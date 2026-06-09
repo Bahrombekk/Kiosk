@@ -281,7 +281,7 @@ class MainWindow(QWidget):
 
     def _shutdown(self):
         """Barcha fon oqimlarini xavfsiz to'xtatadi (Qt 'thread still running' bo'lmasin)."""
-        import gc
+        import threads
         self.ws.stop()
         # Yangi fon ishi paydo bo'lmasin — sahifalardagi taymerlarni to'xtatamiz
         for p in self.pages.values():
@@ -289,16 +289,9 @@ class MainWindow(QWidget):
             t = getattr(canvas, "timer", None)
             if t is not None:
                 t.stop()
-        # Hozir ishlayotgan barcha QThread'lar (loader/fetcher/ws) tugashini kutamiz
-        cur = QThread.currentThread()
-        for obj in gc.get_objects():
-            try:
-                if isinstance(obj, QThread) and obj is not cur and obj.isRunning():
-                    if not obj.wait(2000):
-                        obj.terminate()
-                        obj.wait(500)
-            except RuntimeError:
-                pass   # C++ obyekti allaqachon o'chirilgan — e'tiborsiz
+        # Kuzatilayotgan barcha worker'lar (loader/fetcher/ws) tugashini kutamiz.
+        # gc.get_objects() bo'ylab yurish o'rniga aniq registr (faqat o'zimizniki).
+        threads.wait_all(2000)
 
     def closeEvent(self, e):
         # VAQTINCHALIK: ✕ tugmasi bilan yopilishga ruxsat berildi.

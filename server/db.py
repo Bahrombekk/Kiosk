@@ -19,8 +19,13 @@ CONTENT_TYPES = ("movie", "cartoon", "music", "book", "audiobook")
 
 
 def connect():
-    conn = sqlite3.connect(config.DB_PATH)
+    # timeout: admin (Qt oqimi) va server (uvicorn oqimi) bir vaqtda yozsa
+    # "database is locked" darhol otilmasin — 30s kutadi. WAL: o'quvchi va
+    # yozuvchi bir-birini bloklamaydi (parallel kirish xavfsiz bo'ladi).
+    conn = sqlite3.connect(config.DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row  # natijalar dict kabi olinadi
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=30000")
     return conn
 
 
@@ -96,13 +101,15 @@ def init_db():
     """Bazani yaratadi va bo'sh bo'lsa test ma'lumot bilan to'ldiradi."""
     os.makedirs(config.CONTENT_DIR, exist_ok=True)
     conn = connect()
-    conn.executescript(SCHEMA)
-    conn.commit()
-    # Bo'sh bo'lsa seed qilamiz
-    if conn.execute("SELECT COUNT(*) AS n FROM content").fetchone()["n"] == 0:
-        _seed(conn)
-    conn.commit()
-    conn.close()
+    try:
+        conn.executescript(SCHEMA)
+        conn.commit()
+        # Bo'sh bo'lsa seed qilamiz
+        if conn.execute("SELECT COUNT(*) AS n FROM content").fetchone()["n"] == 0:
+            _seed(conn)
+        conn.commit()
+    finally:
+        conn.close()   # xato bo'lsa ham ulanish (handle) oqib qolmasin
 
 
 def _seed(conn):

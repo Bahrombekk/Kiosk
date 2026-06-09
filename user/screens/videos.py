@@ -265,9 +265,17 @@ class VideosScreen(QWidget):
     def _play(self, item):
         if self._modal:
             self._modal.close_modal()
+        # Avvalgi pleyer hali ochiq bo'lsa — yopamiz (VLC resurslari bo'shasin va
+        # ishlab turgan obyekt referenssiz qolib GC tomonidan abort qilinmasin).
+        if self._player is not None:
+            self._player.stop_and_close()
         url = self.api.stream_url(item["id"])
         self._player = VideoPlayer(url, item.get("title", ""))
+        self._player.closed.connect(self._on_player_closed)
         self._player.start()
+
+    def _on_player_closed(self):
+        self._player = None
 
     # ---------- Mavzu ----------
     def apply_theme(self, name):

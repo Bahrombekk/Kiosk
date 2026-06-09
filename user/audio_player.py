@@ -247,11 +247,22 @@ class AudioPlayer(QWidget):
             self.wave.set_progress(pos)
 
     def stop_and_close(self):
+        if getattr(self, "_closing", False):
+            return
+        self._closing = True
         self._timer.stop()
+        # Native VLC resurslarini bo'shatamiz (video pleyer bilan bir xil) —
+        # aks holda har bir audio ochilishi ularni to'plab boradi.
         self._mp.stop()
+        self._mp.release()
+        self._instance.release()
         self.close()
         self.closed.emit()
         self.deleteLater()
+
+    def closeEvent(self, e):
+        self.stop_and_close()
+        e.accept()
 
     def _restyle(self):
         c = T.THEMES[self.theme_name]

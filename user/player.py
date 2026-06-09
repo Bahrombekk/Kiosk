@@ -314,14 +314,36 @@ class VideoPlayer(QWidget):
 
     # ---------- Yopish ----------
     def stop_and_close(self):
+        # Qayta kirishdan himoya (closeEvent ham shu yerga yo'naltiriladi).
+        if getattr(self, "_closing", False):
+            return
+        self._closing = True
         self._timer.stop()
         self._hide_timer.stop()
+        # Ovoz slayderi libVLC C funksiyasiga ulangan — pleyer bo'shatilgach
+        # signal yetib bormasin (freed obyektga chaqiruv crash beradi).
+        try:
+            self.vol.valueChanged.disconnect()
+        except (TypeError, RuntimeError):
+            pass
+        # MUHIM: native VLC resurslarini (dekoder, threadlar, soketlar) bo'shatamiz.
+        # Aks holda har bir video ochilishi ularni to'plab boradi va uzoq
+        # ishlaydigan kioskда oxir-oqibat muzlash/crash bo'ladi.
         self._mp.stop()
+        self._mp.release()
+        self._instance.release()
+        # Boshqaruv alohida top-level oyna — u "arvoh" bo'lib qolmasin.
         self.controls.close()
         self.controls.deleteLater()
         self.close()
         self.closed.emit()
         self.deleteLater()
+
+    def closeEvent(self, e):
+        # Oyna boshqa yo'l bilan yopilsa ham (Alt+F4 va h.k.) resurslar bo'shasin
+        # va boshqaruv oynasi orqada qolmasin.
+        self.stop_and_close()
+        e.accept()
 
     def resizeEvent(self, e):
         self.video.setGeometry(self.rect())

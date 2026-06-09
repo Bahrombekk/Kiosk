@@ -37,7 +37,11 @@ class WSClient(QThread):
     async def _loop(self):
         while not self._stop:
             try:
-                async with websockets.connect(self.url) as wsconn:
+                # open_timeout: ulanish osilib qolsa (DNS/yarim ochiq) 10s da
+                # uzilib qayta urinadi. ping_*: o'lik ulanishni faol aniqlaydi.
+                async with websockets.connect(
+                        self.url, open_timeout=10,
+                        ping_interval=20, ping_timeout=20) as wsconn:
                     self.link.emit(True)
                     await wsconn.send(json.dumps(
                         {"type": "register", "device_id": self.device_id,

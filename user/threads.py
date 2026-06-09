@@ -20,7 +20,7 @@ Foydalanish:
     self._loader = track(_Loader(self.api))
     self._loader.start()
 """
-from PyQt6.QtCore import QObject
+from PyQt6.QtCore import QObject, QThread
 
 
 class _Registry(QObject):
@@ -48,3 +48,22 @@ def track(thread):
     if _registry is None:
         _registry = _Registry()
     return _registry.track(thread)
+
+
+def wait_all(timeout_ms=2000):
+    """Ilova yopilishidan oldin kuzatilayotgan barcha thread'lar tugashini kutadi.
+    `gc.get_objects()` bo'ylab yurish o'rniga aniq registr to'plamini ishlatadi —
+    faqat O'ZIMIZNING worker'larga tegadi. Belgilangan vaqtda tugamasa (kamdan-kam,
+    chunki HTTP so'rovlarda timeout bor) oxirgi chora sifatida terminate qiladi."""
+    if _registry is None:
+        return
+    cur = QThread.currentThread()
+    for th in list(_registry._alive):
+        try:
+            if th is cur or not th.isRunning():
+                continue
+            if not th.wait(timeout_ms):
+                th.terminate()
+                th.wait(500)
+        except RuntimeError:
+            pass   # C++ obyekti allaqachon o'chirilgan — e'tiborsiz

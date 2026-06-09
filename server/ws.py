@@ -20,6 +20,9 @@ class ConnectionManager:
         # websocket -> {"device_id", "ip", "platform", "connected_at"}
         self.active = {}
         self.loop = None     # server event-loop (admin oqimidan uzatish uchun)
+        # Barcha send_json'larni serializatsiya qiladi: bir socketда ikki
+        # korutina bir vaqtda yozsa Starlette "Concurrent call to send" beradi.
+        self._send_lock = asyncio.Lock()
 
     def set_loop(self, loop):
         self.loop = loop
@@ -58,7 +61,9 @@ class ConnectionManager:
         """
         now = time.time()
         out = []
-        for info in self.active.values():
+        # Snapshot — admin oqimi o'qiyotganda server loop'i active'ni o'zgartirsa
+        # "dictionary changed size during iteration" bo'lmasin.
+        for info in list(self.active.values()):
             out.append({
                 "device_id": info.get("device_id") or "—",
                 "ip": info.get("ip") or "—",
@@ -69,13 +74,19 @@ class ConnectionManager:
         out.sort(key=lambda c: c["connected_at"] or 0, reverse=True)
         return out
 
+    async def send_personal(self, ws, message: dict):
+        """Bitta socketga qulf ostida yuboradi (broadcast bilan to'qnashmaslik uchun)."""
+        async with self._send_lock:
+            await ws.send_json(message)
+
     async def broadcast(self, message: dict):
         dead = []
-        for ws in list(self.active):
-            try:
-                await ws.send_json(message)
-            except Exception:
-                dead.append(ws)
+        async with self._send_lock:
+            for ws in list(self.active):
+                try:
+                    await ws.send_json(message)
+                except Exception:
+                    dead.append(ws)
         for ws in dead:
             self.disconnect(ws)
 

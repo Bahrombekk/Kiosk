@@ -57,8 +57,29 @@ async def _status_loop():
     """Har 3 soniyada barcha userlarga status_update yuboradi (TZ FR-HOME-01)."""
     while True:
         await asyncio.sleep(3)
-        if manager.count():
-            await manager.broadcast({"type": "status_update", **status_payload()})
+        # Bitta xato (masalan sozlamadagi noto'g'ri qiymat) butun sikilni
+        # to'xtatib qo'ymasin — har iteratsiya o'zini himoyalaydi.
+        try:
+            if manager.count():
+                await manager.broadcast({"type": "status_update", **status_payload()})
+        except Exception:
+            log.exception("status sikilida xato — keyingi iteratsiyada davom etamiz")
+
+
+def _safe_join(base, name):
+    """`name`ni `base` katalogi ichida ekanini tekshirib to'liq yo'l qaytaradi.
+    `../`, absolyut yo'l yoki boshqa diskka chiqib ketsa None (path traversal
+    himoyasi — admin kiritgan yoki buzilgan qiymatlardan)."""
+    if not name:
+        return None
+    base_real = os.path.realpath(base)
+    full = os.path.realpath(os.path.join(base_real, name))
+    try:
+        if os.path.commonpath([base_real, full]) != base_real:
+            return None
+    except ValueError:
+        return None   # turli disklar (Windows) — chiqib ketgan
+    return full
 
 
 app = FastAPI(title="Kiosk Server", version="1.0", lifespan=lifespan)
@@ -92,9 +113,9 @@ def cover(content_id: int):
     item = db.get_content_by_id(content_id)
     if not item:
         raise HTTPException(404, "Kontent topilmadi")
-    path = os.path.join(config.COVERS_DIR, item.get("cover_path") or "")
+    path = _safe_join(config.COVERS_DIR, item.get("cover_path"))
     # Muqova rasmlari kamdan-kam o'zgaradi — kiosk uzoq kesh qilsin (1 kun).
-    if item.get("cover_path") and os.path.isfile(path) and not path.endswith(".svg"):
+    if path and os.path.isfile(path) and not path.endswith(".svg"):
         return FileResponse(path, headers={"Cache-Control": "public, max-age=86400"})
     return Response(content=_placeholder_svg(item["title"], item["type"]),
                     media_type="image/svg+xml",
@@ -124,8 +145,8 @@ def stream(content_id: int, request: Request):
     item = db.get_content_by_id(content_id)
     if not item or not item.get("file_path"):
         raise HTTPException(404, "Media topilmadi")
-    path = os.path.join(config.MEDIA_DIR, item["file_path"])
-    if not os.path.isfile(path):
+    path = _safe_join(config.MEDIA_DIR, item["file_path"])
+    if not path or not os.path.isfile(path):
         raise HTTPException(404, "Media fayli mavjud emas (admin yuklashi kerak)")
     return _range_response(path, request)
 
@@ -219,13 +240,16 @@ def book_text(content_id: int):
     item = db.get_content_by_id(content_id)
     if not item or not item.get("text_path"):
         raise HTTPException(404, "Kitob matni topilmadi")
-    path = os.path.join(config.BOOKS_DIR, item["text_path"])
-    if not os.path.isfile(path):
+    path = _safe_join(config.BOOKS_DIR, item["text_path"])
+    if not path or not os.path.isfile(path):
         raise HTTPException(404, "Matn fayli mavjud emas")
-    with open(path, encoding="utf-8") as f:
-        if path.endswith(".json"):
-            return json.load(f)
-        return {"chapters": [{"title": item["title"], "text": f.read()}]}
+    try:
+        with open(path, encoding="utf-8") as f:
+            if path.endswith(".json"):
+                return json.load(f)
+            return {"chapters": [{"title": item["title"], "text": f.read()}]}
+    except (OSError, json.JSONDecodeError) as e:
+        raise HTTPException(500, f"Matn faylini o'qib bo'lmadi: {e}")
 
 
 # --- Boshqa ---
@@ -249,6 +273,14 @@ def settings():
     return db.get_settings()
 
 
+def _safe_int(v, default):
+    """Sozlama qiymati (erkin matn) butun songa o'girilmasa default qaytaradi."""
+    try:
+        return int(float(str(v).strip()))
+    except (TypeError, ValueError):
+        return default
+
+
 def status_payload():
     """Poyezd holati dict'i (REST va WebSocket ikkalasi ishlatadi).
 
@@ -263,8 +295,8 @@ def status_payload():
         if st.get("arrival_time") and st["arrival_time"] <= now:
             current = st["name"]
     return {
-        "speed": int(s.get("speed", 210)),
-        "temperature": int(s.get("temperature", 22)),
+        "speed": _safe_int(s.get("speed"), 210),
+        "temperature": _safe_int(s.get("temperature"), 22),
         "wagon": s.get("wagon_number"),
         "wagon_note": s.get("wagon_note"),
         "current_stop": current,
@@ -282,8 +314,10 @@ def status():
 async def websocket_endpoint(ws: WebSocket):
     """Real vaqt kanal (TZ 11.2): register qabul qiladi, status/announcement yuboradi."""
     await manager.connect(ws)
-    # Ulanishi bilan joriy holatni darhol yuboramiz
-    await ws.send_json({"type": "status_update", **status_payload()})
+    # Ulanishi bilan joriy holatni darhol yuboramiz. MUHIM: status_loop bilan
+    # bir socketда bir vaqtda yuborilmasin — manager qulfi serializatsiya qiladi
+    # (aks holda Starlette "Concurrent call to send" beradi).
+    await manager.send_personal(ws, {"type": "status_update", **status_payload()})
     try:
         while True:
             data = await ws.receive_json()
@@ -293,7 +327,7 @@ async def websocket_endpoint(ws: WebSocket):
                 log.info("Kiosk ulandi: %s (%s) — jami %d",
                          data.get("device_id"), data.get("platform"), manager.count())
             elif mtype == "ping":
-                await ws.send_json({"type": "pong"})
+                await manager.send_personal(ws, {"type": "pong"})
     except WebSocketDisconnect:
         manager.disconnect(ws)
         log.info("Kiosk uzildi — jami %d", manager.count())

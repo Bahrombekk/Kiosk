@@ -70,8 +70,16 @@ class CoverLabel(QLabel):
         # boshlangan so'rov natijasi ko'rsatiladi.
         self._fetcher = track(_Fetcher(url))
         self._fetcher.done.connect(self._on_data)
-        self._fetcher.fail.connect(lambda: self._show_placeholder("?"))
+        self._fetcher.fail.connect(self._on_fail)
         self._fetcher.start()
+
+    def _on_fail(self):
+        # Karta allaqachon o'chirilgan bo'lishi mumkin (ro'yxat qayta render
+        # bo'lganda) — C++ obyektga chaqiruv RuntimeError beradi, e'tiborsiz.
+        try:
+            self._show_placeholder("?")
+        except RuntimeError:
+            pass
 
     def resizeEvent(self, e):
         # Moslashuvchan rejimda kenglik o'zgarsa — balandlikni 16:9 saqlab,
@@ -89,22 +97,27 @@ class CoverLabel(QLabel):
         super().resizeEvent(e)
 
     def _on_data(self, data, ctype):
-        if "svg" in ctype or data[:5] == b"<svg " or data[:6] == b"<?xml ":
-            bw, bh = max(self._w, 480), max(self._h, 270)
-            pm = QPixmap(bw, bh)
-            pm.fill(Qt.GlobalColor.transparent)
-            painter = QPainter(pm)
-            QSvgRenderer(QByteArray(data)).render(painter, QRectF(0, 0, bw, bh))
-            painter.end()
-            self._orig = pm
-        else:
-            raw = QPixmap()
-            raw.loadFromData(data)
-            if raw.isNull():
-                self._show_placeholder("?")
-                return
-            self._orig = raw
-        self._render_scaled()
+        # Karta ro'yxat qayta render bo'lganda o'chirilgan bo'lishi mumkin —
+        # C++ obyektga chaqiruv RuntimeError beradi, butun ilovani crash qilmasin.
+        try:
+            if "svg" in ctype or data[:5] == b"<svg " or data[:6] == b"<?xml ":
+                bw, bh = max(self._w, 480), max(self._h, 270)
+                pm = QPixmap(bw, bh)
+                pm.fill(Qt.GlobalColor.transparent)
+                painter = QPainter(pm)
+                QSvgRenderer(QByteArray(data)).render(painter, QRectF(0, 0, bw, bh))
+                painter.end()
+                self._orig = pm
+            else:
+                raw = QPixmap()
+                raw.loadFromData(data)
+                if raw.isNull():
+                    self._show_placeholder("?")
+                    return
+                self._orig = raw
+            self._render_scaled()
+        except RuntimeError:
+            pass
 
     def _render_scaled(self):
         if self._orig is None or self._w < 2 or self._h < 2:

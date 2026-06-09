@@ -459,7 +459,11 @@ class _HomeCanvas(QWidget):
         if self._modal:
             self._modal.close_modal()
         from player import VideoPlayer
+        old = getattr(self, "_player", None)
+        if old is not None:
+            old.stop_and_close()
         self._player = VideoPlayer(self.api.stream_url(item["id"]), item.get("title", ""))
+        self._player.closed.connect(lambda: setattr(self, "_player", None))
         self._player.start()
 
     def _read_book(self):
@@ -469,7 +473,11 @@ class _HomeCanvas(QWidget):
 
     def _listen_book(self):
         if self.rec_book:
+            old = getattr(self, "_audio", None)
+            if old is not None:
+                old.stop_and_close()
             self._audio = AudioPlayer(self.api, self.rec_book, self.theme_name)
+            self._audio.closed.connect(lambda: setattr(self, "_audio", None))
             self._audio.start()
 
     # ---- Mavzu ----

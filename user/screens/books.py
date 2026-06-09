@@ -223,7 +223,11 @@ class BooksScreen(QWidget):
     def _listen(self, item):
         if self._modal:
             self._modal.close_modal()
+        old = getattr(self, "_audio", None)
+        if old is not None:
+            old.stop_and_close()
         self._audio = AudioPlayer(self.api, item, self.theme_name)
+        self._audio.closed.connect(lambda: setattr(self, "_audio", None))
         self._audio.start()
 
     # --- Mavzu ---
