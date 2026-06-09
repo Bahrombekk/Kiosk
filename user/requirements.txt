@@ -1,0 +1,7 @@
+# Foydalanuvchi (kiosk) ilovasi kutubxonalari
+PyQt6>=6.6
+requests>=2.31
+python-vlc>=3.0     # video/audio o'ynatish (LibVLC kerak — VLC o'rnatilgan bo'lsin)
+qrcode>=7.4         # Saytlar bo'limi uchun QR kod (Pillowsiz, matritsa chiziladi)
+# WebSocket real-time (8-bosqich):
+# websockets>=12

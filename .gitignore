@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Databases (seed_demo.py orqali qayta yaratiladi)
+*.db
+*.sqlite3
+
+# Demo / seeded media (seed_demo.py orqali to'ldiriladi)
+server/content/media/
+content/media/
+
+# Secrets
+.env
+*.env
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
