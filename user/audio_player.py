@@ -58,7 +58,7 @@ class AudioPlayer(QWidget):
         root.addStretch(1)
 
         # Markaz: muqova + nom + muallif
-        self.cover = CoverLabel(240, 340)
+        self.cover = CoverLabel(T.s(240), T.s(340))
         self.cover.load(self.api.cover_url(self.item["id"]))
         root.addWidget(self.cover, alignment=Qt.AlignmentFlag.AlignHCenter)
 
@@ -89,10 +89,10 @@ class AudioPlayer(QWidget):
         # Boshqaruv: 10s, play/pauza, 10s, tezlik
         crow = QHBoxLayout()
         crow.addStretch(1)
-        self.back10 = self._btn("« 10", 64)
-        self.play_btn = self._btn("⏸", 84, accent=True)
-        self.fwd10 = self._btn("10 »", 64)
-        self.speed_btn = self._btn("1x", 64)
+        self.back10 = self._btn("« 10", T.s(64))
+        self.play_btn = self._btn("⏸", T.s(84), accent=True)
+        self.fwd10 = self._btn("10 »", T.s(64))
+        self.speed_btn = self._btn("1x", T.s(64))
         self.back10.clicked.connect(lambda: self._seek_rel(-10000))
         self.play_btn.clicked.connect(self.toggle_play)
         self.fwd10.clicked.connect(lambda: self._seek_rel(+10000))
@@ -171,9 +171,9 @@ class AudioPlayer(QWidget):
                             f" font-size: {T.FONT['small']}px; }}")
         self.setStyleSheet(self.styleSheet() + (
             f"#aBtn {{ background: {c['surface']}; color: {c['text']};"
-            f" border: 1px solid {c['border']}; border-radius: 32px;"
-            f" font-size: 16px; font-weight: 600; }}"
+            f" border: 1px solid {c['border']}; border-radius: {T.s(64) // 2}px;"
+            f" font-size: {T.s(16)}px; font-weight: 600; }}"
             f"#aBtn:hover {{ background: {c['surface2']}; }}"
             f"#aAccent {{ background: {c['accent']}; color: {c['accent_text']};"
-            f" border: none; border-radius: 42px; font-size: 26px; }}"
+            f" border: none; border-radius: {T.s(84) // 2}px; font-size: {T.s(26)}px; }}"
             f"#aAccent:hover {{ background: #1D4ED8; }}"))

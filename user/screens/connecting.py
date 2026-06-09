@@ -33,8 +33,8 @@ class ConnectingScreen(QWidget):
     def apply_theme(self, name):
         c = T.THEMES[name]
         self.logo.setStyleSheet(
-            f"#splashLogo {{ color: {c['accent']}; font-size: 64px;"
-            f" font-weight: 800; letter-spacing: 4px; }}")
+            f"#splashLogo {{ color: {c['accent']}; font-size: {T.s(64)}px;"
+            f" font-weight: 800; letter-spacing: {T.s(4)}px; }}")
         self.status.setStyleSheet(
             f"#splashStatus {{ color: {c['text_secondary']};"
             f" font-size: {T.FONT['h2']}px; }}")

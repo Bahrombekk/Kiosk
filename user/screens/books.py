@@ -46,6 +46,7 @@ class BooksScreen(QWidget):
         self.all_items = []
         self.active_tab = 0
         self.cards = []
+        self._cols = 0
         self._loader = None
         self._modal = None
         self._reader = None
@@ -131,12 +132,29 @@ class BooksScreen(QWidget):
             self.status.setText("Hech narsa topilmadi")
             return
         self.status.setText("")
-        cols = 4
+        cols = self._calc_cols()
+        self._cols = cols
         for i, it in enumerate(items):
             card = BookCard(it, self.api, self.theme_name)
             card.clicked.connect(self._open_detail)
             self.cards.append(card)
             self.grid.addWidget(card, i // cols, i % cols)
+
+    # Ekran kengligiga qarab ustunlar soni (katta monitorda yoyilib ketmasin).
+    # Kitob muqovasi tikka — maqbul kenglik ~230px (ekran miqyosiga mos).
+    def _calc_cols(self):
+        avail = self.scroll.viewport().width()
+        if avail <= 0:
+            avail = self.width() - 2 * T.SPACE["page"]
+        spacing = self.grid.horizontalSpacing()
+        target = T.s(230)
+        cols = (avail + spacing) // (target + spacing)
+        return max(2, int(cols))
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        if self.all_items and self._calc_cols() != getattr(self, "_cols", 0):
+            self._render()
 
     # --- Detal modal + rejimlar ---
     def _open_detail(self, item):
@@ -175,8 +193,8 @@ class BooksScreen(QWidget):
             border = c["accent"] if active else "transparent"
             b.setStyleSheet(
                 f"QPushButton {{ background: transparent; color: {color};"
-                f" border: none; border-bottom: 3px solid {border};"
-                f" padding: 10px 18px; font-size: {T.FONT['nav']}px;"
+                f" border: none; border-bottom: {T.s(3)}px solid {border};"
+                f" padding: {T.s(10)}px {T.s(18)}px; font-size: {T.FONT['nav']}px;"
                 f" font-weight: {'700' if active else '500'}; }}")
 
 
@@ -186,14 +204,14 @@ class _BookDetail(Modal):
     listen = pyqtSignal(dict)
 
     def __init__(self, parent, item, api):
-        super().__init__(parent, width=820, height=460)
+        super().__init__(parent, width=T.s(820), height=T.s(460))
         self.item = item
 
         row = QHBoxLayout()
-        row.setSpacing(24)
+        row.setSpacing(T.s(24))
 
         left = QVBoxLayout()
-        cover = CoverLabel(200, 290)
+        cover = CoverLabel(T.s(200), T.s(290))
         cover.load(api.cover_url(item["id"]))
         left.addWidget(cover)
         pages = item.get("pages")
@@ -204,7 +222,7 @@ class _BookDetail(Modal):
         row.addLayout(left)
 
         right = QVBoxLayout()
-        right.setSpacing(10)
+        right.setSpacing(T.s(10))
         title = QLabel(item.get("title", ""))
         title.setStyleSheet(f"font-size:{T.FONT['title']}px; font-weight:700;")
         title.setWordWrap(True)
@@ -219,14 +237,14 @@ class _BookDetail(Modal):
             listen_btn = QPushButton("🎧  Tinglash")
             listen_btn.setObjectName("listenBtn")
             listen_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            listen_btn.setFixedHeight(52)
+            listen_btn.setFixedHeight(T.s(52))
             listen_btn.clicked.connect(lambda: self.listen.emit(self.item))
             btns.addWidget(listen_btn)
         if can_read(item):
             read_btn = QPushButton("📖  O'qish")
             read_btn.setObjectName("readBtn")
             read_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            read_btn.setFixedHeight(52)
+            read_btn.setFixedHeight(T.s(52))
             read_btn.clicked.connect(lambda: self.read.emit(self.item))
             btns.addWidget(read_btn)
         btns.addStretch(1)
@@ -247,10 +265,10 @@ class _BookDetail(Modal):
             f"#bDesc {{ color: {c['text_secondary']}; font-size: {T.FONT['body']}px; }}"
             f"#bPages {{ color: {c['text_secondary']}; font-size: {T.FONT['small']}px; }}"
             f"#listenBtn {{ background: {c['orange']}; color: #FFFFFF; border: none;"
-            f" border-radius: {T.RADIUS['button']}px; padding: 0 24px;"
+            f" border-radius: {T.RADIUS['button']}px; padding: 0 {T.s(24)}px;"
             f" font-size: {T.FONT['nav']}px; font-weight: 600; }}"
             f"#listenBtn:hover {{ background: #D97706; }}"
             f"#readBtn {{ background: {c['accent']}; color: {c['accent_text']};"
-            f" border: none; border-radius: {T.RADIUS['button']}px; padding: 0 24px;"
+            f" border: none; border-radius: {T.RADIUS['button']}px; padding: 0 {T.s(24)}px;"
             f" font-size: {T.FONT['nav']}px; font-weight: 600; }}"
             f"#readBtn:hover {{ background: #1D4ED8; }}"))

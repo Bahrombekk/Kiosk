@@ -29,19 +29,19 @@ class Modal(QWidget):
         self.body.setContentsMargins(0, 0, 0, 0)
 
         top = QHBoxLayout()
-        top.setContentsMargins(0, 8, 8, 0)
+        top.setContentsMargins(0, T.s(8), T.s(8), 0)
         top.addStretch(1)
         self.close_btn = QPushButton("✕")
         self.close_btn.setObjectName("modalClose")
         self.close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.close_btn.setFixedSize(36, 36)
+        self.close_btn.setFixedSize(T.s(36), T.s(36))
         self.close_btn.clicked.connect(self.close_modal)
         top.addWidget(self.close_btn)
         self.body.addLayout(top)
 
         # Tarkib joyi
         self.content = QVBoxLayout()
-        self.content.setContentsMargins(24, 0, 24, 24)
+        self.content.setContentsMargins(T.s(24), 0, T.s(24), T.s(24))
         self.body.addLayout(self.content, 1)
 
         outer.addWidget(self.panel)
@@ -74,5 +74,5 @@ class Modal(QWidget):
             f"#modalPanel {{ background: {c['surface']};"
             f" border-radius: {T.RADIUS['card']}px; }}"
             f"#modalClose {{ background: {c['surface2']}; color: {c['text']};"
-            f" border: none; border-radius: 18px; font-size: 18px; }}"
+            f" border: none; border-radius: {T.s(18)}px; font-size: {T.s(18)}px; }}"
             f"#modalClose:hover {{ background: {c['border']}; }}")

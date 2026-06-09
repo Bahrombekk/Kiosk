@@ -48,14 +48,14 @@ class _Loader(QThread):
 class Timeline(QWidget):
     """Bekatlar timeline'i (skroll uchun qat'iy oraliqli)."""
 
-    PAD_T = 30
-    STOP_GAP = 92
-
     def __init__(self):
         super().__init__()
         self.stops = []
         self.current = 0
         self.theme_name = "light"
+        # O'lchamlar ekran miqyosiga moslanadi (kichik/katta monitor).
+        self.PAD_T = T.s(30)
+        self.STOP_GAP = T.s(92)
         self.setStyleSheet("background: transparent;")
 
     def set_data(self, stops, current, theme_name):
@@ -76,32 +76,33 @@ class Timeline(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         n = len(self.stops)
-        x = 26
-        text_x = 56
+        x = T.s(26)
+        text_x = T.s(56)
+        tw = T.s(320)
         ys = [self.PAD_T + i * self.STOP_GAP for i in range(n)]
 
         for i in range(n - 1):
-            y1, y2 = ys[i] + 11, ys[i + 1] - 11
+            y1, y2 = ys[i] + T.s(11), ys[i + 1] - T.s(11)
             if i < self.current:
-                p.setPen(QPen(accent, 4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+                p.setPen(QPen(accent, T.s(4), Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
             else:
-                p.setPen(QPen(gray, 3, Qt.PenStyle.DashLine, Qt.PenCapStyle.RoundCap))
+                p.setPen(QPen(gray, T.s(3), Qt.PenStyle.DashLine, Qt.PenCapStyle.RoundCap))
             p.drawLine(int(x), int(y1), int(x), int(y2))
 
-        name_font = QFont(); name_font.setPixelSize(24); name_font.setWeight(QFont.Weight.Bold)
-        small_font = QFont(); small_font.setPixelSize(15); small_font.setWeight(QFont.Weight.Medium)
+        name_font = QFont(); name_font.setPixelSize(T.s(24)); name_font.setWeight(QFont.Weight.Bold)
+        small_font = QFont(); small_font.setPixelSize(T.s(15)); small_font.setWeight(QFont.Weight.Medium)
 
         for i, s in enumerate(self.stops):
             y = ys[i]
             if i < self.current:
                 p.setPen(Qt.PenStyle.NoPen); p.setBrush(QBrush(accent))
-                p.drawEllipse(int(x - 8), int(y - 8), 16, 16)
+                r = T.s(8); p.drawEllipse(int(x - r), int(y - r), 2 * r, 2 * r)
             elif i == self.current:
-                p.setBrush(QBrush(QColor("#FFFFFF"))); p.setPen(QPen(accent, 4))
-                p.drawEllipse(int(x - 9), int(y - 9), 18, 18)
+                p.setBrush(QBrush(QColor("#FFFFFF"))); p.setPen(QPen(accent, T.s(4)))
+                r = T.s(9); p.drawEllipse(int(x - r), int(y - r), 2 * r, 2 * r)
             else:
-                p.setBrush(QBrush(QColor("#FFFFFF"))); p.setPen(QPen(gray, 3))
-                p.drawEllipse(int(x - 7), int(y - 7), 14, 14)
+                p.setBrush(QBrush(QColor("#FFFFFF"))); p.setPen(QPen(gray, T.s(3)))
+                r = T.s(7); p.drawEllipse(int(x - r), int(y - r), 2 * r, 2 * r)
 
             time = s.get("arrival_time") or ""
             if i == 0:
@@ -113,12 +114,12 @@ class Timeline(QWidget):
 
             p.setFont(name_font)
             p.setPen(accent if i == self.current else QColor(c["text"]))
-            p.drawText(QRectF(text_x, y - 22, 320, 28),
+            p.drawText(QRectF(text_x, y - T.s(22), tw, T.s(28)),
                        Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
                        s.get("name", ""))
             p.setFont(small_font)
             p.setPen(QColor(c["text_secondary"]))
-            p.drawText(QRectF(text_x, y + 6, 320, 22),
+            p.drawText(QRectF(text_x, y + T.s(6), tw, T.s(22)),
                        Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
                        detail)
         p.end()
@@ -136,7 +137,7 @@ class MapScreen(QWidget):
 
     def _build(self):
         root = QVBoxLayout(self)
-        root.setContentsMargins(24, 12, 24, 24)
+        root.setContentsMargins(T.s(24), T.s(12), T.s(24), T.s(24))
 
         self.card = QFrame()
         self.card.setObjectName("mainCard")
@@ -147,11 +148,11 @@ class MapScreen(QWidget):
         # ---- Sarlavha banneri ----
         self.header = QFrame()
         self.header.setObjectName("mapHeader")
-        self.header.setFixedHeight(196)
+        self.header.setFixedHeight(T.s(196))
         hh = QHBoxLayout(self.header)
-        hh.setContentsMargins(34, 26, 30, 26)
+        hh.setContentsMargins(T.s(34), T.s(26), T.s(30), T.s(26))
         left = QVBoxLayout()
-        left.setSpacing(6)
+        left.setSpacing(T.s(6))
         self.train_name = QLabel("Poyezd")
         self.train_name.setObjectName("hTitle")
         self.route = QLabel("")
@@ -159,14 +160,14 @@ class MapScreen(QWidget):
         left.addWidget(self.train_name)
         left.addWidget(self.route)
         chips = QHBoxLayout()
-        chips.setSpacing(14)
+        chips.setSpacing(T.s(14))
         self.chip_date = self._chip("📅", "")
         self.chip_depart = self._chip("🕐", "")
         self.chip_dur = self._chip("🏁", "")
         for ch in (self.chip_date, self.chip_depart, self.chip_dur):
             chips.addWidget(ch)
         chips.addStretch(1)
-        left.addSpacing(6)
+        left.addSpacing(T.s(6))
         left.addLayout(chips)
         left.addStretch(1)
         hh.addLayout(left, 1)
@@ -175,28 +176,28 @@ class MapScreen(QWidget):
         tpm = QPixmap(TRAIN_IMG)
         if not tpm.isNull():
             self.train_img.setPixmap(tpm.scaledToHeight(
-                150, Qt.TransformationMode.SmoothTransformation))
+                T.s(150), Qt.TransformationMode.SmoothTransformation))
         self.train_img.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         hh.addWidget(self.train_img, 0, Qt.AlignmentFlag.AlignVCenter)
         cv.addWidget(self.header)
 
         # ---- Tana: timeline (chap) + xarita (o'ng) ----
         body = QHBoxLayout()
-        body.setContentsMargins(28, 24, 28, 28)
-        body.setSpacing(26)
+        body.setContentsMargins(T.s(28), T.s(24), T.s(28), T.s(28))
+        body.setSpacing(T.s(26))
 
         self.timeline = Timeline()
         self.tl_scroll = QScrollArea()
         self.tl_scroll.setObjectName("tlScroll")
         self.tl_scroll.setWidget(self.timeline)
         self.tl_scroll.setWidgetResizable(True)
-        self.tl_scroll.setFixedWidth(380)
+        self.tl_scroll.setFixedWidth(T.s(380))
         self.tl_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         self.tl_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.tl_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         body.addWidget(self.tl_scroll)
 
-        self.slippy = SlippyMap(radius=22)
+        self.slippy = SlippyMap(radius=T.s(22))
         self.slippy.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         body.addWidget(self.slippy, 1)
 
@@ -206,10 +207,10 @@ class MapScreen(QWidget):
     def _chip(self, emoji, text):
         chip = QFrame()
         chip.setObjectName("chip")
-        chip.setFixedHeight(48)
+        chip.setFixedHeight(T.s(48))
         lay = QHBoxLayout(chip)
-        lay.setContentsMargins(16, 0, 18, 0)
-        lay.setSpacing(9)
+        lay.setContentsMargins(T.s(16), 0, T.s(18), 0)
+        lay.setSpacing(T.s(9))
         ic = QLabel(emoji); ic.setObjectName("chipIc")
         lbl = QLabel(text); lbl.setObjectName("chipTxt")
         lay.addWidget(ic)
@@ -253,17 +254,17 @@ class MapScreen(QWidget):
         self.theme_name = name
         c = T.THEMES[name]
         self.setStyleSheet(
-            f"#mainCard {{ background: {c['surface']}; border-radius: 26px; }}"
+            f"#mainCard {{ background: {c['surface']}; border-radius: {T.s(26)}px; }}"
             f"#mapHeader {{ background: #E9EDF5;"
-            f" border-top-left-radius: 26px; border-top-right-radius: 26px; }}"
+            f" border-top-left-radius: {T.s(26)}px; border-top-right-radius: {T.s(26)}px; }}"
             f"#hTitle {{ background: transparent; color: #1C2230;"
-            f" font-size: 36px; font-weight: 700; }}"
+            f" font-size: {T.s(36)}px; font-weight: 700; }}"
             f"#hSub {{ background: transparent; color: #8B94A4;"
-            f" font-size: 22px; font-weight: 500; }}"
-            f"#chip {{ background: #FFFFFF; border-radius: 12px; }}"
-            f"#chipIc {{ background: transparent; font-size: 18px; }}"
+            f" font-size: {T.s(22)}px; font-weight: 500; }}"
+            f"#chip {{ background: #FFFFFF; border-radius: {T.s(12)}px; }}"
+            f"#chipIc {{ background: transparent; font-size: {T.s(18)}px; }}"
             f"#chipTxt {{ background: transparent; color: #2B3340;"
-            f" font-size: 18px; font-weight: 600; }}"
+            f" font-size: {T.s(18)}px; font-weight: 600; }}"
             f"#tlScroll {{ background: transparent; }}"
             f"#tlScroll QWidget {{ background: transparent; }}")
         if self.stops:

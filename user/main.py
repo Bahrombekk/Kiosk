@@ -310,6 +310,11 @@ class MainWindow(QWidget):
 def main():
     try:
         app = QApplication(sys.argv)
+        # Monitor o'lchamiga qarab global UI miqyosini o'rnatamiz (kichik/katta
+        # ekranga moslashish). MUHIM: oyna qurilmasdan OLDIN.
+        screen = app.primaryScreen()
+        if screen is not None:
+            T.init_scale(screen.size())
         win = MainWindow()
         win.showMaximized()  # VAQTINCHALIK: to'liq ekran o'rniga (ASL: win.showFullScreen())
         sys.exit(app.exec())

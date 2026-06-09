@@ -46,13 +46,13 @@ class NavBar(QWidget):
         self.pill = QFrame()
         self.pill.setObjectName("navPill")
         pl = QHBoxLayout(self.pill)
-        pl.setContentsMargins(8, 8, 8, 8)
-        pl.setSpacing(6)
+        pl.setContentsMargins(T.s(8), T.s(8), T.s(8), T.s(8))
+        pl.setSpacing(T.s(6))
 
         for key, label, icon_file, _title in T.NAV_ITEMS:
             btn = QPushButton()
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setIconSize(QSize(24, 24))
+            btn.setIconSize(QSize(T.s(24), T.s(24)))
             btn.clicked.connect(lambda _c, k=key: self.navigate.emit(k))
             self.buttons[key] = [btn, label, os.path.join(ICON_DIR, icon_file)]
             pl.addWidget(btn)
@@ -94,8 +94,8 @@ class NavBar(QWidget):
                 btn.setStyleSheet(
                     f"QPushButton {{ background: {c['accent']};"
                     f" color: {c['accent_text']}; border: none;"
-                    f" border-radius: {T.RADIUS['pill'] - 8}px;"
-                    f" padding: 10px 20px; font-size: {T.FONT['nav']}px;"
+                    f" border-radius: {T.RADIUS['pill'] - T.s(8)}px;"
+                    f" padding: {T.s(10)}px {T.s(20)}px; font-size: {T.FONT['nav']}px;"
                     f" font-weight: 600; }}")
             else:
                 btn.setText("")
@@ -103,5 +103,5 @@ class NavBar(QWidget):
                 btn.setIcon(colored_icon(icon_path, c["text"]))
                 btn.setStyleSheet(
                     f"QPushButton {{ background: transparent; border: none;"
-                    f" border-radius: {T.RADIUS['pill'] - 8}px; padding: 10px 14px; }}"
+                    f" border-radius: {T.RADIUS['pill'] - T.s(8)}px; padding: {T.s(10)}px {T.s(14)}px; }}"
                     f"QPushButton:hover {{ background: {c['surface2']}; }}")

@@ -6,7 +6,7 @@ Yuklash tarmoq orqali bo'lgani uchun alohida oqimda (UI qotmaydi);
 rasm baytlari kelgach, asosiy oqimda QPixmap'ga aylantiriladi.
 """
 import requests
-from PyQt6.QtWidgets import QLabel
+from PyQt6.QtWidgets import QLabel, QSizePolicy
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QByteArray, QRectF, QSize
 from PyQt6.QtGui import QPixmap, QPainter, QColor
 from PyQt6.QtSvg import QSvgRenderer
@@ -32,15 +32,33 @@ class _Fetcher(QThread):
 
 
 class CoverLabel(QLabel):
-    """Belgilangan o'lchamdagi muqova; manzil berilsa serverdan yuklaydi."""
+    """Muqova / thumbnail; manzil berilsa serverdan yuklaydi.
 
-    def __init__(self, width=200, height=280, radius=None):
+    Ikki rejim:
+      - qat'iy: `aspect=None` (default) — width×height qat'iy o'lcham.
+      - moslashuvchan: `aspect` berilsa (masalan 16/9) — mavjud kenglikni
+        to'ldiradi, balandlik avtomatik (kenglik/aspect), o'lcham o'zgarsa
+        rasm qayta miqyoslanadi (grid 3 ustunni to'ldirishi uchun).
+    """
+
+    def __init__(self, width=200, height=280, radius=None, aspect=None,
+                 round_top_only=False):
         super().__init__()
-        self._w, self._h = width, height
         self._radius = T.RADIUS["card"] if radius is None else radius
-        self.setFixedSize(width, height)
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._aspect = aspect
+        self._round_top_only = round_top_only   # faqat tepa burchaklar (modal header)
+        self._orig = None          # yuklangan asl pixmap (qayta miqyoslash uchun)
         self._fetcher = None
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        if aspect is None:
+            self._w, self._h = width, height
+            self.setFixedSize(width, height)
+        else:
+            self._w = width
+            self._h = max(1, round(width / aspect))
+            self.setMinimumWidth(10)
+            self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            self.setFixedHeight(self._h)
         self._show_placeholder("...")
 
     def sizeHint(self):
@@ -55,40 +73,76 @@ class CoverLabel(QLabel):
         self._fetcher.fail.connect(lambda: self._show_placeholder("?"))
         self._fetcher.start()
 
+    def resizeEvent(self, e):
+        # Moslashuvchan rejimda kenglik o'zgarsa — balandlikni 16:9 saqlab,
+        # rasmni qayta chizamiz.
+        if self._aspect is not None:
+            self._w = max(1, self.width())
+            h = max(1, round(self._w / self._aspect))
+            if h != self.height():
+                self.setFixedHeight(h)
+            self._h = h
+            if self._orig is not None:
+                self._render_scaled()
+            else:
+                self._show_placeholder("...")
+        super().resizeEvent(e)
+
     def _on_data(self, data, ctype):
-        pm = QPixmap(self._w, self._h)
-        pm.fill(Qt.GlobalColor.transparent)
         if "svg" in ctype or data[:5] == b"<svg " or data[:6] == b"<?xml ":
+            bw, bh = max(self._w, 480), max(self._h, 270)
+            pm = QPixmap(bw, bh)
+            pm.fill(Qt.GlobalColor.transparent)
             painter = QPainter(pm)
-            QSvgRenderer(QByteArray(data)).render(painter, QRectF(0, 0, self._w, self._h))
+            QSvgRenderer(QByteArray(data)).render(painter, QRectF(0, 0, bw, bh))
             painter.end()
+            self._orig = pm
         else:
             raw = QPixmap()
             raw.loadFromData(data)
             if raw.isNull():
                 self._show_placeholder("?")
                 return
-            pm = raw.scaled(self._w, self._h,
-                            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                            Qt.TransformationMode.SmoothTransformation)
-        self.setPixmap(self._rounded(pm))
+            self._orig = raw
+        self._render_scaled()
+
+    def _render_scaled(self):
+        if self._orig is None or self._w < 2 or self._h < 2:
+            return
+        scaled = self._orig.scaled(
+            self._w, self._h, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation)
+        self.setPixmap(self._rounded(scaled))
 
     def _rounded(self, pm):
-        """Burchaklarni yumaloqlaydi."""
+        """Rasmni markazlab, burchaklarni yumaloqlab kesadi."""
         out = QPixmap(self._w, self._h)
         out.fill(Qt.GlobalColor.transparent)
         p = QPainter(out)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        path_pm = pm
         from PyQt6.QtGui import QPainterPath
         path = QPainterPath()
-        path.addRoundedRect(0, 0, self._w, self._h, self._radius, self._radius)
+        if self._round_top_only:
+            r, w, h = self._radius, self._w, self._h
+            path.moveTo(0, h)
+            path.lineTo(0, r)
+            path.arcTo(0, 0, 2 * r, 2 * r, 180, -90)        # tepa-chap
+            path.lineTo(w - r, 0)
+            path.arcTo(w - 2 * r, 0, 2 * r, 2 * r, 90, -90)  # tepa-o'ng
+            path.lineTo(w, h)
+            path.closeSubpath()
+        else:
+            path.addRoundedRect(0, 0, self._w, self._h, self._radius, self._radius)
         p.setClipPath(path)
-        p.drawPixmap(0, 0, path_pm)
+        x = (self._w - pm.width()) // 2
+        y = (self._h - pm.height()) // 2
+        p.drawPixmap(x, y, pm)
         p.end()
         return out
 
     def _show_placeholder(self, text):
+        if self._w < 2 or self._h < 2:
+            return
         pm = QPixmap(self._w, self._h)
         pm.fill(QColor("#475569"))
         p = QPainter(pm)

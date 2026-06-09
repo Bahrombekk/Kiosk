@@ -50,13 +50,13 @@ class SiteCard(QFrame):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(18, 18, 18, 18)
-        lay.setSpacing(8)
+        lay.setContentsMargins(T.s(18), T.s(18), T.s(18), T.s(18))
+        lay.setSpacing(T.s(8))
 
         top = QHBoxLayout()
         self.icon = QLabel()
         path = os.path.join(ICON_DIR, "globe.svg")
-        self.icon.setPixmap(colored_icon(path, T.THEMES[theme_name]["accent"]).pixmap(32, 32))
+        self.icon.setPixmap(colored_icon(path, T.THEMES[theme_name]["accent"]).pixmap(T.s(32), T.s(32)))
         self.name = QLabel(item.get("name", ""))
         self.name.setObjectName("siteName")
         top.addWidget(self.icon)
@@ -82,7 +82,7 @@ class SiteCard(QFrame):
         self.theme_name = name
         c = T.THEMES[name]
         path = os.path.join(ICON_DIR, "globe.svg")
-        self.icon.setPixmap(colored_icon(path, c["accent"]).pixmap(32, 32))
+        self.icon.setPixmap(colored_icon(path, c["accent"]).pixmap(T.s(32), T.s(32)))
         self.setStyleSheet(
             f"#siteCard {{ background: {c['surface']};"
             f" border-radius: {T.RADIUS['card']}px; }}"
@@ -90,7 +90,7 @@ class SiteCard(QFrame):
             f"#siteName {{ color: {c['text']}; font-size: {T.FONT['card_title']}px; font-weight: 600; }}"
             f"#siteUrl {{ color: {c['accent']}; font-size: {T.FONT['body']}px; }}"
             f"#siteDesc {{ color: {c['text_secondary']}; font-size: {T.FONT['small']}px; }}"
-            f"#siteArrow {{ color: {c['text_secondary']}; font-size: 22px; }}")
+            f"#siteArrow {{ color: {c['text_secondary']}; font-size: {T.s(22)}px; }}")
 
     def mouseReleaseEvent(self, e):
         if e.button() == Qt.MouseButton.LeftButton:
@@ -104,6 +104,7 @@ class SitesScreen(QWidget):
         self.theme_name = "light"
         self.sites = []
         self.cards = []
+        self._cols = 0
         self._loader = None
         self._modal = None
         self._build()
@@ -152,12 +153,28 @@ class SitesScreen(QWidget):
             self.status.setText("Saytlar yo'q")
             return
         self.status.setText("")
-        cols = 3
+        cols = self._calc_cols()
+        self._cols = cols
         for i, s in enumerate(self.sites):
             card = SiteCard(s, self.theme_name)
             card.clicked.connect(self._open_detail)
             self.cards.append(card)
             self.grid.addWidget(card, i // cols, i % cols)
+
+    # Ekran kengligiga qarab ustunlar soni (katta monitorda yoyilib ketmasin).
+    def _calc_cols(self):
+        avail = self.scroll.viewport().width()
+        if avail <= 0:
+            avail = self.width() - 2 * T.SPACE["page"]
+        spacing = self.grid.horizontalSpacing()
+        target = T.s(380)
+        cols = (avail + spacing) // (target + spacing)
+        return max(1, int(cols))
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        if self.sites and self._calc_cols() != getattr(self, "_cols", 0):
+            self._render()
 
     def _open_detail(self, item):
         self._modal = _SiteDetail(self.window(), item)
@@ -176,15 +193,15 @@ class _SiteDetail(Modal):
     """Sayt detali va QR kod (TZ 8.13)."""
 
     def __init__(self, parent, item):
-        super().__init__(parent, width=820, height=480)
+        super().__init__(parent, width=T.s(820), height=T.s(480))
         self.item = item
 
         row = QHBoxLayout()
-        row.setSpacing(28)
+        row.setSpacing(T.s(28))
 
         # Chap: nom, URL, tavsif, imkoniyatlar
         left = QVBoxLayout()
-        left.setSpacing(10)
+        left.setSpacing(T.s(10))
         name = QLabel(item.get("name", ""))
         name.setStyleSheet(f"font-size:{T.FONT['title']}px; font-weight:700;")
         url = QLabel(item.get("url", ""))
@@ -209,7 +226,7 @@ class _SiteDetail(Modal):
         # O'ng: QR + 3 qadamli yo'riqnoma
         right = QVBoxLayout()
         right.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self.qr = QRWidget(220)
+        self.qr = QRWidget(T.s(220))
         self.qr.set_url(item.get("url", ""))
         right.addWidget(self.qr, alignment=Qt.AlignmentFlag.AlignHCenter)
         guide = QLabel(

@@ -109,7 +109,7 @@ class Reader(QWidget):
         for b in (self.prev_btn, self.next_btn):
             b.setObjectName("rNav")
             b.setCursor(Qt.CursorShape.PointingHandCursor)
-            b.setFixedSize(48, 48)
+            b.setFixedSize(T.s(48), T.s(48))
         self.prev_btn.clicked.connect(lambda: self._go(-1))
         self.next_btn.clicked.connect(lambda: self._go(+1))
         bottom.addWidget(self.counter)
@@ -168,8 +168,8 @@ class Reader(QWidget):
         self.counter.setStyleSheet(
             f"#rCounter {{ color: {c['text_secondary']}; font-size: {T.FONT['body']}px; }}")
         nav = (f"#rNav {{ background: {c['surface']}; color: {c['text']};"
-               f" border: 1px solid {c['border']}; border-radius: 24px;"
-               f" font-size: 22px; }}"
+               f" border: 1px solid {c['border']}; border-radius: {T.s(24)}px;"
+               f" font-size: {T.s(22)}px; }}"
                f"#rNav:disabled {{ color: {c['border']}; }}")
         self.prev_btn.setStyleSheet(nav)
         self.next_btn.setStyleSheet(nav)

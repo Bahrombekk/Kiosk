@@ -15,7 +15,9 @@ import sys
 import vlc
 from PyQt6.QtWidgets import (QWidget, QFrame, QHBoxLayout, QVBoxLayout,
                              QPushButton, QLabel, QSlider)
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, QEvent, pyqtSignal
+
+import theme as T
 
 
 def _fmt(ms):
@@ -69,40 +71,63 @@ class VideoPlayer(QWidget):
         # Video yuzasi (VLC shu oynaga chizadi)
         self.video = QFrame(self)
         self.video.setStyleSheet("background: #000000;")
+        # Sichqoncha tegsa boshqaruv qaytsin: harakat hodisasi ota-oynaga
+        # (player) o'tib, mouseMoveEvent ishga tushadi.
+        self.video.setMouseTracking(True)
 
-        # Bufer indikatori (markazda)
-        self.buffering = QLabel("Yuklanmoqda...", self)
-        self.buffering.setStyleSheet(
-            "color: #FFFFFF; font-size: 22px; background: transparent;")
-        self.buffering.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.buffering.hide()
-
-        # Boshqaruv qatlami (video ustida)
-        self.controls = QWidget(self)
-        self.controls.setAttribute(Qt.WidgetAttribute.WA_NativeWindow, True)
+        # Boshqaruv qatlami — alohida shaffof "ustda turuvchi" oyna.
+        # VLC Windows'da videoni o'z native HWND'iga chizadi: agar boshqaruvni
+        # oddiy bola-widget qilsak, video uni berkitadi. Shu sabab boshqaruv
+        # alohida top-level shaffof oyna (DWM uni video ustiga shaffof
+        # joylashtiradi) — video ko'rinadi, tugmalar bosiladi.
+        self.controls = QWidget(
+            None,
+            Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowStaysOnTopHint
+            | Qt.WindowType.Tool)
+        self.controls.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.controls.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        # Esc kabi klavishlar asosiy oynada qolsin (boshqaruv fokus olmasin)
+        self.controls.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.controls.setMouseTracking(True)
+        self.controls.installEventFilter(self)
         c = QVBoxLayout(self.controls)
-        c.setContentsMargins(24, 16, 24, 24)
+        c.setContentsMargins(0, 0, 0, 0)
+        c.setSpacing(0)
 
-        # Yuqori: X + sarlavha
-        top = QHBoxLayout()
-        self.x_btn = self._round_btn("✕", 44)
+        # Yuqori panel (X + sarlavha) — ochiq rangli video ustida ham o'qilsin
+        # uchun yarim shaffof to'q "scrim" fon.
+        self.top_bar = QFrame()
+        self.top_bar.setObjectName("topBar")
+        top = QHBoxLayout(self.top_bar)
+        top.setContentsMargins(T.s(24), T.s(16), T.s(24), T.s(16))
+        top.setSpacing(T.s(16))
+        self.x_btn = self._round_btn("✕", T.s(60))
         self.x_btn.clicked.connect(self.stop_and_close)
         self.title_lbl = QLabel(self.title)
         self.title_lbl.setStyleSheet(
-            "color:#FFFFFF; font-size:20px; font-weight:600; background:transparent;")
+            f"color:#FFFFFF; font-size:{T.s(22)}px; font-weight:600; background:transparent;")
         top.addWidget(self.x_btn)
         top.addWidget(self.title_lbl)
         top.addStretch(1)
-        c.addLayout(top)
+        c.addWidget(self.top_bar)
 
         c.addStretch(1)
 
-        # Markaz: 10s orqaga, play/pauza, 10s oldinga
+        # Markaz: bufer indikatori + 10s orqaga, play/pauza, 10s oldinga
+        self.buffering = QLabel("Yuklanmoqda...")
+        self.buffering.setStyleSheet(
+            f"color: #FFFFFF; font-size: {T.s(22)}px; font-weight:600; background: transparent;")
+        self.buffering.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.buffering.hide()
+        c.addWidget(self.buffering)
+
         center = QHBoxLayout()
+        center.setSpacing(T.s(28))
         center.addStretch(1)
-        self.back_btn = self._round_btn("« 10", 64)
-        self.play_btn = self._round_btn("⏸", 84)
-        self.fwd_btn = self._round_btn("10 »", 64)
+        self.back_btn = self._round_btn("« 10", T.s(72))
+        self.play_btn = self._round_btn("⏸", T.s(96))
+        self.fwd_btn = self._round_btn("10 »", T.s(72))
         self.back_btn.clicked.connect(lambda: self._seek_relative(-10000))
         self.play_btn.clicked.connect(self.toggle_play)
         self.fwd_btn.clicked.connect(lambda: self._seek_relative(+10000))
@@ -113,50 +138,69 @@ class VideoPlayer(QWidget):
 
         c.addStretch(1)
 
-        # Past: vaqt | progress | umumiy | ovoz
-        bottom = QHBoxLayout()
+        # Pastki panel: vaqt | progress | umumiy | ovoz (scrim fon)
+        self.bottom_bar = QFrame()
+        self.bottom_bar.setObjectName("bottomBar")
+        bottom = QHBoxLayout(self.bottom_bar)
+        bottom.setContentsMargins(T.s(28), T.s(18), T.s(28), T.s(22))
+        bottom.setSpacing(T.s(14))
         self.cur_lbl = QLabel("00:00")
         self.tot_lbl = QLabel("00:00")
         for l in (self.cur_lbl, self.tot_lbl):
-            l.setStyleSheet("color:#FFFFFF; font-size:15px; background:transparent;")
+            l.setStyleSheet(f"color:#FFFFFF; font-size:{T.s(16)}px; background:transparent;")
 
         self.progress = QSlider(Qt.Orientation.Horizontal)
+        self.progress.setObjectName("seekBar")
         self.progress.setRange(0, 1000)
         self.progress.sliderPressed.connect(lambda: setattr(self, "_dragging", True))
         self.progress.sliderReleased.connect(self._on_seek)
 
+        self.vol_lbl = QLabel("🔊")
+        self.vol_lbl.setStyleSheet(f"color:#FFFFFF; font-size:{T.s(18)}px; background:transparent;")
         self.vol = QSlider(Qt.Orientation.Horizontal)
+        self.vol.setObjectName("volBar")
         self.vol.setRange(0, 100)
         self.vol.setValue(80)
-        self.vol.setFixedWidth(120)
+        self.vol.setFixedWidth(T.s(140))
         self.vol.valueChanged.connect(self._mp.audio_set_volume)
 
         bottom.addWidget(self.cur_lbl)
         bottom.addWidget(self.progress, 1)
         bottom.addWidget(self.tot_lbl)
-        bottom.addSpacing(16)
-        bottom.addWidget(QLabel("🔊"))
+        bottom.addSpacing(T.s(16))
+        bottom.addWidget(self.vol_lbl)
         bottom.addWidget(self.vol)
-        c.addLayout(bottom)
+        c.addWidget(self.bottom_bar)
 
-        self.controls.setStyleSheet("background: transparent;")
+        # Scrim fon + slayder ko'rinishi (sensorli ekran uchun yo'g'onroq).
+        gh, hh = T.s(6), T.s(18)   # groove balandligi, handle o'lchami
+        self.controls.setStyleSheet(
+            "#topBar { background: rgba(0,0,0,0.45); }"
+            "#bottomBar { background: rgba(0,0,0,0.55); }"
+            f"QSlider::groove:horizontal {{ height: {gh}px; border-radius: {gh // 2}px;"
+            "  background: rgba(255,255,255,0.30); }"
+            f"QSlider::sub-page:horizontal {{ height: {gh}px; border-radius: {gh // 2}px;"
+            "  background: #2563EB; }"
+            f"QSlider::handle:horizontal {{ width: {hh}px; height: {hh}px;"
+            f"  margin: {-(hh // 2 - gh // 2)}px 0; border-radius: {hh // 2}px;"
+            "  background: #FFFFFF; }")
 
     def _round_btn(self, text, size):
         b = QPushButton(text)
         b.setCursor(Qt.CursorShape.PointingHandCursor)
         b.setFixedSize(size, size)
         b.setStyleSheet(
-            f"QPushButton {{ background: rgba(255,255,255,0.15); color:#FFFFFF;"
-            f" border:none; border-radius:{size // 2}px; font-size:18px;"
+            f"QPushButton {{ background: rgba(0,0,0,0.45); color:#FFFFFF;"
+            f" border:none; border-radius:{size // 2}px; font-size:{T.s(20)}px;"
             f" font-weight:600; }}"
-            f"QPushButton:hover {{ background: rgba(255,255,255,0.30); }}")
+            f"QPushButton:hover {{ background: rgba(37,99,235,0.85); }}")
         return b
 
     # ---------- O'ynatish ----------
     def start(self):
         self.showFullScreen()
-        media = self._instance.media_new(self.stream_url)
-        self._mp.set_media(media)
+        self._media = self._instance.media_new(self.stream_url)
+        self._mp.set_media(self._media)
         # Video chiqarish oynasini ulash (platformaga bog'liq)
         win_id = int(self.video.winId())
         if sys.platform.startswith("win"):
@@ -165,12 +209,37 @@ class VideoPlayer(QWidget):
             self._mp.set_nsobject(win_id)
         else:
             self._mp.set_xwindow(win_id)
+        # VLC video oynasi sichqoncha/klavishlarni o'zi ushlab qolmasin —
+        # aks holda event'lar Qt'ga yetmaydi: boshqaruv yashirilgach qaytmaydi
+        # va X tugma bosilmaydi (kiosk: chiqib bo'lmay qoladi).
+        self._mp.video_set_mouse_input(False)
+        self._mp.video_set_key_input(False)
         self._mp.audio_set_volume(self.vol.value())
         self._mp.play()
+        self.setFocus()
         self._show_controls()
 
+    def keyPressEvent(self, e):
+        # Klaviatura bilan ham chiqish/boshqaruv (kiosk uchun zaxira yo'l).
+        if e.key() == Qt.Key.Key_Escape:
+            self.stop_and_close()
+        elif e.key() == Qt.Key.Key_Space:
+            self.toggle_play()
+        elif e.key() == Qt.Key.Key_Left:
+            self._seek_relative(-10000)
+        elif e.key() == Qt.Key.Key_Right:
+            self._seek_relative(+10000)
+        else:
+            super().keyPressEvent(e)
+
     def toggle_play(self):
-        self._mp.pause()  # play<->pause almashtiradi
+        state = self._mp.get_state()
+        if state in (vlc.State.Ended, vlc.State.Stopped):
+            # Video tugagan/to'xtagan — boshidan qaytadan o'ynatamiz.
+            self._mp.set_media(self._media)
+            self._mp.play()
+        else:
+            self._mp.pause()  # play<->pause almashtiradi
         self._show_controls()
 
     def _seek_relative(self, delta_ms):
@@ -190,45 +259,72 @@ class VideoPlayer(QWidget):
 
     def _refresh(self):
         state = self._mp.get_state()
-        # Bufer holati
-        if state == vlc.State.Buffering:
-            self.buffering.show()
+        # Yuklanish/bufer holati — indikator ko'rsatamiz va boshqaruv
+        # yashirilmasin (foydalanuvchi nimani kutayotganini bilsin).
+        loading = state in (vlc.State.Opening, vlc.State.Buffering)
+        self.buffering.setVisible(loading)
+        if loading:
+            self._show_controls()
+
+        # play / pauza / qayta o'ynatish belgisi
+        if state == vlc.State.Ended:
+            self.play_btn.setText("↻")
+            self._show_controls()           # tugagach — chiqish/qayta uchun
+        elif state == vlc.State.Playing:
+            self.play_btn.setText("⏸")
         else:
-            self.buffering.hide()
-        # play/pauza belgisi
-        playing = state == vlc.State.Playing
-        self.play_btn.setText("⏸" if playing else "▶")
+            self.play_btn.setText("▶")
 
         length = self._mp.get_length()
         cur = self._mp.get_time()
         self.cur_lbl.setText(_fmt(cur))
         self.tot_lbl.setText(_fmt(length))
         if length > 0 and not self._dragging:
-            self.progress.setValue(int(1000 * cur / length))
+            pos = 1000 if state == vlc.State.Ended else int(1000 * cur / length)
+            self.progress.setValue(pos)
 
     # ---------- Boshqaruvni ko'rsatish/yashirish ----------
     def _show_controls(self):
+        # Boshqaruv oynasi videoni aniq qoplashi uchun geometriyani moslaymiz.
+        self.controls.setGeometry(self.geometry())
         self.controls.show()
         self.controls.raise_()
-        self._hide_timer.start(3500)
+        self._hide_timer.start(5000)
 
     def _hide_controls(self):
         self.controls.hide()
+
+    def eventFilter(self, obj, e):
+        # Boshqaruv oynasiga tegilsa/sichqoncha qimirlasa — yashirilmasin.
+        if obj is self.controls and e.type() in (
+                QEvent.Type.MouseButtonPress, QEvent.Type.MouseMove):
+            self._show_controls()
+        return super().eventFilter(obj, e)
 
     def mouseMoveEvent(self, e):
         self._show_controls()
         super().mouseMoveEvent(e)
 
+    def mousePressEvent(self, e):
+        # Sensorli ekran: tegilganda boshqaruv qaytsin (tap = press, move emas).
+        # Boshqaruv yashirin bo'lsa — ko'rsatadi; ko'rinib turgan bo'lsa —
+        # taymerni yangilaydi.
+        self._show_controls()
+        super().mousePressEvent(e)
+
     # ---------- Yopish ----------
     def stop_and_close(self):
         self._timer.stop()
+        self._hide_timer.stop()
         self._mp.stop()
+        self.controls.close()
+        self.controls.deleteLater()
         self.close()
         self.closed.emit()
         self.deleteLater()
 
     def resizeEvent(self, e):
         self.video.setGeometry(self.rect())
-        self.controls.setGeometry(self.rect())
-        self.buffering.setGeometry(self.rect())
+        if self.controls.isVisible():
+            self.controls.setGeometry(self.geometry())
         super().resizeEvent(e)

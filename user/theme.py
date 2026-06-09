@@ -63,6 +63,38 @@ RADIUS = {"card": 26, "button": 16, "pill": 32}
 # Bo'shliqlar (px)
 SPACE = {"page": 24, "gap": 16, "inner": 18}
 
+# ----------------------------------------------------------------------------
+# Moslashuvchan o'lcham (responsive scaling).
+# Dastur turli monitorlarda ishlaydi (poyezdda kichik ham, katta ham bo'lishi
+# mumkin). Barcha o'lchamlar 1920x1080 "bazaviy dizayn" uchun yozilgan; ishga
+# tushganda haqiqiy ekran o'lchamiga qarab SCALE hisoblanadi va shu yagona
+# koeffitsient orqali shrift/bo'shliq/o'lchamlar kichik yoki katta qilinadi —
+# nisbatlar saqlanib qoladi. Qat'iy piksel yozilgan joylarda T.s(px) ishlating.
+# ----------------------------------------------------------------------------
+DESIGN_W, DESIGN_H = 1920, 1080
+SCALE = 1.0
+_BASE = None   # (FONT, SPACE, RADIUS) ning asl nusxasi — qayta hisoblash uchun
+
+
+def s(px):
+    """Bazaviy pikselni joriy ekran SCALE'iga moslab qaytaradi (butun son)."""
+    return max(1, round(px * SCALE))
+
+
+def init_scale(size, lo=0.8, hi=1.7):
+    """Ekran o'lchamiga qarab global SCALE'ni o'rnatadi va FONT/SPACE/RADIUS
+    lug'atlarini joyida qayta hisoblaydi. UI qurilmasdan OLDIN chaqirilishi shart
+    (main.py). `size` — QSize (ekran o'lchami)."""
+    global SCALE, _BASE
+    if _BASE is None:
+        _BASE = ({**FONT}, {**SPACE}, {**RADIUS})
+    bf, bs, br = _BASE
+    sc = min(size.width() / DESIGN_W, size.height() / DESIGN_H)
+    SCALE = max(lo, min(hi, sc))
+    FONT.update({k: max(1, round(v * SCALE)) for k, v in bf.items()})
+    SPACE.update({k: max(1, round(v * SCALE)) for k, v in bs.items()})
+    RADIUS.update({k: max(1, round(v * SCALE)) for k, v in br.items()})
+
 # Navigatsiya bo'limlari: (kalit, ko'rinadigan nom, ikonka fayli, sarlavha)
 NAV_ITEMS = [
     ("home",   "Asosiy",   "home.svg",  ""),
@@ -71,3 +103,5 @@ NAV_ITEMS = [
     ("books",  "Kitoblar", "book.svg",  "KITOBLAR"),
     ("sites",  "Saytlar",  "globe.svg", "SAYTLAR"),
 ]
+
+
