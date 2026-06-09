@@ -17,7 +17,32 @@ Sinov tugmalari (faqat ishlab chiqishda):
   Ctrl+Shift+C    — admin chiqishi (kiosk'dan chiqish)
 """
 import sys
+import os
+import faulthandler
+import traceback
 from datetime import datetime
+
+# --- Crash'ni ko'rinadigan qilish (TZ debug) ---
+# Muammo: ilova "o'zidan o'zi" yopilib, xatoni ko'rsatmasdi. PyQt6'da Qt
+# hodisasi (paintEvent/slot) ichidagi ushlanmagan istisno yoki C++ darajasidagi
+# nosozlik konsolga hech narsa chiqarmasdan jarayonni tugatishi mumkin.
+# Quyidagi blok HAR QANDAY crash'ni `crash.log` fayliga va konsolga yozadi.
+_LOG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "crash.log")
+_logf = open(_LOG, "a", encoding="utf-8")
+faulthandler.enable(file=_logf, all_threads=True)   # native crash (segfault) dump
+
+
+def _excepthook(exc_type, exc, tb):
+    """Ushlanmagan Python istisnolarini yozadi (PyQt jim yopib yubormasin)."""
+    text = "".join(traceback.format_exception(exc_type, exc, tb))
+    _logf.write("\n===== CRASH =====\n" + text)
+    _logf.flush()
+    sys.stderr.write(text)
+    sys.stderr.flush()
+
+
+sys.excepthook = _excepthook
+
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QStackedWidget,
                              QLabel)
 from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
@@ -25,6 +50,7 @@ from PyQt6.QtGui import QPixmap, QPainter, QColor
 
 import config
 import theme as T
+from threads import track
 from api import ApiClient
 from ws_client import WSClient
 from widgets.navbar import NavBar
@@ -132,7 +158,7 @@ class MainWindow(QWidget):
         self.banner_timer.timeout.connect(self.banner.hide)
 
         # WebSocket real-time (TZ 11.2): status va e'lonlarni tinglaydi
-        self.ws = WSClient()
+        self.ws = track(WSClient())
         self.ws.status.connect(self._on_status)
         self.ws.announcement.connect(self.show_announcement)
         self.ws.start()
@@ -146,7 +172,7 @@ class MainWindow(QWidget):
     def check_connection(self):
         if self._checker and self._checker.isRunning():
             return  # oldingi tekshiruv hali tugamagan
-        self._checker = HealthChecker(self.api)
+        self._checker = track(HealthChecker(self.api))
         self._checker.result.connect(self._on_health)
         self._checker.start()
 
@@ -282,10 +308,15 @@ class MainWindow(QWidget):
 
 
 def main():
-    app = QApplication(sys.argv)
-    win = MainWindow()
-    win.showMaximized()  # VAQTINCHALIK: to'liq ekran o'rniga (ASL: win.showFullScreen())
-    sys.exit(app.exec())
+    try:
+        app = QApplication(sys.argv)
+        win = MainWindow()
+        win.showMaximized()  # VAQTINCHALIK: to'liq ekran o'rniga (ASL: win.showFullScreen())
+        sys.exit(app.exec())
+    except Exception:
+        # Yaratish paytidagi istisnoni ham yozamiz (excepthook ba'zan kech ulanadi)
+        _excepthook(*sys.exc_info())
+        raise
 
 
 if __name__ == "__main__":

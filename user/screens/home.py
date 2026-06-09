@@ -21,6 +21,7 @@ from PyQt6.QtSvg import QSvgRenderer
 BASE_W, BASE_H = 1500, 980
 
 import theme as T
+from threads import track
 from widgets.cover import CoverLabel, _Fetcher
 from widgets.card import fmt_duration
 from reader import Reader
@@ -105,9 +106,8 @@ class BannerImage(QLabel):
         return False
 
     def load_url(self, url):
-        if self._fetcher and self._fetcher.isRunning():
-            self._fetcher.terminate()
-        self._fetcher = _Fetcher(url)
+        # terminate() o'rniga track() — eski fetcher tugagunicha tirik qoladi.
+        self._fetcher = track(_Fetcher(url))
         self._fetcher.done.connect(self._on_data)
         self._fetcher.start()
 
@@ -379,7 +379,7 @@ class _HomeCanvas(QWidget):
 
     # ---- Yuklash ----
     def on_show(self):
-        self._loader = _Loader(self.api)
+        self._loader = track(_Loader(self.api))
         self._loader.done.connect(self._on_data)
         self._loader.start()
         self.timer.start()
@@ -404,7 +404,7 @@ class _HomeCanvas(QWidget):
         self._render_rec()
 
     def _refresh_status(self):
-        self._sloader = _StatusLoader(self.api)
+        self._sloader = track(_StatusLoader(self.api))
         self._sloader.done.connect(self._apply_status)
         self._sloader.start()
 

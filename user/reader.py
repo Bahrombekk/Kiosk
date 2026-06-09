@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QLabel, QScrollArea)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 import theme as T
+from threads import track
 
 PAGE_CHARS = 900   # bitta sahifaga taxminan necha belgi
 
@@ -120,7 +121,7 @@ class Reader(QWidget):
     def start(self):
         self._restyle()
         self.showFullScreen()
-        self._loader = _TextLoader(self.api, self.item["id"])
+        self._loader = track(_TextLoader(self.api, self.item["id"]))
         self._loader.done.connect(self._on_text)
         self._loader.fail.connect(lambda: self.text.setText("Matnni yuklab bo'lmadi"))
         self._loader.start()

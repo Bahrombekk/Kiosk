@@ -11,6 +11,7 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal, QByteArray, QRectF, QSize
 from PyQt6.QtGui import QPixmap, QPainter, QColor
 from PyQt6.QtSvg import QSvgRenderer
 import theme as T
+from threads import track
 
 
 class _Fetcher(QThread):
@@ -46,9 +47,10 @@ class CoverLabel(QLabel):
         return QSize(self._w, self._h)
 
     def load(self, url):
-        if self._fetcher and self._fetcher.isRunning():
-            self._fetcher.terminate()
-        self._fetcher = _Fetcher(url)
+        # Eski fetcher hali ishlayotgan bo'lsa, uni majburan to'xtatmaymiz
+        # (terminate xavfli) — track() uni tugagunicha tirik saqlaydi; oxirgi
+        # boshlangan so'rov natijasi ko'rsatiladi.
+        self._fetcher = track(_Fetcher(url))
         self._fetcher.done.connect(self._on_data)
         self._fetcher.fail.connect(lambda: self._show_placeholder("?"))
         self._fetcher.start()

@@ -1,40 +1,36 @@
 """
-map.py — Xarita (Map) bo'limi (Figma "Xarita.html" maketiga moslangan).
+map.py — Xarita (Map) bo'limi.
 
 Katta oq karta ichida:
-  - kulrang sarlavha banneri: poyezd nomi, yo'nalish, 3 ta chip (sana / jo'nash /
-    davomiylik) va poyezd rasmi;
-  - chapda bekatlar timeline'i (o'tilgan to'la nuqta, joriy halqa, kelgusi bo'sh;
-    o'tilgan qism to'liq chiziq, qolgani uzuq chiziq);
-  - o'ngda marshrut xaritasi rasmi.
-Bekatlar va joriy bekat serverdan olinadi (dinamik). Butun ekran qat'iy
-o'lchamda quriladi va ScaledScreen orqali miqyoslanadi — katta ekranda buzilmaydi.
+  - kulrang sarlavha banneri: poyezd nomi, yo'nalish, 3 chip, poyezd rasmi;
+  - chapda bekatlar timeline'i (skroll qilinadi);
+  - o'ngda HAQIQIY, INTERAKTIV offline xarita (lokal OSM/Carto plitkalaridan) —
+    suriladi (drag), zumlanadi (g'ildirak yoki +/− tugmalari).
+
+Bu ekran QGraphicsView miqyoslagichiga O'RALMAGAN — shunda xarita to'g'ridan-to'g'ri
+sichqoncha hodisalarini oladi (interaktiv bo'ladi). Moslashuvchan layout ishlatiladi.
 """
 import os
 from datetime import datetime
 
-from PyQt6.QtWidgets import QWidget, QFrame, QLabel, QHBoxLayout
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QRectF, QPointF
-from PyQt6.QtGui import (QPixmap, QPainter, QPainterPath, QColor, QPen, QBrush,
-                         QFont)
+from PyQt6.QtWidgets import (QWidget, QFrame, QLabel, QHBoxLayout, QVBoxLayout,
+                             QScrollArea, QSizePolicy)
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QRectF
+from PyQt6.QtGui import QPixmap, QColor, QPen, QBrush, QFont, QPainter
 
 import theme as T
-from widgets.scaled import ScaledScreen
+from threads import track
+from widgets.slippymap import SlippyMap
 
 ASSETS = os.path.join(os.path.dirname(__file__), "..", "assets", "design")
-MAP_IMG = os.path.join(ASSETS, "map.png")
 TRAIN_IMG = os.path.join(ASSETS, "train.png")
-
-# Sahna o'lchami (Figma main-card 1918×1213 + atrofdagi kichik chekka)
-BASE_W, BASE_H = 1980, 1280
-CARD_X, CARD_Y, CARD_W, CARD_H = 31, 34, 1918, 1213
 
 UZ_MONTHS = ["", "Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun",
              "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"]
 
 
 class _Loader(QThread):
-    done = pyqtSignal(list, dict, dict)   # stops, status, settings
+    done = pyqtSignal(list, dict, dict)
     fail = pyqtSignal()
 
     def __init__(self, api):
@@ -49,35 +45,25 @@ class _Loader(QThread):
             self.fail.emit()
 
 
-def _rounded(pm, w, h, radius):
-    """Pixmap'ni w×h ga to'ldirib (cover) burchaklarini yumaloqlaydi."""
-    scaled = pm.scaled(w, h, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                       Qt.TransformationMode.SmoothTransformation)
-    out = QPixmap(w, h)
-    out.fill(Qt.GlobalColor.transparent)
-    p = QPainter(out)
-    p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    path = QPainterPath()
-    path.addRoundedRect(0, 0, w, h, radius, radius)
-    p.setClipPath(path)
-    p.drawPixmap((w - scaled.width()) // 2, (h - scaled.height()) // 2, scaled)
-    p.end()
-    return out
-
-
 class Timeline(QWidget):
-    """Bekatlar timeline'i — chiziq (o'tilgan: to'liq, qolgani: uzuq) + nuqtalar."""
+    """Bekatlar timeline'i (skroll uchun qat'iy oraliqli)."""
+
+    PAD_T = 30
+    STOP_GAP = 92
 
     def __init__(self):
         super().__init__()
         self.stops = []
         self.current = 0
         self.theme_name = "light"
+        self.setStyleSheet("background: transparent;")
 
     def set_data(self, stops, current, theme_name):
         self.stops = stops
         self.current = current
         self.theme_name = theme_name
+        n = len(stops)
+        self.setMinimumHeight(self.PAD_T * 2 + max(0, n - 1) * self.STOP_GAP)
         self.update()
 
     def paintEvent(self, e):
@@ -90,40 +76,32 @@ class Timeline(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         n = len(self.stops)
-        pad_t, pad_b = 36, 40
-        x = 92                      # nuqtalar markazi
-        text_x = 156
-        H = self.height()
-        ys = [pad_t if n == 1 else pad_t + i * (H - pad_t - pad_b) / (n - 1)
-              for i in range(n)]
+        x = 26
+        text_x = 56
+        ys = [self.PAD_T + i * self.STOP_GAP for i in range(n)]
 
-        # --- Bog'lovchi chiziqlar ---
         for i in range(n - 1):
-            y1, y2 = ys[i] + 18, ys[i + 1] - 18
-            if i < self.current:                       # o'tilgan — to'liq ko'k
-                p.setPen(QPen(accent, 6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-            else:                                      # qolgan — uzuq kulrang
-                p.setPen(QPen(gray, 5, Qt.PenStyle.DashLine, Qt.PenCapStyle.RoundCap))
-            p.drawLine(QPointF(x, y1), QPointF(x, y2))
+            y1, y2 = ys[i] + 11, ys[i + 1] - 11
+            if i < self.current:
+                p.setPen(QPen(accent, 4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+            else:
+                p.setPen(QPen(gray, 3, Qt.PenStyle.DashLine, Qt.PenCapStyle.RoundCap))
+            p.drawLine(int(x), int(y1), int(x), int(y2))
 
-        # --- Nuqtalar va matn ---
-        name_font = QFont(); name_font.setPixelSize(56); name_font.setWeight(QFont.Weight.Bold)
-        small_font = QFont(); small_font.setPixelSize(34); small_font.setWeight(QFont.Weight.Medium)
+        name_font = QFont(); name_font.setPixelSize(24); name_font.setWeight(QFont.Weight.Bold)
+        small_font = QFont(); small_font.setPixelSize(15); small_font.setWeight(QFont.Weight.Medium)
 
         for i, s in enumerate(self.stops):
             y = ys[i]
-            if i < self.current:                       # o'tilgan — to'la
-                p.setPen(Qt.PenStyle.NoPen)
-                p.setBrush(QBrush(accent))
-                p.drawEllipse(QPointF(x, y), 16, 16)
-            elif i == self.current:                    # joriy — halqa
-                p.setBrush(QBrush(QColor("#FFFFFF")))
-                p.setPen(QPen(accent, 7))
-                p.drawEllipse(QPointF(x, y), 15, 15)
-            else:                                      # kelgusi — bo'sh
-                p.setBrush(QBrush(QColor(c["surface"])))
-                p.setPen(QPen(gray, 5))
-                p.drawEllipse(QPointF(x, y), 14, 14)
+            if i < self.current:
+                p.setPen(Qt.PenStyle.NoPen); p.setBrush(QBrush(accent))
+                p.drawEllipse(int(x - 8), int(y - 8), 16, 16)
+            elif i == self.current:
+                p.setBrush(QBrush(QColor("#FFFFFF"))); p.setPen(QPen(accent, 4))
+                p.drawEllipse(int(x - 9), int(y - 9), 18, 18)
+            else:
+                p.setBrush(QBrush(QColor("#FFFFFF"))); p.setPen(QPen(gray, 3))
+                p.drawEllipse(int(x - 7), int(y - 7), 14, 14)
 
             time = s.get("arrival_time") or ""
             if i == 0:
@@ -133,24 +111,20 @@ class Timeline(QWidget):
             else:
                 detail = time
 
-            # nom
             p.setFont(name_font)
             p.setPen(accent if i == self.current else QColor(c["text"]))
-            p.drawText(QRectF(text_x, y - 44, 600, 60),
+            p.drawText(QRectF(text_x, y - 22, 320, 28),
                        Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
                        s.get("name", ""))
-            # detal (vaqt)
             p.setFont(small_font)
             p.setPen(QColor(c["text_secondary"]))
-            p.drawText(QRectF(text_x, y + 12, 600, 44),
+            p.drawText(QRectF(text_x, y + 6, 320, 22),
                        Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
                        detail)
         p.end()
 
 
-class _MapCanvas(QWidget):
-    """Xarita tarkibi — qat'iy BASE_W×BASE_H o'lchamda."""
-
+class MapScreen(QWidget):
     def __init__(self, api):
         super().__init__()
         self.api = api
@@ -158,76 +132,86 @@ class _MapCanvas(QWidget):
         self.stops = []
         self.current = 0
         self._loader = None
-        self.setObjectName("mapBg")
-        self.setFixedSize(BASE_W, BASE_H)
         self._build()
 
     def _build(self):
-        # Oq asosiy karta
-        self.card = QFrame(self)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(24, 12, 24, 24)
+
+        self.card = QFrame()
         self.card.setObjectName("mainCard")
-        self.card.setGeometry(CARD_X, CARD_Y, CARD_W, CARD_H)
+        cv = QVBoxLayout(self.card)
+        cv.setContentsMargins(0, 0, 0, 0)
+        cv.setSpacing(0)
 
-        # --- Sarlavha banneri ---
-        self.header = QFrame(self.card)
+        # ---- Sarlavha banneri ----
+        self.header = QFrame()
         self.header.setObjectName("mapHeader")
-        self.header.setGeometry(0, 0, CARD_W, 372)
-
-        self.train_name = QLabel("Poyezd", self.header)
+        self.header.setFixedHeight(196)
+        hh = QHBoxLayout(self.header)
+        hh.setContentsMargins(34, 26, 30, 26)
+        left = QVBoxLayout()
+        left.setSpacing(6)
+        self.train_name = QLabel("Poyezd")
         self.train_name.setObjectName("hTitle")
-        self.train_name.setGeometry(64, 46, 1100, 84)
-
-        self.route = QLabel("", self.header)
+        self.route = QLabel("")
         self.route.setObjectName("hSub")
-        self.route.setGeometry(64, 142, 1100, 56)
-
-        # chiplar
-        self.chips = QWidget(self.header)
-        self.chips.setGeometry(64, 236, 1120, 92)
-        crow = QHBoxLayout(self.chips)
-        crow.setContentsMargins(0, 0, 0, 0)
-        crow.setSpacing(22)
+        left.addWidget(self.train_name)
+        left.addWidget(self.route)
+        chips = QHBoxLayout()
+        chips.setSpacing(14)
         self.chip_date = self._chip("📅", "")
         self.chip_depart = self._chip("🕐", "")
         self.chip_dur = self._chip("🏁", "")
         for ch in (self.chip_date, self.chip_depart, self.chip_dur):
-            crow.addWidget(ch)
-        crow.addStretch(1)
+            chips.addWidget(ch)
+        chips.addStretch(1)
+        left.addSpacing(6)
+        left.addLayout(chips)
+        left.addStretch(1)
+        hh.addLayout(left, 1)
 
-        # poyezd rasmi
-        self.train_img = QLabel(self.header)
-        self.train_img.setGeometry(CARD_W - 46 - 670, 40, 670, 316)
+        self.train_img = QLabel()
         tpm = QPixmap(TRAIN_IMG)
         if not tpm.isNull():
-            self.train_img.setPixmap(tpm.scaled(
-                670, 316, Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation))
-        self.train_img.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
+            self.train_img.setPixmap(tpm.scaledToHeight(
+                150, Qt.TransformationMode.SmoothTransformation))
+        self.train_img.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        hh.addWidget(self.train_img, 0, Qt.AlignmentFlag.AlignVCenter)
+        cv.addWidget(self.header)
 
-        # --- Timeline ---
+        # ---- Tana: timeline (chap) + xarita (o'ng) ----
+        body = QHBoxLayout()
+        body.setContentsMargins(28, 24, 28, 28)
+        body.setSpacing(26)
+
         self.timeline = Timeline()
-        self.timeline.setParent(self.card)
-        self.timeline.setGeometry(0, 398, 760, 770)
+        self.tl_scroll = QScrollArea()
+        self.tl_scroll.setObjectName("tlScroll")
+        self.tl_scroll.setWidget(self.timeline)
+        self.tl_scroll.setWidgetResizable(True)
+        self.tl_scroll.setFixedWidth(380)
+        self.tl_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        self.tl_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.tl_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        body.addWidget(self.tl_scroll)
 
-        # --- Xarita rasmi ---
-        self.map_lbl = QLabel(self.card)
-        self.map_lbl.setObjectName("mapImg")
-        self.map_lbl.setGeometry(775, 398, 1060, 750)
-        mpm = QPixmap(MAP_IMG)
-        if not mpm.isNull():
-            self.map_lbl.setPixmap(_rounded(mpm, 1060, 750, 28))
+        self.slippy = SlippyMap(radius=22)
+        self.slippy.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        body.addWidget(self.slippy, 1)
+
+        cv.addLayout(body, 1)
+        root.addWidget(self.card)
 
     def _chip(self, emoji, text):
         chip = QFrame()
         chip.setObjectName("chip")
-        chip.setFixedHeight(88)
+        chip.setFixedHeight(48)
         lay = QHBoxLayout(chip)
-        lay.setContentsMargins(30, 0, 32, 0)
-        lay.setSpacing(16)
-        ic = QLabel(emoji)
-        ic.setObjectName("chipIc")
-        lbl = QLabel(text)
-        lbl.setObjectName("chipTxt")
+        lay.setContentsMargins(16, 0, 18, 0)
+        lay.setSpacing(9)
+        ic = QLabel(emoji); ic.setObjectName("chipIc")
+        lbl = QLabel(text); lbl.setObjectName("chipTxt")
         lay.addWidget(ic)
         lay.addWidget(lbl)
         chip._text = lbl
@@ -235,7 +219,7 @@ class _MapCanvas(QWidget):
 
     # ---- Ma'lumot ----
     def on_show(self):
-        self._loader = _Loader(self.api)
+        self._loader = track(_Loader(self.api))
         self._loader.done.connect(self._on_data)
         self._loader.start()
 
@@ -244,7 +228,8 @@ class _MapCanvas(QWidget):
         cur_name = status.get("current_stop")
         self.current = next((i for i, s in enumerate(stops)
                              if s.get("name") == cur_name), 0)
-        self.train_name.setText(status.get("train_name") or settings.get("train_name") or "Poyezd")
+        self.train_name.setText(status.get("train_name")
+                                or settings.get("train_name") or "Poyezd")
         route = status.get("route") or settings.get("route") or ""
         if "→" in route:
             a, _, b = route.partition("→")
@@ -253,12 +238,11 @@ class _MapCanvas(QWidget):
                 f"&rarr;</font> {b.strip()}")
         else:
             self.route.setText(route)
-        # chiplar
         self.chip_date._text.setText(self._today())
-        depart = settings.get("depart_time") or "—"
-        self.chip_depart._text.setText(f"Jo'nash: {depart}")
+        self.chip_depart._text.setText(f"Jo'nash: {settings.get('depart_time') or '—'}")
         self.chip_dur._text.setText(settings.get("duration") or "—")
         self.timeline.set_data(stops, self.current, self.theme_name)
+        self.slippy.set_route(stops, self.current, self.theme_name)
 
     def _today(self):
         d = datetime.now()
@@ -269,22 +253,19 @@ class _MapCanvas(QWidget):
         self.theme_name = name
         c = T.THEMES[name]
         self.setStyleSheet(
-            f"#mapBg {{ background: transparent; }}"
-            f"#mainCard {{ background: {c['surface']}; border-radius: 34px; }}"
-            f"#mapHeader {{ background: #E9EDF5; border-radius: 34px; }}"
+            f"#mainCard {{ background: {c['surface']}; border-radius: 26px; }}"
+            f"#mapHeader {{ background: #E9EDF5;"
+            f" border-top-left-radius: 26px; border-top-right-radius: 26px; }}"
             f"#hTitle {{ background: transparent; color: #1C2230;"
-            f" font-size: 70px; font-weight: 700; }}"
+            f" font-size: 36px; font-weight: 700; }}"
             f"#hSub {{ background: transparent; color: #8B94A4;"
-            f" font-size: 42px; font-weight: 500; }}"
-            f"#chip {{ background: #FFFFFF; border-radius: 18px; }}"
-            f"#chipIc {{ background: transparent; font-size: 34px; }}"
+            f" font-size: 22px; font-weight: 500; }}"
+            f"#chip {{ background: #FFFFFF; border-radius: 12px; }}"
+            f"#chipIc {{ background: transparent; font-size: 18px; }}"
             f"#chipTxt {{ background: transparent; color: #2B3340;"
-            f" font-size: 36px; font-weight: 600; }}"
-            f"#mapImg {{ background: transparent; }}")
+            f" font-size: 18px; font-weight: 600; }}"
+            f"#tlScroll {{ background: transparent; }}"
+            f"#tlScroll QWidget {{ background: transparent; }}")
         if self.stops:
             self.timeline.set_data(self.stops, self.current, name)
-
-
-class MapScreen(ScaledScreen):
-    def __init__(self, api):
-        super().__init__(_MapCanvas(api))
+            self.slippy.set_route(self.stops, self.current, name)

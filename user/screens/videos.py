@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 
 import theme as T
+from threads import track
 from widgets.card import ContentCard, fmt_duration
 from widgets.modal import Modal
 from widgets.cover import CoverLabel
@@ -106,7 +107,7 @@ class VideosScreen(QWidget):
 
     def reload(self):
         self.status.setText("Yuklanmoqda...")
-        self._loader = _Loader(self.api)
+        self._loader = track(_Loader(self.api))
         self._loader.done.connect(self._on_loaded)
         self._loader.fail.connect(lambda: self.status.setText("Yuklab bo'lmadi"))
         self._loader.start()

@@ -21,6 +21,9 @@ content/media/
 .env
 *.env
 
+# Runtime crash log (main.py yozadi)
+crash.log
+
 # IDE / OS
 .vscode/
 .idea/
