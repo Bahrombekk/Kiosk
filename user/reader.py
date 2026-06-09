@@ -7,8 +7,10 @@ hajmga bo'lish orqali hosil qilinadi.
 """
 import requests
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
-                             QLabel, QScrollArea)
+                             QLabel, QScrollArea, QFrame, QScroller,
+                             QGraphicsDropShadowEffect)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtGui import QColor
 import theme as T
 from threads import track
 
@@ -61,15 +63,21 @@ class Reader(QWidget):
 
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
+        # MUHIM: oddiy QWidget stylesheet `background`ni o'zida bo'yamaydi —
+        # WA_StyledBackground bo'lmasa fon bo'yalmay, ortidagi eski ekran (satin)
+        # ko'rinib qoladi. Shu bayroq bilan fon ishonchli bo'yaladi.
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._build()
 
     def _build(self):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
-        # Tepa: Ortga + bob nomi
+        # Tepa: Ortga (pill) + bob nomi
         top = QHBoxLayout()
-        top.setContentsMargins(T.SPACE["page"], T.SPACE["gap"], T.SPACE["page"], 0)
+        top.setContentsMargins(T.SPACE["page"], T.SPACE["gap"],
+                               T.SPACE["page"], T.SPACE["gap"])
         self.back = QPushButton("←  Ortga")
         self.back.setObjectName("rBack")
         self.back.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -79,43 +87,64 @@ class Reader(QWidget):
         self.chapter.setAlignment(Qt.AlignmentFlag.AlignCenter)
         top.addWidget(self.back)
         top.addWidget(self.chapter, 1)
-        top.addSpacing(120)
+        top.addSpacing(T.s(150))   # chap "Ortga" pill bilan muvozanat (markazlash)
         root.addLayout(top)
 
-        # Matn (markazda, cheklangan kenglik)
+        # Matn — markazda oq "sahifa" karta ustida (kitob varag'i kabi),
+        # cheklangan kenglik, yumshoq soya. Skroll sensor barmoq bilan ishlaydi.
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
         self.scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # Sensorli ekran: barmoq bilan surib skroll qilish
+        QScroller.grabGesture(self.scroll.viewport(),
+                              QScroller.ScrollerGestureType.LeftMouseButtonGesture)
         host = QWidget()
+        host.setObjectName("rHost")
         hl = QHBoxLayout(host)
+        hl.setContentsMargins(T.SPACE["page"], T.s(8), T.SPACE["page"], T.s(32))
         hl.addStretch(1)
+        self.page = QFrame()
+        self.page.setObjectName("rPage")
+        self.page.setMaximumWidth(T.s(880))
+        psh = QGraphicsDropShadowEffect(self.page)
+        psh.setBlurRadius(T.s(50))
+        psh.setOffset(0, T.s(16))
+        psh.setColor(QColor(40, 55, 90, 55))
+        self.page.setGraphicsEffect(psh)
+        pl = QVBoxLayout(self.page)
+        pl.setContentsMargins(T.s(54), T.s(48), T.s(54), T.s(54))
         self.text = QLabel("Yuklanmoqda...")
         self.text.setObjectName("rText")
         self.text.setWordWrap(True)
-        self.text.setMaximumWidth(820)
+        self.text.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
         self.text.setAlignment(Qt.AlignmentFlag.AlignTop)
-        hl.addWidget(self.text, 4)
+        pl.addWidget(self.text)
+        hl.addWidget(self.page, 6)
         hl.addStretch(1)
         self.scroll.setWidget(host)
         root.addWidget(self.scroll, 1)
 
-        # Past: sahifa hisoblagichi + navigatsiya
+        # Past: ‹ sahifa hisoblagichi › — markazda
         bottom = QHBoxLayout()
-        bottom.setContentsMargins(T.SPACE["page"], 0, T.SPACE["page"], T.SPACE["gap"])
+        bottom.setContentsMargins(T.SPACE["page"], T.s(6), T.SPACE["page"], T.SPACE["gap"])
         self.counter = QLabel("")
         self.counter.setObjectName("rCounter")
+        self.counter.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.counter.setMinimumWidth(T.s(140))
         self.prev_btn = QPushButton("‹")
         self.next_btn = QPushButton("›")
         for b in (self.prev_btn, self.next_btn):
             b.setObjectName("rNav")
             b.setCursor(Qt.CursorShape.PointingHandCursor)
-            b.setFixedSize(T.s(48), T.s(48))
+            b.setFixedSize(T.s(56), T.s(56))
         self.prev_btn.clicked.connect(lambda: self._go(-1))
         self.next_btn.clicked.connect(lambda: self._go(+1))
-        bottom.addWidget(self.counter)
         bottom.addStretch(1)
         bottom.addWidget(self.prev_btn)
+        bottom.addWidget(self.counter)
         bottom.addWidget(self.next_btn)
+        bottom.addStretch(1)
         root.addLayout(bottom)
 
     def start(self):
@@ -155,21 +184,36 @@ class Reader(QWidget):
 
     def _restyle(self):
         c = T.THEMES[self.theme_name]
-        self.setStyleSheet(f"background: {c['bg']};")
+        # Fon oq (o'qishga qulay); dark mavzuda mavzu foni
+        page_bg = "#FFFFFF" if self.theme_name == "light" else c["bg"]
+        self.setStyleSheet(
+            f"background: {page_bg};"
+            f"#rHost {{ background: transparent; }}"
+            f"QScrollArea {{ background: transparent; border: none; }}")
+        self.scroll.viewport().setStyleSheet("background: transparent;")
         self.back.setStyleSheet(
-            f"#rBack {{ background: transparent; color: {c['text']};"
-            f" border: none; font-size: {T.FONT['nav']}px; font-weight: 600; }}")
+            f"#rBack {{ background: {c['surface']}; color: {c['text']};"
+            f" border: none; border-radius: {T.RADIUS['pill']}px;"
+            f" padding: {T.s(12)}px {T.s(26)}px; font-size: {T.FONT['nav']}px;"
+            f" font-weight: 600; }}"
+            f"#rBack:hover {{ background: {c['surface2']}; }}")
         self.chapter.setStyleSheet(
             f"#rChapter {{ color: {c['text']}; font-size: {T.FONT['h2']}px;"
             f" font-weight: 600; }}")
+        # Oq sahifa karta + ichidagi matn
+        self.page.setStyleSheet(
+            f"#rPage {{ background: {c['surface']};"
+            f" border-radius: {T.RADIUS['card']}px; }}")
         self.text.setStyleSheet(
-            f"#rText {{ color: {c['text']}; font-size: {T.FONT['body'] + 4}px;"
-            f" line-height: 180%; }}")
+            f"#rText {{ background: transparent; color: {c['text']};"
+            f" font-size: {T.FONT['body'] + 4}px; line-height: 185%; }}")
         self.counter.setStyleSheet(
-            f"#rCounter {{ color: {c['text_secondary']}; font-size: {T.FONT['body']}px; }}")
-        nav = (f"#rNav {{ background: {c['surface']}; color: {c['text']};"
-               f" border: 1px solid {c['border']}; border-radius: {T.s(24)}px;"
-               f" font-size: {T.s(22)}px; }}"
+            f"#rCounter {{ color: {c['text_secondary']}; font-size: {T.FONT['body']}px;"
+            f" font-weight: 600; }}")
+        nav = (f"#rNav {{ background: {c['surface']}; color: {c['accent']};"
+               f" border: 1px solid {c['border']}; border-radius: {T.s(56) // 2}px;"
+               f" font-size: {T.s(26)}px; font-weight: 700; }}"
+               f"#rNav:hover {{ background: {c['surface2']}; }}"
                f"#rNav:disabled {{ color: {c['border']}; }}")
         self.prev_btn.setStyleSheet(nav)
         self.next_btn.setStyleSheet(nav)

@@ -5,15 +5,86 @@ To'liq ekran: tepa-chapda "← Ortga"; markazda muqova, nom, muallif;
 progress chizig'i, joriy/umumiy vaqt; boshqaruv: 10s orqaga, play/pauza,
 10s oldinga, hamda o'qish tezligi (1x → 1.5x → 2x).
 """
+import math
 import vlc
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
-                             QLabel, QSlider)
+                             QLabel, QSizePolicy, QGraphicsDropShadowEffect)
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QColor, QPainter
 import theme as T
 from player import _fmt
 from widgets.cover import CoverLabel
 
 SPEEDS = [1.0, 1.5, 2.0]
+
+
+class Waveform(QWidget):
+    """Audio progress'ni to'lqin (vertikal ustunlar) ko'rinishida ko'rsatadi.
+    O'tilgan qism urg'u rangda, qolgani kulrang. Bosish/surish bilan seek qiladi.
+    Ustun balandliklari determinik (audio to'lqinga o'xshash, lekin barqaror)."""
+    seek = pyqtSignal(float)   # 0..1
+
+    def __init__(self):
+        super().__init__()
+        self._progress = 0.0
+        self._dragging = False
+        self._accent = QColor("#2f68f4")
+        self._gray = QColor("#c7cdd8")
+        self._bar_w = T.s(5)
+        self._gap = T.s(5)
+        self.setMinimumHeight(T.s(72))
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def set_colors(self, accent, gray):
+        self._accent = QColor(accent)
+        self._gray = QColor(gray)
+        self.update()
+
+    def set_progress(self, p):
+        p = max(0.0, min(1.0, p))
+        if abs(p - self._progress) > 0.0005:
+            self._progress = p
+            self.update()
+
+    def _bar_height(self, i):
+        """0.18..1.0 oralig'ida determinik balandlik (sinuslar yig'indisi)."""
+        v = (math.sin(i * 0.7) * 0.5 + math.sin(i * 1.7 + 1) * 0.3
+             + math.sin(i * 0.33 + 2) * 0.2)
+        return 0.18 + 0.82 * abs(v)
+
+    def paintEvent(self, e):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setPen(Qt.PenStyle.NoPen)
+        step = self._bar_w + self._gap
+        n = max(1, self.width() // step)
+        cy = self.height() / 2
+        max_h = self.height() - T.s(6)
+        played = self._progress * n
+        r = self._bar_w / 2
+        for i in range(n):
+            h = self._bar_height(i) * max_h
+            x = i * step
+            p.setBrush(self._accent if i < played else self._gray)
+            p.drawRoundedRect(int(x), int(cy - h / 2), self._bar_w, int(h), r, r)
+        p.end()
+
+    def _set_from_x(self, e):
+        if self.width() > 0:
+            self.set_progress(e.position().x() / self.width())
+
+    def mousePressEvent(self, e):
+        self._dragging = True
+        self._set_from_x(e)
+
+    def mouseMoveEvent(self, e):
+        if self._dragging:
+            self._set_from_x(e)
+
+    def mouseReleaseEvent(self, e):
+        self._dragging = False
+        self.seek.emit(self._progress)
 
 
 class AudioPlayer(QWidget):
@@ -30,6 +101,9 @@ class AudioPlayer(QWidget):
 
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
+        # Top-level QWidget fonni o'zida bo'yashi uchun (aks holda ortidagi eski
+        # ekran ko'rinib qoladi) — Reader bilan bir xil.
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
 
         self._instance = vlc.Instance(
             "--quiet", f"--network-caching={self.NETWORK_CACHING_MS}")
@@ -60,7 +134,14 @@ class AudioPlayer(QWidget):
         # Markaz: muqova + nom + muallif
         self.cover = CoverLabel(T.s(240), T.s(340))
         self.cover.load(self.api.cover_url(self.item["id"]))
+        # Muqovaga yumshoq soya (boshqa kartalar kabi)
+        sh = QGraphicsDropShadowEffect(self.cover)
+        sh.setBlurRadius(T.s(48))
+        sh.setOffset(0, T.s(18))
+        sh.setColor(QColor(40, 55, 90, 90))
+        self.cover.setGraphicsEffect(sh)
         root.addWidget(self.cover, alignment=Qt.AlignmentFlag.AlignHCenter)
+        root.addSpacing(T.s(20))
 
         self.title = QLabel(self.item.get("title", ""))
         self.title.setObjectName("aTitle")
@@ -71,35 +152,41 @@ class AudioPlayer(QWidget):
         root.addWidget(self.title)
         root.addWidget(self.author)
 
-        # Progress + vaqt
-        prow = QHBoxLayout()
+        # To'lqin (waveform) — progress; ostida joriy/umumiy vaqt chetlarda
+        self.wave = Waveform()
+        self.wave.seek.connect(self._on_wave_seek)
+        root.addWidget(self.wave)
+
+        trow = QHBoxLayout()
         self.cur = QLabel("00:00")
         self.tot = QLabel("00:00")
-        self.progress = QSlider(Qt.Orientation.Horizontal)
-        self.progress.setRange(0, 1000)
-        self.progress.sliderPressed.connect(lambda: setattr(self, "_dragging", True))
-        self.progress.sliderReleased.connect(self._on_seek)
         self.cur.setObjectName("aTime")
         self.tot.setObjectName("aTime")
-        prow.addWidget(self.cur)
-        prow.addWidget(self.progress, 1)
-        prow.addWidget(self.tot)
-        root.addLayout(prow)
+        trow.addWidget(self.cur)
+        trow.addStretch(1)
+        trow.addWidget(self.tot)
+        root.addLayout(trow)
+        root.addSpacing(T.s(16))
 
-        # Boshqaruv: 10s, play/pauza, 10s, tezlik
+        # Boshqaruv: markazda [10s, play/pauza, 10s], o'ng chetda tezlik (1x)
         crow = QHBoxLayout()
-        crow.addStretch(1)
-        self.back10 = self._btn("« 10", T.s(64))
-        self.play_btn = self._btn("⏸", T.s(84), accent=True)
-        self.fwd10 = self._btn("10 »", T.s(64))
+        self.back10 = self._btn("⟲ 10", T.s(64))
+        self.play_btn = self._btn("⏸", T.s(88), accent=True)
+        self.fwd10 = self._btn("10 ⟳", T.s(64))
         self.speed_btn = self._btn("1x", T.s(64))
         self.back10.clicked.connect(lambda: self._seek_rel(-10000))
         self.play_btn.clicked.connect(self.toggle_play)
         self.fwd10.clicked.connect(lambda: self._seek_rel(+10000))
         self.speed_btn.clicked.connect(self._cycle_speed)
-        for b in (self.back10, self.play_btn, self.fwd10, self.speed_btn):
-            crow.addWidget(b)
+        crow.addSpacing(T.s(64))          # o'ngdagi tezlik tugmasi bilan muvozanat
         crow.addStretch(1)
+        crow.addWidget(self.back10)
+        crow.addSpacing(T.s(28))
+        crow.addWidget(self.play_btn)
+        crow.addSpacing(T.s(28))
+        crow.addWidget(self.fwd10)
+        crow.addStretch(1)
+        crow.addWidget(self.speed_btn)
         root.addLayout(crow)
 
         root.addStretch(1)
@@ -115,22 +202,27 @@ class AudioPlayer(QWidget):
     def start(self):
         self._restyle()
         self.showFullScreen()
-        media = self._instance.media_new(self.api.stream_url(self.item["id"]))
-        self._mp.set_media(media)
+        self._media = self._instance.media_new(self.api.stream_url(self.item["id"]))
+        self._mp.set_media(self._media)
         self._mp.play()
 
     def toggle_play(self):
-        self._mp.pause()
+        state = self._mp.get_state()
+        if state in (vlc.State.Ended, vlc.State.Stopped):
+            # Tugagan — boshidan qaytadan
+            self._mp.set_media(self._media)
+            self._mp.play()
+        else:
+            self._mp.pause()
 
     def _seek_rel(self, delta):
         t = self._mp.get_time()
         self._mp.set_time(max(0, t + delta))
 
-    def _on_seek(self):
+    def _on_wave_seek(self, frac):
         length = self._mp.get_length()
         if length > 0:
-            self._mp.set_time(int(length * self.progress.value() / 1000))
-        self._dragging = False
+            self._mp.set_time(int(length * frac))
 
     def _cycle_speed(self):
         self._speed_i = (self._speed_i + 1) % len(SPEEDS)
@@ -139,14 +231,20 @@ class AudioPlayer(QWidget):
         self.speed_btn.setText(f"{rate:g}x")
 
     def _refresh(self):
-        playing = self._mp.get_state() == vlc.State.Playing
-        self.play_btn.setText("⏸" if playing else "▶")
+        state = self._mp.get_state()
+        if state == vlc.State.Ended:
+            self.play_btn.setText("↻")
+        elif state == vlc.State.Playing:
+            self.play_btn.setText("⏸")
+        else:
+            self.play_btn.setText("▶")
         length = self._mp.get_length()
         cur = self._mp.get_time()
         self.cur.setText(_fmt(cur))
         self.tot.setText(_fmt(length))
-        if length > 0 and not self._dragging:
-            self.progress.setValue(int(1000 * cur / length))
+        if length > 0 and not self.wave._dragging:
+            pos = 1.0 if state == vlc.State.Ended else cur / length
+            self.wave.set_progress(pos)
 
     def stop_and_close(self):
         self._timer.stop()
@@ -157,10 +255,16 @@ class AudioPlayer(QWidget):
 
     def _restyle(self):
         c = T.THEMES[self.theme_name]
-        self.setStyleSheet(f"background: {c['bg']};")
+        # Fon oq (Reader bilan bir xil); dark mavzuda mavzu foni
+        bg = "#FFFFFF" if self.theme_name == "light" else c["bg"]
+        self.setStyleSheet(f"background: {bg};")
+        self.wave.set_colors(c["accent"], "#C7CDD8")
         self.back.setStyleSheet(
-            f"#aBack {{ background: transparent; color: {c['text']}; border: none;"
-            f" font-size: {T.FONT['nav']}px; font-weight: 600; }}")
+            f"#aBack {{ background: {c['surface']}; color: {c['text']};"
+            f" border: none; border-radius: {T.RADIUS['pill']}px;"
+            f" padding: {T.s(12)}px {T.s(26)}px; font-size: {T.FONT['nav']}px;"
+            f" font-weight: 600; }}"
+            f"#aBack:hover {{ background: {c['surface2']}; }}")
         self.title.setStyleSheet(
             f"#aTitle {{ color: {c['text']}; font-size: {T.FONT['h2']}px;"
             f" font-weight: 700; }}")
@@ -175,5 +279,5 @@ class AudioPlayer(QWidget):
             f" font-size: {T.s(16)}px; font-weight: 600; }}"
             f"#aBtn:hover {{ background: {c['surface2']}; }}"
             f"#aAccent {{ background: {c['accent']}; color: {c['accent_text']};"
-            f" border: none; border-radius: {T.s(84) // 2}px; font-size: {T.s(26)}px; }}"
+            f" border: none; border-radius: {T.s(88) // 2}px; font-size: {T.s(26)}px; }}"
             f"#aAccent:hover {{ background: #1D4ED8; }}"))
