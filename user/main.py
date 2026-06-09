@@ -21,6 +21,7 @@ from datetime import datetime
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QStackedWidget,
                              QLabel)
 from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
+from PyQt6.QtGui import QPixmap, QPainter, QColor
 
 import config
 import theme as T
@@ -54,6 +55,9 @@ class MainWindow(QWidget):
         self.connected = False
         self.api = ApiClient()
         self._checker = None
+        # Butun oynani qoplaydigan orqa fon (atlas/satin tekstura) — paintEvent'da
+        # chiziladi, shunda har bir ekranda (xarita ham) bir xil fon ko'rinadi.
+        self._bg = QPixmap(T.BG_IMAGE)
 
         # --- VAQTINCHALIK: oddiy oyna ramkasi (—, □, ✕ tugmalari) bilan ---
         # Kiosk rejimdan chiqa olish uchun frameless va StaysOnTop o'chirildi.
@@ -95,7 +99,7 @@ class MainWindow(QWidget):
 
         self.stack = QStackedWidget()
         self.pages = {
-            "home":   HomeScreen(self.api),
+            "home":   HomeScreen(self.api, self),
             "map":    MapScreen(self.api),
             "videos": VideosScreen(self.api),
             "books":  BooksScreen(self.api),
@@ -179,6 +183,21 @@ class MainWindow(QWidget):
         self.banner.move(0, 0)
         self.banner.setFixedWidth(self.width())
 
+    def paintEvent(self, e):
+        """Butun oynani orqa fon rasmi bilan qoplaydi (nisbatni saqlab, kesib
+        to'ldiradi — cover). Light mavzuda satin rasm, dark mavzuda tekis rang."""
+        p = QPainter(self)
+        if self.theme_name == "light" and not self._bg.isNull():
+            scaled = self._bg.scaled(
+                self.size(), Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation)
+            x = (self.width() - scaled.width()) // 2
+            y = (self.height() - scaled.height()) // 2
+            p.drawPixmap(x, y, scaled)
+        else:
+            p.fillRect(self.rect(), QColor(T.THEMES[self.theme_name]["bg"]))
+        super().paintEvent(e)
+
     def resizeEvent(self, e):
         if hasattr(self, "banner"):
             self._place_banner()
@@ -198,11 +217,14 @@ class MainWindow(QWidget):
     # --- Mavzu ---
     def apply_theme(self):
         c = T.THEMES[self.theme_name]
-        # QLabel'lar shaffof bo'lsin — aks holda sahifa foni (bg) matn ortida
-        # kulrang to'rtburchak bo'lib ko'rinadi (barcha ekranlarga taalluqli).
+        self.setObjectName("mainWin")
+        # Oyna foni paintEvent'da satin rasm bilan butun oynaga chiziladi.
+        # MUHIM: #mainWin va bolalarga `background` BERMAYMIZ — ular shaffof bo'lib
+        # tursin, shunda paintEvent chizgan fon ular ortidan ko'rinadi. Faqat shrift.
         self.setStyleSheet(
-            f"QWidget {{ background: {c['bg']}; font-family: {T.FONT_FAMILY}; }}"
-            f"QLabel {{ background: transparent; }}")
+            f"QWidget {{ font-family: {T.FONT_FAMILY}; }}"
+            + f"QLabel {{ background: transparent; }}")
+        self.update()  # fon qayta chizilsin (mavzu almashganda)
         self.connecting.apply_theme(self.theme_name)
         self.nav.apply_theme(self.theme_name)
         for page in self.pages.values():
@@ -232,11 +254,25 @@ class MainWindow(QWidget):
         super().keyPressEvent(e)
 
     def _shutdown(self):
-        """Fon oqimlarini xavfsiz to'xtatadi (Qt 'thread still running' xatosi bo'lmasin)."""
+        """Barcha fon oqimlarini xavfsiz to'xtatadi (Qt 'thread still running' bo'lmasin)."""
+        import gc
         self.ws.stop()
-        if not self.ws.wait(3000):   # tugashini kutamiz; bo'lmasa majburan
-            self.ws.terminate()
-            self.ws.wait(1000)
+        # Yangi fon ishi paydo bo'lmasin — sahifalardagi taymerlarni to'xtatamiz
+        for p in self.pages.values():
+            canvas = getattr(p, "canvas", p)
+            t = getattr(canvas, "timer", None)
+            if t is not None:
+                t.stop()
+        # Hozir ishlayotgan barcha QThread'lar (loader/fetcher/ws) tugashini kutamiz
+        cur = QThread.currentThread()
+        for obj in gc.get_objects():
+            try:
+                if isinstance(obj, QThread) and obj is not cur and obj.isRunning():
+                    if not obj.wait(2000):
+                        obj.terminate()
+                        obj.wait(500)
+            except RuntimeError:
+                pass   # C++ obyekti allaqachon o'chirilgan — e'tiborsiz
 
     def closeEvent(self, e):
         # VAQTINCHALIK: ✕ tugmasi bilan yopilishga ruxsat berildi.

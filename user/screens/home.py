@@ -11,10 +11,14 @@ Kontent va holat serverdan yuklanadi (dinamik).
 """
 import os
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel,
-                             QPushButton, QSizePolicy)
+                             QPushButton, QSizePolicy, QGraphicsView, QGraphicsScene)
 from PyQt6.QtCore import (Qt, QThread, pyqtSignal, QTimer, QByteArray, QRectF)
 from PyQt6.QtGui import QPixmap, QPainter, QPainterPath
 from PyQt6.QtSvg import QSvgRenderer
+
+# Asosiy ekran shu qat'iy "sahna" o'lchamida quriladi va QGraphicsView orqali
+# ekranga bir tekis miqyoslanadi (Figma fit() kabi) — katta ekranda buzilmaydi.
+BASE_W, BASE_H = 1500, 980
 
 import theme as T
 from widgets.cover import CoverLabel, _Fetcher
@@ -222,10 +226,14 @@ class Poster(QFrame):
             self.clicked.emit()
 
 
-class HomeScreen(QWidget):
-    def __init__(self, api):
+class _HomeCanvas(QWidget):
+    """Asosiy ekran tarkibi — qat'iy BASE_W×BASE_H o'lchamda quriladi.
+    HomeScreen uni QGraphicsView orqali ekranga bir tekis miqyoslaydi."""
+
+    def __init__(self, api, host):
         super().__init__()
         self.api = api
+        self.host = host          # modal/oynalarni biriktirish uchun haqiqiy oyna
         self.theme_name = "light"
         self.rec_movies = []
         self.movie_idx = 0
@@ -235,6 +243,8 @@ class HomeScreen(QWidget):
         self._modal = None
         self._reader = None
         self._audio = None
+        self.setObjectName("homeCanvas")
+        self.setFixedSize(BASE_W, BASE_H)
         self._build()
 
         self.timer = QTimer(self)
@@ -288,12 +298,12 @@ class HomeScreen(QWidget):
         lh.addLayout(lv, 1)
         left.addWidget(self.loc_card)
 
-        # Reklama banner
-        self.ad = BannerImage(mode="fit", maxh=440, radius=T.RADIUS["card"])
+        # Reklama banner — chap ustunning qolgan balandligini to'ldiradi
+        # (Figma object-fit: cover). Kanvas bilan birga miqyoslanadi.
+        self.ad = BannerImage(mode="box", radius=T.RADIUS["card"])
         if not self.ad.set_file(AD_IMAGE):
             self.ad.hide()
-        left.addWidget(self.ad)
-        left.addStretch(1)
+        left.addWidget(self.ad, 1)
 
         # ---- O'ng ustun (oq karta) ----
         self.right = _card()
@@ -441,7 +451,7 @@ class HomeScreen(QWidget):
             return
         movie = self.rec_movies[self.movie_idx]
         from screens.videos import _VideoDetail
-        self._modal = _VideoDetail(self.window(), movie, self.api)
+        self._modal = _VideoDetail(self.host, movie, self.api)
         self._modal.play.connect(self._play_movie)
         self._modal.show_over(self.theme_name)
 
@@ -467,6 +477,7 @@ class HomeScreen(QWidget):
         self.theme_name = name
         c = T.THEMES[name]
         self.setStyleSheet(
+            f"#homeCanvas {{ background: transparent; }}"
             f"#card {{ background: {c['surface']}; border-radius: {T.RADIUS['card']}px; }}"
             f"#bookCard {{ background: #F6F8FB; border: 1px solid #EAEFF6;"
             f" border-radius: {T.RADIUS['card']}px; }}"
@@ -487,3 +498,62 @@ class HomeScreen(QWidget):
             f"#readBtn {{ background: {c['accent']}; color: {c['accent_text']}; border: none;"
             f" border-radius: {T.RADIUS['button']}px; font-size: 24px; font-weight: 600; }}"
             f"#readBtn:hover {{ background: #1D4ED8; }}")
+
+
+class HomeScreen(QWidget):
+    """Asosiy ekran o'rami: tarkibni (_HomeCanvas) qat'iy o'lchamda saqlab,
+    QGraphicsView orqali mavjud joyga bir tekis (nisbatni saqlab) miqyoslaydi.
+    Shunday qilib istalgan ekran o'lchamida ko'rinish buzilmaydi (Figma fit()).
+    """
+
+    def __init__(self, api, host=None):
+        super().__init__()
+        self.canvas = _HomeCanvas(api, host or self)
+
+        self.scene = QGraphicsScene(self)
+        self.proxy = self.scene.addWidget(self.canvas)
+        self.view = QGraphicsView(self.scene, self)
+        self.view.setFrameShape(QGraphicsView.Shape.NoFrame)
+        self.view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.view.setRenderHints(QPainter.RenderHint.Antialiasing
+                                 | QPainter.RenderHint.SmoothPixmapTransform)
+        self.view.setStyleSheet("background: transparent; border: none;")
+        # Shaffof — orqada turgan oyna foni (satin rasmi) ko'rinsin
+        self.view.setBackgroundBrush(Qt.GlobalColor.transparent)
+        self.view.viewport().setAutoFillBackground(False)
+        self.view.viewport().setStyleSheet("background: transparent;")
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.addWidget(self.view)
+
+    def _fit(self):
+        self.view.fitInView(self.proxy, Qt.AspectRatioMode.KeepAspectRatio)
+
+    def resizeEvent(self, e):
+        self._fit()
+        super().resizeEvent(e)
+
+    def showEvent(self, e):
+        self._fit()
+        super().showEvent(e)
+
+    # --- main.py kutadigan interfeys (delegatsiya) ---
+    def apply_theme(self, name):
+        self.canvas.apply_theme(name)
+        # Sahna/ko'rinish shaffof — letterbox ham oyna fonini (satin) ko'rsatadi
+        self.view.setBackgroundBrush(Qt.GlobalColor.transparent)
+        self.scene.setBackgroundBrush(Qt.GlobalColor.transparent)
+
+    def on_show(self):
+        self.canvas.on_show()
+        self._fit()
+
+    def hideEvent(self, e):
+        self.canvas.timer.stop()    # sahifadan chiqilganda status so'rovini to'xtatamiz
+        super().hideEvent(e)
+
+    def _apply_status(self, data):
+        # main.py WebSocket status_update'ni shu orqali uzatadi
+        self.canvas._apply_status(data)

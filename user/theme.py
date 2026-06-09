@@ -3,6 +3,12 @@ theme.py — Dizayn tokenlari (Figma'dan ajratilgan ranglar va o'lchamlar).
 Butun ilova ranglari SHU YERDAN olinadi. Figma bilan 100% moslash uchun
 faqat shu fayldagi qiymatlarni o'zgartirasiz — boshqa joyga tegmaysiz (TZ 9-bo'lim).
 """
+import os
+
+# Sahifa orqa fon rasmi (oq atlas tekstura — noshaffof, burmalari ko'rinadigan).
+# Asl Background.png juda shaffof (alfa~24%) edi; och fon ustiga bakelangan.
+BG_IMAGE = os.path.join(os.path.dirname(__file__), "images",
+                        "bg_satin.png").replace("\\", "/")
 
 # Ranglar Figma eksportidan pixel-sampling orqali olingan.
 # Aniq piksel qiymatlar kerak bo'lsa Figma "Inspect" dan tekshirib shu yerda o'zgartiring.
