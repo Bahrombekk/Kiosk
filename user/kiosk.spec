@@ -51,10 +51,42 @@ exe = EXE(
     console=False,
     icon="assets/design/app.ico",
 )
+
+# Watchdog — Kiosk qulasa avtomatik qayta ko'taradigan ikkinchi exe.
+# Autostart registri (installer.iss) Kiosk.exe o'rniga SHU exe'ni ko'rsatadi.
+wd_a = Analysis(
+    ["watchdog.py"],
+    pathex=[],
+    binaries=[],
+    datas=[],
+    hiddenimports=[],
+    hookspath=[],
+    runtime_hooks=[],
+    excludes=["tkinter"],
+    noarchive=False,
+)
+wd_pyz = PYZ(wd_a.pure)
+
+wd_exe = EXE(
+    wd_pyz,
+    wd_a.scripts,
+    [],
+    exclude_binaries=True,
+    name="KioskWatchdog",
+    debug=False,
+    strip=False,
+    upx=False,
+    console=False,
+    icon="assets/design/app.ico",
+)
+
 coll = COLLECT(
     exe,
     a.binaries,
     a.datas,
+    wd_exe,
+    wd_a.binaries,
+    wd_a.datas,
     strip=False,
     upx=False,
     name="Kiosk",

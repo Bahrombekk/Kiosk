@@ -1,0 +1,13 @@
+Windows Registry Editor Version 5.00
+
+; Kiosk qulflash siyosatlarini YOQISH (texnik xizmatdan keyin qaytarish).
+; Ishlatish: faylga ikki marta bosing (admin huquqi kerak), keyin tizimdan
+; chiqib qayta kiring.
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System]
+"DisableTaskMgr"=dword:00000001
+"DisableLockWorkstation"=dword:00000001
+"HideFastUserSwitching"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer]
+"NoWinKeys"=dword:00000001

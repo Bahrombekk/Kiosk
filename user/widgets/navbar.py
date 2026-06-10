@@ -61,10 +61,19 @@ class NavBar(QWidget):
         root.addWidget(self.pill, alignment=Qt.AlignmentFlag.AlignLeft)
         root.addStretch(1)
 
+        # Oflayn indikatori — server uzilib keshdan ishlayotganda ko'rinadi
+        self.offline_lbl = QLabel("● Oflayn")
+        self.offline_lbl.setObjectName("navOffline")
+        self.offline_lbl.hide()
+        root.addWidget(self.offline_lbl, alignment=Qt.AlignmentFlag.AlignRight)
+
         self.right = QLabel("")
         self.right.setObjectName("navRight")
         root.addWidget(self.right, alignment=Qt.AlignmentFlag.AlignRight)
         self.set_active("home")
+
+    def set_offline(self, offline):
+        self.offline_lbl.setVisible(bool(offline))
 
     def set_clock(self, text):
         if self.active == "home":
@@ -92,6 +101,9 @@ class NavBar(QWidget):
         self.right.setStyleSheet(
             f"#navRight {{ color: {c['text']}; font-size: {T.FONT['clock']}px;"
             f" font-weight: 600; }}")
+        self.offline_lbl.setStyleSheet(
+            f"#navOffline {{ color: #F59E0B; font-size: {T.FONT['nav']}px;"
+            f" font-weight: 700; padding-right: {T.s(14)}px; }}")
         for key, (btn, label, icon_path) in self.buttons.items():
             if key == self.active:
                 btn.setText(" " + label)

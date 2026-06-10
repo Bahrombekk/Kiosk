@@ -9,34 +9,55 @@ import os
 import sys
 
 
-def _external_server_url():
-    """O'rnatilgan ilovada exe (yoki loyiha) yonidagi server.txt dan o'qiydi.
-
-    Installer shu faylni yozadi; keyinchalik administrator oddiy bloknot
-    bilan tahrirlashi mumkin — qayta o'rnatish shart emas."""
+def _base_dir():
+    """Exe (frozen) yoki loyiha papkasi — server.txt/loglar shu yerda."""
     if getattr(sys, "frozen", False):
-        base = os.path.dirname(sys.executable)
-    else:
-        base = os.path.dirname(os.path.abspath(__file__))
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def _read_server_txt():
+    """server.txt'ni o'qiydi: (url, api_key) qaytaradi.
+
+    Fayl formati (installer yozadi, admin bloknotda tahrirlashi mumkin):
+        # izoh
+        http://192.168.1.10:8765
+        key=AbCdEf...
+    Birinchi oddiy qator — URL (eski format bilan mos), `key=` qatori —
+    API kalit."""
+    url, key = None, None
     try:
-        with open(os.path.join(base, "server.txt"), encoding="utf-8") as f:
+        with open(os.path.join(_base_dir(), "server.txt"), encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
-                if line and not line.startswith("#"):
-                    return line
+                if not line or line.startswith("#"):
+                    continue
+                if line.lower().startswith("key="):
+                    key = line[4:].strip()
+                elif url is None:
+                    url = line
     except OSError:
         pass
-    return None
+    return url, key
 
+
+_TXT_URL, _TXT_KEY = _read_server_txt()
 
 # Server manzili. Statik IP tavsiya etiladi (TZ 11.3). Ustuvorlik:
 #   1) KIOSK_SERVER muhit o'zgaruvchisi  2) server.txt  3) default
 SERVER_URL = (os.environ.get("KIOSK_SERVER")
-              or _external_server_url()
+              or _TXT_URL
               or "http://192.168.136.69:8765")
 
-# WebSocket manzili (SERVER_URL'dan avtomatik hosil qilinadi: http->ws)
-WS_URL = SERVER_URL.replace("http://", "ws://").replace("https://", "wss://") + "/ws"
+# API kalit — server admin oynasida ko'rinadi, o'rnatishda kiritiladi.
+# Ustuvorlik: 1) KIOSK_API_KEY env  2) server.txt'dagi key= qatori
+API_KEY = os.environ.get("KIOSK_API_KEY") or _TXT_KEY or ""
+
+# WebSocket manzili (SERVER_URL'dan avtomatik hosil qilinadi: http->ws).
+# Kalit query param sifatida ketadi — server tomonda REST bilan bir xil
+# tekshiriladi, websockets kutubxonasiga header berish shart emas.
+WS_URL = (SERVER_URL.replace("http://", "ws://").replace("https://", "wss://")
+          + "/ws" + (f"?k={API_KEY}" if API_KEY else ""))
 
 # HTTP so'rovlar uchun timeout (soniya)
 REQUEST_TIMEOUT = 5

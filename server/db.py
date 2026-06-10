@@ -94,6 +94,13 @@ CREATE TABLE IF NOT EXISTS route_stops (
     longitude    REAL,
     sort_order   INTEGER DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS audit_log (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts      TEXT DEFAULT (datetime('now','localtime')),
+    action  TEXT NOT NULL,
+    details TEXT
+);
 """
 
 
@@ -368,3 +375,59 @@ def set_setting(key, value):
         c.execute(
             "INSERT INTO settings (key,value) VALUES (?,?) "
             "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
+
+
+# --- Parol/PIN xeshlash (PBKDF2-SHA256) ---
+def hash_secret(plain):
+    """Parol/PIN'ni tuzlangan PBKDF2 xeshiga aylantiradi.
+
+    Format: pbkdf2$<iteratsiya>$<salt_hex>$<hash_hex> — bitta satrda saqlanadi,
+    verify_secret shu formatni o'qiydi. Hech qayerda ochiq matn saqlanmaydi."""
+    import hashlib
+    import os as _os
+    iterations = 100_000
+    salt = _os.urandom(16)
+    dk = hashlib.pbkdf2_hmac("sha256", plain.encode("utf-8"), salt, iterations)
+    return f"pbkdf2${iterations}${salt.hex()}${dk.hex()}"
+
+
+def verify_secret(plain, stored):
+    """Kiritilgan qiymatni saqlangan xesh bilan timing-safe solishtiradi."""
+    import hashlib
+    import hmac
+    try:
+        algo, iterations, salt_hex, hash_hex = stored.split("$")
+        if algo != "pbkdf2":
+            return False
+        dk = hashlib.pbkdf2_hmac("sha256", plain.encode("utf-8"),
+                                 bytes.fromhex(salt_hex), int(iterations))
+        return hmac.compare_digest(dk.hex(), hash_hex)
+    except (AttributeError, ValueError):
+        return False
+
+
+# --- Audit log (admin amallari tarixi) ---
+def log_action(action, details=""):
+    """Admin amalini tarixga yozadi (kim nimani qachon o'zgartirgani)."""
+    try:
+        with _conn() as c:
+            c.execute("INSERT INTO audit_log (action, details) VALUES (?,?)",
+                      (action, str(details)[:500]))
+    except Exception:
+        log.warning("Audit log yozilmadi: %s", action, exc_info=True)
+
+
+# --- API kalit (kiosk <-> server autentifikatsiyasi) ---
+def get_or_create_api_key():
+    """Settings'dagi api_key'ni qaytaradi; yo'q bo'lsa yangisini yaratadi.
+
+    Bitta umumiy kalit: server birinchi ishga tushganda generatsiya qilinadi,
+    operator uni admin oynasidan ko'chirib kiosk o'rnatuvchisiga kiritadi.
+    Kalitsiz so'rovlar 401 oladi (LAN'dagi begona qurilmalardan himoya)."""
+    import secrets
+    key = get_settings().get("api_key")
+    if not key:
+        key = secrets.token_urlsafe(24)
+        set_setting("api_key", key)
+        log.info("Yangi API kalit yaratildi (admin oynasida ko'rinadi)")
+    return key

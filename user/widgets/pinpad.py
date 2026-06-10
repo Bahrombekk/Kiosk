@@ -19,11 +19,14 @@ IDLE_CLOSE_MS = 30_000
 
 
 class PinDialog(QDialog):
-    def __init__(self, parent, pin, theme="light"):
+    def __init__(self, parent, verify, theme="light"):
+        """verify — kiritilgan PIN satrini qabul qilib True/False qaytaradigan
+        funksiya (xesh bilan solishtirish main.py'da quriladi)."""
         super().__init__(parent)
-        self._pin = str(pin)
+        self._verify = verify
         self._entered = ""
         self._attempts = 0
+        self.lockout = False   # True = urinishlar tugab yopildi (main 60s bloklaydi)
         self.c = T.THEMES[theme]
 
         # Video pleyer (StaysOnTop) ustida ham ko'rinishi uchun
@@ -142,13 +145,14 @@ class PinDialog(QDialog):
 
     def _check(self, *_):
         self._touch()
-        if self._entered == self._pin:
+        if self._verify(self._entered):
             self.accept()
             return
         self._attempts += 1
         self._entered = ""
         self.dots.setText("")
         if self._attempts >= MAX_ATTEMPTS:
+            self.lockout = True
             self.reject()
             return
         self.err.setText(

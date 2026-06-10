@@ -420,6 +420,22 @@ class ContentDialog(QDialog):
         if not self.title.text().strip():
             QMessageBox.warning(self, "Xato", "Nomi bo'sh bo'lmasligi kerak.")
             return
+        # Media/matn fayli majburiy — fayl yo'q yozuv kioskda 404 beradi
+        # (tahrirda eskisi saqlanib qoladi: self.item'dagi yo'l yetarli)
+        t = self.type.currentData()
+        if t in ("movie", "cartoon", "music", "audiobook"):
+            if not (self.media_src or self.item.get("file_path")):
+                QMessageBox.warning(
+                    self, "Xato",
+                    "Video/audio fayl tanlanmagan — bu turdagi kontent "
+                    "faylsiz kioskda ochilmaydi.")
+                return
+        elif t == "book":
+            if not (self.text_src or self.item.get("text_path")):
+                QMessageBox.warning(
+                    self, "Xato",
+                    "Kitob matn fayli tanlanmagan (.txt yoki .json).")
+                return
         self.accept()
 
     def values(self):
@@ -751,6 +767,26 @@ class AdminWindow(QMainWindow):
         hint = QLabel(f"User qurilmada: KIOSK_SERVER={self._server_url}")
         hint.setObjectName("hint")
         stat_lay.addWidget(hint)
+
+        # API kalit qatori — kiosk o'rnatuvchisiga kiritiladi (maskalangan,
+        # "Nusxalash" tugmasi to'liq kalitni clipboard'ga oladi).
+        self._api_key = db.get_or_create_api_key()
+        krow = QHBoxLayout()
+        krow.setSpacing(10)
+        key_ic = QLabel()
+        key_ic.setPixmap(svg_pixmap("copy", C_MUTED, 16))
+        masked = self._api_key[:4] + "•" * 8 + self._api_key[-4:]
+        key_lbl = QLabel(f"API kalit: {masked}")
+        key_lbl.setObjectName("muted")
+        key_copy = self._btn("Nusxalash", "copy", self._copy_api_key, kind="ghost")
+        krow.addWidget(key_ic)
+        krow.addWidget(key_lbl)
+        krow.addWidget(key_copy)
+        krow.addStretch(1)
+        stat_lay.addLayout(krow)
+        key_hint = QLabel("Kiosk o'rnatishda shu kalit so'raladi (server.txt'dagi key= qatori)")
+        key_hint.setObjectName("hint")
+        stat_lay.addWidget(key_hint)
         lay.addWidget(stat_card)
 
         # === E'lon yuborish kartasi ===
@@ -799,6 +835,10 @@ class AdminWindow(QMainWindow):
     def _copy_addr(self):
         QApplication.clipboard().setText(self._server_url)
         self.statusBar().showMessage("Manzil nusxalandi: " + self._server_url, 3000)
+
+    def _copy_api_key(self):
+        QApplication.clipboard().setText(self._api_key)
+        self.statusBar().showMessage("API kalit nusxalandi.", 3000)
 
     @staticmethod
     def _dot(label, color, size=10):
@@ -855,6 +895,7 @@ class AdminWindow(QMainWindow):
         ws.manager.broadcast_threadsafe({"type": "announcement", "text": text})
         self.ann_input.clear()
         n = len(ws.manager.clients())
+        db.log_action("announcement_sent", text)
         self.statusBar().showMessage(
             f"E'lon yuborildi ({n} ta kioskka): {text}", 5000)
 
@@ -942,7 +983,9 @@ class AdminWindow(QMainWindow):
     def add_content(self):
         dlg = ContentDialog(self)
         if dlg.exec():
-            db.add_content(dlg.values())
+            vals = dlg.values()
+            new_id = db.add_content(vals)
+            db.log_action("content_added", f"#{new_id} {vals.get('title')!r}")
             self.refresh_content()
             self.statusBar().showMessage("Kontent qo'shildi.", 3000)
 
@@ -955,6 +998,7 @@ class AdminWindow(QMainWindow):
         dlg = ContentDialog(self, item)
         if dlg.exec():
             db.update_content(cid, dlg.values())
+            db.log_action("content_updated", f"#{cid}")
             self.refresh_content()
             self.statusBar().showMessage("Kontent yangilandi.", 3000)
 
@@ -967,6 +1011,7 @@ class AdminWindow(QMainWindow):
                                 f"#{cid} kontent o'chirilsinmi?") \
                 == QMessageBox.StandardButton.Yes:
             db.delete_content(cid)
+            db.log_action("content_deleted", f"#{cid}")
             self.refresh_content()
             self.statusBar().showMessage("Kontent o'chirildi.", 3000)
 
@@ -1040,6 +1085,7 @@ class AdminWindow(QMainWindow):
         dlg = RecordDialog(self, f"Yangi: {cfg['title']}", cfg["fields"])
         if dlg.exec():
             cfg["add"](dlg.values())
+            db.log_action(f"{name}_added")
             self._crud_refresh(name)
             self.statusBar().showMessage("Yozuv qo'shildi.", 3000)
 
@@ -1052,6 +1098,7 @@ class AdminWindow(QMainWindow):
         dlg = RecordDialog(self, f"Tahrirlash: {cfg['title']}", cfg["fields"], item)
         if dlg.exec():
             cfg["update"](item["id"], dlg.values())
+            db.log_action(f"{name}_updated", f"#{item['id']}")
             self._crud_refresh(name)
             self.statusBar().showMessage("Yozuv yangilandi.", 3000)
 
@@ -1065,6 +1112,7 @@ class AdminWindow(QMainWindow):
                                 f"#{item['id']} o'chirilsinmi?") \
                 == QMessageBox.StandardButton.Yes:
             cfg["delete"](item["id"])
+            db.log_action(f"{name}_deleted", f"#{item['id']}")
             self._crud_refresh(name)
             self.statusBar().showMessage("Yozuv o'chirildi.", 3000)
 
@@ -1143,6 +1191,36 @@ class AdminWindow(QMainWindow):
         clay.addLayout(row)
 
         lay.addWidget(card)
+
+        # --- Xavfsizlik kartasi: kiosk chiqish PIN + admin parolini almashtirish ---
+        sec_card, sec_lay = self._card(22)
+        sec_title = QLabel("Xavfsizlik")
+        sec_title.setObjectName("cardTitle")
+        sec_lay.addWidget(sec_title)
+        sec_form = QFormLayout()
+        sec_form.setSpacing(12)
+        self.s_pin = QLineEdit()
+        self.s_pin.setEchoMode(QLineEdit.EchoMode.Password)
+        self.s_pin.setPlaceholderText("Yangi PIN (4-8 raqam, bo'sh = o'zgarmaydi)")
+        sec_form.addRow("Kiosk chiqish PIN-kodi:", self.s_pin)
+        self.s_admin_old = QLineEdit()
+        self.s_admin_old.setEchoMode(QLineEdit.EchoMode.Password)
+        self.s_admin_new = QLineEdit()
+        self.s_admin_new.setEchoMode(QLineEdit.EchoMode.Password)
+        self.s_admin_new.setPlaceholderText("Kamida 8 belgi (bo'sh = o'zgarmaydi)")
+        sec_form.addRow("Joriy admin parol:", self.s_admin_old)
+        sec_form.addRow("Yangi admin parol:", self.s_admin_new)
+        sec_lay.addLayout(sec_form)
+        sec_hint = QLabel("PIN kioskka serverdan yetkaziladi (kiosk uni xesh "
+                          "ko'rinishida keshlaydi, oflaynda ham ishlaydi).")
+        sec_hint.setObjectName("hint")
+        sec_lay.addWidget(sec_hint)
+        sec_row = QHBoxLayout()
+        sec_row.addStretch(1)
+        sec_row.addWidget(self._btn("Xavfsizlikni saqlash", "save",
+                                    self.save_security))
+        sec_lay.addLayout(sec_row)
+        lay.addWidget(sec_card)
         lay.addStretch(1)
         return w
 
@@ -1155,12 +1233,57 @@ class AdminWindow(QMainWindow):
         self.s_depart.setText(s.get("depart_time", ""))
 
     def save_settings(self):
-        db.set_setting("wagon_number", self.s_wagon.text())
+        import re
+        wagon = self.s_wagon.text().strip()
+        if wagon and not wagon.isdigit():
+            QMessageBox.warning(self, "Xato",
+                                "Vagon raqami faqat raqamlardan iborat bo'lsin.")
+            return
+        depart = self.s_depart.text().strip()
+        if depart and not re.fullmatch(r"\d{1,2}:\d{2}", depart):
+            QMessageBox.warning(self, "Xato",
+                                "Jo'nash vaqti HH:MM ko'rinishida bo'lsin "
+                                "(masalan 08:00).")
+            return
+        db.set_setting("wagon_number", wagon)
         db.set_setting("wagon_note", self.s_wagon_note.text())
         db.set_setting("train_name", self.s_train.text())
         db.set_setting("route", self.s_route.text())
-        db.set_setting("depart_time", self.s_depart.text())
+        db.set_setting("depart_time", depart)
+        db.log_action("settings_saved",
+                      f"train={self.s_train.text()!r} wagon={wagon!r}")
         self.statusBar().showMessage("Sozlamalar saqlandi.", 3000)
+
+    def save_security(self):
+        """Kiosk PIN va/yoki admin parolini yangilaydi (faqat xesh saqlanadi)."""
+        pin = self.s_pin.text().strip()
+        new_pw = self.s_admin_new.text()
+        if not pin and not new_pw:
+            QMessageBox.information(self, "Eslatma",
+                                    "O'zgartirish uchun PIN yoki yangi parol kiriting.")
+            return
+        if pin:
+            if not (pin.isdigit() and 4 <= len(pin) <= 8):
+                QMessageBox.warning(self, "Xato",
+                                    "PIN 4-8 ta raqamdan iborat bo'lishi kerak.")
+                return
+            db.set_setting("exit_pin_hash", db.hash_secret(pin))
+            db.log_action("exit_pin_changed")
+        if new_pw:
+            stored = db.get_settings().get("admin_password_hash")
+            if stored and not db.verify_secret(self.s_admin_old.text(), stored):
+                QMessageBox.warning(self, "Xato", "Joriy admin parol noto'g'ri.")
+                return
+            if len(new_pw) < 8:
+                QMessageBox.warning(self, "Xato",
+                                    "Yangi parol kamida 8 belgi bo'lsin.")
+                return
+            db.set_setting("admin_password_hash", db.hash_secret(new_pw))
+            db.log_action("admin_password_changed")
+        self.s_pin.clear()
+        self.s_admin_old.clear()
+        self.s_admin_new.clear()
+        self.statusBar().showMessage("Xavfsizlik sozlamalari saqlandi.", 3000)
 
     # --- Yopilganda backendni to'xtatamiz ---
     def closeEvent(self, e):
@@ -1169,11 +1292,111 @@ class AdminWindow(QMainWindow):
         super().closeEvent(e)
 
 
+class LoginDialog(QDialog):
+    """Admin oynasi ochilishidan oldin parol so'raydi.
+
+    Birinchi ishga tushishda (parol hali o'rnatilmagan) — yangi parol
+    yaratish rejimi. 5 marta noto'g'ri kiritilsa dastur yopiladi."""
+
+    MAX_ATTEMPTS = 5
+
+    def __init__(self):
+        super().__init__()
+        self._attempts = 0
+        self._create_mode = not db.get_settings().get("admin_password_hash")
+        self.setWindowTitle("Kiosk Server — Kirish")
+        self.setModal(True)
+        self.setFixedWidth(420)
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(28, 24, 28, 24)
+        lay.setSpacing(12)
+
+        title = QLabel("Yangi admin parol yarating"
+                       if self._create_mode else "Admin parolini kiriting")
+        title.setStyleSheet("font-size: 17px; font-weight: 800;")
+        lay.addWidget(title)
+
+        if self._create_mode:
+            sub = QLabel("Birinchi ishga tushirish: server boshqaruvi uchun "
+                         "parol o'rnating (kamida 8 belgi).")
+            sub.setWordWrap(True)
+            sub.setStyleSheet(f"color: {C_MUTED};")
+            lay.addWidget(sub)
+
+        self.pw1 = QLineEdit()
+        self.pw1.setEchoMode(QLineEdit.EchoMode.Password)
+        self.pw1.setPlaceholderText("Parol")
+        lay.addWidget(self.pw1)
+
+        self.pw2 = QLineEdit()
+        self.pw2.setEchoMode(QLineEdit.EchoMode.Password)
+        self.pw2.setPlaceholderText("Parolni takrorlang")
+        self.pw2.setVisible(self._create_mode)
+        lay.addWidget(self.pw2)
+
+        self.err = QLabel(" ")
+        self.err.setStyleSheet(f"color: {C_BAD}; font-weight: 600;")
+        lay.addWidget(self.err)
+
+        btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok
+                                | QDialogButtonBox.StandardButton.Cancel)
+        btns.accepted.connect(self._submit)
+        btns.rejected.connect(self.reject)
+        lay.addWidget(btns)
+        self.pw1.returnPressed.connect(self._submit)
+        self.pw2.returnPressed.connect(self._submit)
+
+    def _submit(self):
+        pw = self.pw1.text()
+        if self._create_mode:
+            if len(pw) < 8:
+                self.err.setText("Parol kamida 8 belgi bo'lsin.")
+                return
+            if pw != self.pw2.text():
+                self.err.setText("Parollar mos kelmadi.")
+                return
+            db.set_setting("admin_password_hash", db.hash_secret(pw))
+            db.log_action("admin_password_created")
+            self.accept()
+            return
+        stored = db.get_settings().get("admin_password_hash", "")
+        if db.verify_secret(pw, stored):
+            db.log_action("admin_login_ok")
+            self.accept()
+            return
+        self._attempts += 1
+        db.log_action("admin_login_fail", f"attempt={self._attempts}")
+        left = self.MAX_ATTEMPTS - self._attempts
+        if left <= 0:
+            self.reject()
+            return
+        self.err.setText(f"Parol noto'g'ri ({left} urinish qoldi).")
+        self.pw1.clear()
+
+
 def main():
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s  %(levelname)-7s  %(name)s  %(message)s",
         datefmt="%H:%M:%S")
+    # Konsoldan tashqari aylanuvchi faylga ham yozamiz — admin exe konsolsiz
+    # ishlaganda ham muammolarni keyin logs/server.log dan ko'rish mumkin.
+    try:
+        import logging.handlers
+        _base = (os.path.dirname(sys.executable)
+                 if getattr(sys, "frozen", False)
+                 else os.path.dirname(os.path.abspath(__file__)))
+        _log_dir = os.path.join(_base, "logs")
+        os.makedirs(_log_dir, exist_ok=True)
+        _fh = logging.handlers.RotatingFileHandler(
+            os.path.join(_log_dir, "server.log"),
+            maxBytes=1_000_000, backupCount=3, encoding="utf-8")
+        _fh.setFormatter(logging.Formatter(
+            "%(asctime)s %(levelname)-7s %(name)s %(message)s"))
+        logging.getLogger().addHandler(_fh)
+    except OSError:
+        pass
     db.init_db()
     app = QApplication(sys.argv)
     app.setStyleSheet(STYLE)
@@ -1185,6 +1408,12 @@ def main():
             f"{config.PORT}-port band.\n\nEhtimol Kiosk serverining boshqa nusxasi "
             f"hali ochiq. Avval uni yoping (yoki Vazifalar menejeridan python.exe "
             f"jarayonini to'xtating), so'ng qaytadan oching.")
+        sys.exit(1)
+
+    # Admin parol darvozasi — server (AdminWindow ichida) faqat muvaffaqiyatli
+    # kirishdan keyin ishga tushadi.
+    login = LoginDialog()
+    if not login.exec():
         sys.exit(1)
 
     win = AdminWindow()

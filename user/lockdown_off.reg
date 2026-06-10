@@ -1,0 +1,13 @@
+Windows Registry Editor Version 5.00
+
+; Kiosk qulflash siyosatlarini VAQTINCHA O'CHIRISH (texnik xizmat uchun).
+; Ishlatish: faylga ikki marta bosing (admin huquqi kerak), keyin tizimdan
+; chiqib qayta kiring. Ishni tugatgach lockdown_on.reg ni ishga tushiring!
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System]
+"DisableTaskMgr"=-
+"DisableLockWorkstation"=-
+"HideFastUserSwitching"=-
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer]
+"NoWinKeys"=-

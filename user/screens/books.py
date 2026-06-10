@@ -235,6 +235,11 @@ class BooksScreen(QWidget):
     def _listen(self, item):
         if self._modal:
             self._modal.close_modal()
+        # Oflaynda striming ishlamaydi — pleyerni ochib qotirmaymiz
+        if self.api.offline:
+            self.status.setText(
+                "Server bilan aloqa yo'q — audio vaqtincha mavjud emas")
+            return
         old = getattr(self, "_audio", None)
         if old is not None:
             old.stop_and_close()

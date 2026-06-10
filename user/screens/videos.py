@@ -276,6 +276,11 @@ class VideosScreen(QWidget):
     def _play(self, item):
         if self._modal:
             self._modal.close_modal()
+        # Oflaynda striming ishlamaydi — pleyerni ochib qotirmaymiz
+        if self.api.offline:
+            self.status.setText(
+                "Server bilan aloqa yo'q — video vaqtincha mavjud emas")
+            return
         # Avvalgi pleyer hali ochiq bo'lsa — yopamiz (VLC resurslari bo'shasin va
         # ishlab turgan obyekt referenssiz qolib GC tomonidan abort qilinmasin).
         if self._player is not None:

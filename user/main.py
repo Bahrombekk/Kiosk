@@ -11,10 +11,9 @@ Ishga tushirish:
   pip install -r requirements.txt
   python main.py
 
-Sinov tugmalari (faqat ishlab chiqishda):
-  Ctrl+T          — Light/Dark almashtirish (Figma bilan solishtirish uchun)
-  Ctrl+Shift+Q    — admin chiqishi (kiosk'dan chiqish)
-  Ctrl+Shift+C    — admin chiqishi (kiosk'dan chiqish)
+Texnik tugmalar:
+  Ctrl+Shift+Q    — admin chiqishi (PIN so'raladi)
+  Ctrl+Shift+C    — admin chiqishi (PIN so'raladi)
 """
 import sys
 import os
@@ -27,18 +26,38 @@ from datetime import datetime
 # hodisasi (paintEvent/slot) ichidagi ushlanmagan istisno yoki C++ darajasidagi
 # nosozlik konsolga hech narsa chiqarmasdan jarayonni tugatishi mumkin.
 # Quyidagi blok HAR QANDAY crash'ni `crash.log` fayliga va konsolga yozadi.
-_LOG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "crash.log")
+import logsetup
+
+_LOG = os.path.join(logsetup.base_dir(), "crash.log")
+# crash.log cheksiz o'smasin — 1MB dan oshsa eskisini chetga suramiz
+try:
+    if os.path.exists(_LOG) and os.path.getsize(_LOG) > 1_000_000:
+        os.replace(_LOG, _LOG + ".1")
+except OSError:
+    pass
 _logf = open(_LOG, "a", encoding="utf-8")
 faulthandler.enable(file=_logf, all_threads=True)   # native crash (segfault) dump
 
+logsetup.setup()
+
 
 def _excepthook(exc_type, exc, tb):
-    """Ushlanmagan Python istisnolarini yozadi (PyQt jim yopib yubormasin)."""
+    """Ushlanmagan Python istisnolarini yozadi (PyQt jim yopib yubormasin).
+
+    Yozib bo'lgach jarayon ataylab 1-kod bilan tugatiladi (fail-fast):
+    Qt sloti ichidagi xato ilovani "yarim o'lik" (qora ekran) holatda
+    qoldirmasin — watchdog uni darhol qayta ko'taradi."""
     text = "".join(traceback.format_exception(exc_type, exc, tb))
     _logf.write("\n===== CRASH =====\n" + text)
     _logf.flush()
     sys.stderr.write(text)
     sys.stderr.flush()
+    try:
+        import logging
+        logging.getLogger("crash").error("Ushlanmagan istisno:\n%s", text)
+    except Exception:
+        pass
+    os._exit(1)
 
 
 sys.excepthook = _excepthook
@@ -62,6 +81,7 @@ from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QStackedWidget,
 from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal, QEvent, QPoint, QRect
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QIcon
 
+import cache
 import config
 import theme as T
 from threads import track
@@ -91,6 +111,20 @@ class HealthChecker(QThread):
 
     def run(self):
         self.result.emit(self.api.health())
+
+
+class _SettingsPrefetch(QThread):
+    """Sozlamalarni oldindan yuklab keshlaydi (chiqish PIN xeshi yangilansin)."""
+
+    def __init__(self, api):
+        super().__init__()
+        self.api = api
+
+    def run(self):
+        try:
+            self.api.get_settings()   # _cached() o'zi diskka yozadi
+        except Exception:
+            pass  # tarmoq xatosi — keyingi ulanishda yana uriniladi
 
 
 class MainWindow(QWidget):
@@ -219,10 +253,20 @@ class MainWindow(QWidget):
         was = self.connected
         self.connected = ok
         if ok:
+            self.nav.set_offline(False)
             self.outer.setCurrentWidget(self.app)
             if not was:
                 self.go(self.nav.active)  # qayta ulanganda joriy sahifani yangilash
+                # PIN xeshi va sozlamalar keshi yangilansin (fonda)
+                track(_SettingsPrefetch(self.api)).start()
+        elif cache.has_catalog():
+            # OFLAYN REJIM: server o'chgan, lekin keshlangan katalog bor —
+            # "ulanmoqda" ekraniga qaytarmaymiz, kiosk ishlashda davom etadi
+            # (ro'yxat/kitoblar keshdan; faqat video striming ishlamaydi).
+            self.nav.set_offline(True)
+            self.outer.setCurrentWidget(self.app)
         else:
+            # Birinchi ishga tushish (kesh yo'q) — ulanish ekrani
             self.connecting.set_status(
                 "Serverga ulanib bo'lmadi, qayta urinilmoqda...")
             self.outer.setCurrentWidget(self.connecting)
@@ -327,7 +371,9 @@ class MainWindow(QWidget):
                     try:
                         self._register_secret_tap(ev.globalPosition().toPoint())
                     except Exception:
-                        pass  # chiqish mexanizmi hech qachon ilovani yiqitmasin
+                        # chiqish mexanizmi hech qachon ilovani yiqitmasin
+                        logsetup.get_logger(__name__).exception(
+                            "Maxfiy chiqish teginishida xato")
         return super().eventFilter(obj, ev)
 
     # --- Zastavka (screensaver) ---
@@ -387,14 +433,39 @@ class MainWindow(QWidget):
             self._exit_taps.clear()
             self._ask_exit_pin()
 
+    def _verify_pin(self, entered):
+        """Kiritilgan PIN to'g'rimi? Ustuvorlik:
+          1) KIOSK_EXIT_PIN muhit o'zgaruvchisi (faqat ishlab chiqish)
+          2) serverda admin o'rnatgan xesh (settings keshi — oflaynda ham bor)
+          3) default PIN (config.EXIT_PIN)"""
+        import hmac as _hmac
+        import pinhash
+        env_pin = os.environ.get("KIOSK_EXIT_PIN")
+        if env_pin:
+            return _hmac.compare_digest(entered.encode(), env_pin.encode())
+        hit = cache.load_json("settings")
+        stored = hit[0].get("exit_pin_hash") if hit else None
+        if stored:
+            return pinhash.verify_secret(entered, stored)
+        return _hmac.compare_digest(entered.encode(),
+                                    config.EXIT_PIN.encode())
+
     def _ask_exit_pin(self):
         if self._pin_open:
+            return
+        # Urinishlar tugagan bo'lsa — 60 soniya blok (brute-force qiyinlashadi)
+        import time as _time
+        if _time.monotonic() < getattr(self, "_pin_block_until", 0):
             return
         self._pin_open = True
         try:
             from widgets.pinpad import PinDialog
-            dlg = PinDialog(self, config.EXIT_PIN, theme=self.theme_name)
+            dlg = PinDialog(self, self._verify_pin, theme=self.theme_name)
             ok = dlg.exec()
+            if dlg.lockout:
+                self._pin_block_until = _time.monotonic() + 60
+                logsetup.get_logger(__name__).warning(
+                    "PIN 5 marta noto'g'ri kiritildi — 60s blok")
         finally:
             self._pin_open = False
         if ok:
@@ -403,6 +474,8 @@ class MainWindow(QWidget):
     def _exit_app(self):
         """Yagona chiqish nuqtasi: fon oqimlarini to'xtatib, ilovani yopadi."""
         self._allow_exit = True
+        import lockdown
+        lockdown.uninstall()   # klaviatura quli ochilsin (texnik xizmat uchun)
         self._shutdown()
         QApplication.quit()
 
@@ -411,16 +484,12 @@ class MainWindow(QWidget):
         # Esc ni e'tiborsiz qoldiramiz (chiqib ketmasin)
         if e.key() == Qt.Key.Key_Escape:
             return
-        # Ctrl+T -> mavzu almashtirish (sinov)
-        if e.key() == Qt.Key.Key_T and (e.modifiers() & Qt.KeyboardModifier.ControlModifier):
-            self.theme_name = "dark" if self.theme_name == "light" else "light"
-            self.apply_theme()
-            return
-        # Ctrl+Shift+Q yoki Ctrl+Shift+C -> admin chiqishi
+        # Ctrl+Shift+Q yoki Ctrl+Shift+C -> admin chiqishi (PIN talab qilinadi —
+        # klaviatura ulagan yo'lovchi PIN'siz chiqib keta olmasin)
         if (e.key() in (Qt.Key.Key_Q, Qt.Key.Key_C)
                 and (e.modifiers() & Qt.KeyboardModifier.ControlModifier)
                 and (e.modifiers() & Qt.KeyboardModifier.ShiftModifier)):
-            self._exit_app()
+            self._ask_exit_pin()
             return
         super().keyPressEvent(e)
 
@@ -460,6 +529,10 @@ def main():
         screen = app.primaryScreen()
         if screen is not None:
             T.init_scale(screen.size())
+        # OS-darajali klaviatura qulfi (Win/Alt+Tab) — faqat frozen buildda
+        # yoki KIOSK_LOCKDOWN=1 bo'lsa (lockdown.py'ga qarang)
+        import lockdown
+        lockdown.install()
         win = MainWindow()
         win.showFullScreen()  # KIOSK: butun ekran
         win.start_splash()     # logotipli splash (fullscreen'dan keyin)

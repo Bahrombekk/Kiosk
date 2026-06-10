@@ -7,6 +7,7 @@ orqali UI'ga uzatadi. Ulanish uzilsa avtomatik qayta ulanadi (TZ 12.2 — har
 """
 import asyncio
 import json
+import logging
 import socket
 import platform
 
@@ -14,6 +15,8 @@ import websockets
 from PyQt6.QtCore import QThread, pyqtSignal
 
 import config
+
+log = logging.getLogger(__name__)
 
 
 class WSClient(QThread):
@@ -32,7 +35,7 @@ class WSClient(QThread):
         try:
             asyncio.run(self._loop())
         except Exception:
-            pass
+            log.exception("WS oqimi kutilmagan xato bilan tugadi")
 
     async def _loop(self):
         while not self._stop:
@@ -50,7 +53,8 @@ class WSClient(QThread):
                         if self._stop:
                             return
                         self._handle(raw)
-            except Exception:
+            except Exception as e:
+                log.warning("WS uzildi (%s), qayta urinamiz", e)
                 # Ulanish uzildi — biroz kutib qayta urinamiz (TZ 12.2).
                 # Uyquni mayda bo'laklarga bo'lamiz: stop() darhol ta'sir qilsin
                 # (aks holda ilova yopilganda thread 5s ishlab turib, Qt'ni

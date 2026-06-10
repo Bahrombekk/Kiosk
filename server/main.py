@@ -23,12 +23,13 @@ import hashlib
 import asyncio
 import logging
 import mimetypes
+import secrets
 from email.utils import formatdate
 from datetime import datetime
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import Response, StreamingResponse, FileResponse
+from fastapi.responses import Response, StreamingResponse, FileResponse, JSONResponse
 
 import config
 import db
@@ -42,9 +43,23 @@ logging.basicConfig(
 log = logging.getLogger("kiosk.server")
 
 
+# Umumiy API kalit (db settings'da; birinchi ishga tushishda yaratiladi).
+# lifespan'gacha ham kerak bo'lishi mumkin, shuning uchun lazy o'qiladi.
+_API_KEY = None
+
+
+def _api_key():
+    global _API_KEY
+    if _API_KEY is None:
+        db.init_db()
+        _API_KEY = db.get_or_create_api_key()
+    return _API_KEY
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()   # baza yaratiladi va kerak bo'lsa seed qilinadi
+    _api_key()     # kalit tayyor bo'lsin (birinchi so'rovda emas)
     manager.set_loop(asyncio.get_running_loop())
     log.info("Server tayyor — http://%s:%s", config.HOST, config.PORT)
     task = asyncio.create_task(_status_loop())   # holatni davriy tarqatish
@@ -83,6 +98,29 @@ def _safe_join(base, name):
 
 
 app = FastAPI(title="Kiosk Server", version="1.0", lifespan=lifespan)
+
+# Kalitsiz ruxsat etilgan yo'llar: health faqat {"status":"ok"} qaytaradi —
+# ulanish ekrani va o'rnatish diagnostikasi uchun ochiq qoladi.
+_EXEMPT_PATHS = {"/api/health"}
+
+
+@app.middleware("http")
+async def require_api_key(request: Request, call_next):
+    """Barcha /api yo'llari uchun API kalit talab qilinadi.
+
+    Kalit ikki usulda beriladi:
+      - `X-API-Key` header (oddiy REST so'rovlar)
+      - `?k=` query param (VLC stream va muqova URL'lari — header qo'yib
+        bo'lmaydigan joylar uchun)
+    Solishtirish timing-safe (secrets.compare_digest)."""
+    p = request.url.path
+    if p.startswith("/api") and p not in _EXEMPT_PATHS:
+        supplied = (request.headers.get("x-api-key")
+                    or request.query_params.get("k", ""))
+        if not secrets.compare_digest(supplied, _api_key()):
+            return JSONResponse({"detail": "API kalit noto'g'ri yoki yo'q"},
+                                status_code=401)
+    return await call_next(request)
 
 
 # --- Ulanish ---
@@ -268,9 +306,15 @@ def route():
     return db.get_route()
 
 
+# Kioskka berilmaydigan maxfiy sozlamalar (himoya qatlami — endpoint kalit
+# bilan yopiq bo'lsa ham, sirlar javobda ko'rinmasin).
+_PRIVATE_SETTINGS = {"api_key", "admin_password_hash"}
+
+
 @app.get("/api/settings")
 def settings():
-    return db.get_settings()
+    s = db.get_settings()
+    return {k: v for k, v in s.items() if k not in _PRIVATE_SETTINGS}
 
 
 def _safe_int(v, default):
@@ -313,6 +357,11 @@ def status():
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
     """Real vaqt kanal (TZ 11.2): register qabul qiladi, status/announcement yuboradi."""
+    # Kalit tekshiruvi (?k=...): begona qurilmalar broadcast'larni eshitmasin,
+    # soxta device_id bilan ro'yxatdan o'tmasin.
+    if not secrets.compare_digest(ws.query_params.get("k", ""), _api_key()):
+        await ws.close(code=4401)
+        return
     await manager.connect(ws)
     # Ulanishi bilan joriy holatni darhol yuboramiz. MUHIM: status_loop bilan
     # bir socketда bir vaqtda yuborilmasin — manager qulfi serializatsiya qiladi

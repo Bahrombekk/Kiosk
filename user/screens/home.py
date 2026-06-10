@@ -9,6 +9,7 @@ Figma maketi (Kiosk.html) asosida qurilgan:
 Ikonka plitkalari va reklama Figma eksport rasmlaridan (assets/design/).
 Kontent va holat serverdan yuklanadi (dinamik).
 """
+import logging
 import os
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel,
                              QPushButton, QSizePolicy, QGraphicsView, QGraphicsScene)
@@ -29,6 +30,8 @@ from widgets.icons import svg_icon
 from reader import Reader
 from audio_player import AudioPlayer
 
+log = logging.getLogger(__name__)
+
 VIDEO_TYPES = ("movie", "cartoon", "music")
 BOOK_TYPES = ("book", "audiobook")
 
@@ -37,6 +40,12 @@ AD_IMAGE = os.path.join(ASSETS, "ad.png")
 IC_SPEED = os.path.join(ASSETS, "ic_speed.png")
 IC_TEMP = os.path.join(ASSETS, "ic_temp.png")
 IC_TRAIN = os.path.join(ASSETS, "ic_train.png")
+
+# Yo'q assetlar jim bo'sh joy bo'lib qolmasin — startupda bir marta loglaymiz
+# (UI baribir ishlayveradi: _tile/set_file null rasmni o'zi ushlaydi).
+for _p in (AD_IMAGE, IC_SPEED, IC_TEMP, IC_TRAIN):
+    if not os.path.exists(_p):
+        logging.getLogger(__name__).warning("Asset topilmadi: %s", _p)
 
 
 class _Loader(QThread):
@@ -52,6 +61,7 @@ class _Loader(QThread):
         try:
             self.done.emit(self.api.get_status(), self.api.get_content())
         except Exception:
+            log.warning("Home: status/katalog yuklanmadi", exc_info=True)
             self.fail.emit()
 
 
@@ -66,7 +76,7 @@ class _StatusLoader(QThread):
         try:
             self.done.emit(self.api.get_status())
         except Exception:
-            pass
+            log.debug("Home: status olinmadi", exc_info=True)
 
 
 def _card():

@@ -5,13 +5,38 @@ Server muqovani fayl (jpg/png) yoki dinamik SVG sifatida qaytaradi.
 Yuklash tarmoq orqali bo'lgani uchun alohida oqimda (UI qotmaydi);
 rasm baytlari kelgach, asosiy oqimda QPixmap'ga aylantiriladi.
 """
+import logging
+from collections import OrderedDict
+
 import requests
 from PyQt6.QtWidgets import QLabel, QSizePolicy
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QByteArray, QRectF, QSize
 from PyQt6.QtGui import QPixmap, QPainter, QColor
 from PyQt6.QtSvg import QSvgRenderer
+import cache
 import theme as T
 from threads import track
+
+log = logging.getLogger(__name__)
+
+# Xotiradagi LRU kesh: url -> dekodlangan QPixmap. Grid har qayta render
+# bo'lganda bir xil muqovalar serverdan qayta tortilmasin (tezroq + kam trafik).
+_MEM_CACHE = OrderedDict()
+_MEM_CACHE_MAX = 200
+
+
+def _mem_get(url):
+    pm = _MEM_CACHE.get(url)
+    if pm is not None:
+        _MEM_CACHE.move_to_end(url)
+    return pm
+
+
+def _mem_put(url, pm):
+    _MEM_CACHE[url] = pm
+    _MEM_CACHE.move_to_end(url)
+    while len(_MEM_CACHE) > _MEM_CACHE_MAX:
+        _MEM_CACHE.popitem(last=False)
 
 
 class _Fetcher(QThread):
@@ -26,8 +51,15 @@ class _Fetcher(QThread):
         try:
             r = requests.get(self.url, timeout=8)
             r.raise_for_status()
+            cache.save_cover(self.url, r.content)   # oflayn uchun diskka
             self.done.emit(r.content, r.headers.get("content-type", ""))
         except requests.RequestException:
+            # Server o'chiq — disk keshidan urinamiz (oflayn rejim)
+            data = cache.load_cover(self.url)
+            if data is not None:
+                self.done.emit(data, "")
+                return
+            log.debug("Muqova yuklanmadi: %s", self.url)
             self.fail.emit()
 
 
@@ -65,6 +97,13 @@ class CoverLabel(QLabel):
         return QSize(self._w, self._h)
 
     def load(self, url):
+        # Avval xotira keshi — bor bo'lsa tarmoqsiz, oqimsiz darhol chizamiz
+        pm = _mem_get(url)
+        if pm is not None:
+            self._orig = pm
+            self._render_scaled()
+            return
+        self._url = url
         # Eski fetcher hali ishlayotgan bo'lsa, uni majburan to'xtatmaymiz
         # (terminate xavfli) — track() uni tugagunicha tirik saqlaydi; oxirgi
         # boshlangan so'rov natijasi ko'rsatiladi.
@@ -115,6 +154,8 @@ class CoverLabel(QLabel):
                     self._show_placeholder("?")
                     return
                 self._orig = raw
+            if getattr(self, "_url", None):
+                _mem_put(self._url, self._orig)
             self._render_scaled()
         except RuntimeError:
             pass

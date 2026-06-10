@@ -23,6 +23,15 @@ content/media/
 
 # Runtime crash log (main.py yozadi)
 crash.log
+crash.log.1
+
+# Runtime loglar va oflayn kesh (logsetup.py / cache.py yozadi)
+logs/
+cache/
+
+# SQLite WAL fayllari
+*.db-wal
+*.db-shm
 
 # IDE / OS
 .vscode/
