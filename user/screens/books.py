@@ -9,12 +9,13 @@ Tarkibi:
 """
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
                              QPushButton, QLabel, QScrollArea, QFrame)
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QTimer
 from PyQt6.QtGui import QIcon
 
 import theme as T
 from threads import track
 from widgets.card import BookCard, can_read, can_listen, _svg_pixmap
+from widgets.icons import svg_icon
 from widgets.modal import Modal
 from widgets.cover import CoverLabel
 from reader import Reader
@@ -188,6 +189,17 @@ class BooksScreen(QWidget):
         # ustun stretch'larini nollaymiz (kartalar chapga surilib qolmasin).
         for cidx in range(16):
             self.grid.setColumnStretch(cidx, 1 if cidx < cols else 0)
+        # Layout o'rnashgach qayta tekshiramiz (birinchi ochilishda viewport
+        # kengligi hali yakuniy emas — kartalar kichik/siqilgan chiqadi).
+        QTimer.singleShot(0, self._recheck_cols)
+
+    def _recheck_cols(self):
+        if self.all_items and self.isVisible() and self._calc_cols() != self._cols:
+            self._render()
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        QTimer.singleShot(0, self._recheck_cols)
 
     # Ekran kengligiga qarab ustunlar soni (katta monitorda yoyilib ketmasin).
     # Kitob muqovasi tikka — maqbul kenglik ~230px (ekran miqyosiga mos).
@@ -344,15 +356,19 @@ class _BookDetail(Modal):
         btns = QHBoxLayout()
         btns.setSpacing(T.s(16))
         if can_listen(item):
-            self.listen_btn = QPushButton("🎧  Tinglash")
+            self.listen_btn = QPushButton(" Tinglash")
             self.listen_btn.setObjectName("listenBtn")
+            self.listen_btn.setIcon(svg_icon("headphones", "#FFFFFF", T.s(48)))
+            self.listen_btn.setIconSize(QSize(T.s(24), T.s(24)))
             self.listen_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             self.listen_btn.setFixedHeight(T.s(56))
             self.listen_btn.clicked.connect(lambda: self.listen.emit(self.item))
             btns.addWidget(self.listen_btn, 1)
         if can_read(item):
-            self.read_btn = QPushButton("📖  O'qish")
+            self.read_btn = QPushButton(" O'qish")
             self.read_btn.setObjectName("readBtn")
+            self.read_btn.setIcon(svg_icon("book-open", "#FFFFFF", T.s(48)))
+            self.read_btn.setIconSize(QSize(T.s(24), T.s(24)))
             self.read_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             self.read_btn.setFixedHeight(T.s(56))
             self.read_btn.clicked.connect(lambda: self.read.emit(self.item))

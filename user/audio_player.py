@@ -9,11 +9,12 @@ import math
 import vlc
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QLabel, QSizePolicy, QGraphicsDropShadowEffect)
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize
 from PyQt6.QtGui import QColor, QPainter
 import theme as T
 from player import _fmt
 from widgets.cover import CoverLabel
+from widgets.icons import svg_icon
 
 SPEEDS = [1.0, 1.5, 2.0]
 
@@ -171,7 +172,7 @@ class AudioPlayer(QWidget):
         # Boshqaruv: markazda [10s, play/pauza, 10s], o'ng chetda tezlik (1x)
         crow = QHBoxLayout()
         self.back10 = self._btn("⟲ 10", T.s(64))
-        self.play_btn = self._btn("⏸", T.s(88), accent=True)
+        self.play_btn = self._btn("", T.s(88), accent=True, icon="pause")
         self.fwd10 = self._btn("10 ⟳", T.s(64))
         self.speed_btn = self._btn("1x", T.s(64))
         self.back10.clicked.connect(lambda: self._seek_rel(-10000))
@@ -191,12 +192,22 @@ class AudioPlayer(QWidget):
 
         root.addStretch(1)
 
-    def _btn(self, text, size, accent=False):
+    def _btn(self, text, size, accent=False, icon=None):
         b = QPushButton(text)
         b.setObjectName("aAccent" if accent else "aBtn")
         b.setCursor(Qt.CursorShape.PointingHandCursor)
         b.setFixedSize(size, size)
+        if icon:
+            b.setIcon(svg_icon(icon, "#FFFFFF", 64))
+            b.setIconSize(QSize(int(size * 0.42), int(size * 0.42)))
         return b
+
+    def _set_play_icon(self, name):
+        # _refresh tez-tez chaqiriladi — ikonka faqat o'zgarganda yangilanadi.
+        if getattr(self, "_play_icon_name", None) == name:
+            return
+        self._play_icon_name = name
+        self.play_btn.setIcon(svg_icon(name, "#FFFFFF", 64))
 
     # --- O'ynatish ---
     def start(self):
@@ -233,11 +244,11 @@ class AudioPlayer(QWidget):
     def _refresh(self):
         state = self._mp.get_state()
         if state == vlc.State.Ended:
-            self.play_btn.setText("↻")
+            self._set_play_icon("rotate-ccw")
         elif state == vlc.State.Playing:
-            self.play_btn.setText("⏸")
+            self._set_play_icon("pause")
         else:
-            self.play_btn.setText("▶")
+            self._set_play_icon("play")
         length = self._mp.get_length()
         cur = self._mp.get_time()
         self.cur.setText(_fmt(cur))

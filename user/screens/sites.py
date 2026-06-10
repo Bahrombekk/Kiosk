@@ -9,7 +9,7 @@ QR kod + 3 qadamli yo'riqnoma.
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
                              QFrame, QLabel, QScrollArea, QPushButton,
                              QSizePolicy, QGraphicsDropShadowEffect)
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt6.QtGui import QColor
 
 import theme as T
@@ -283,6 +283,17 @@ class SitesScreen(QWidget):
         # Faol ustunlar teng cho'ziladi; ortiqcha "fantom" ustunlarni nollaymiz.
         for cidx in range(16):
             self.grid.setColumnStretch(cidx, 1 if cidx < cols else 0)
+        # Layout o'rnashgach qayta tekshiramiz (birinchi ochilishda viewport
+        # kengligi hali yakuniy emas — kartalar kichik/siqilgan chiqadi).
+        QTimer.singleShot(0, self._recheck_cols)
+
+    def _recheck_cols(self):
+        if self.sites and self.isVisible() and self._calc_cols() != self._cols:
+            self._render()
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        QTimer.singleShot(0, self._recheck_cols)
 
     # Ekran kengligiga qarab ustunlar soni (dizayn: 3 ustun; kichik ekranda ham >=2).
     def _calc_cols(self):

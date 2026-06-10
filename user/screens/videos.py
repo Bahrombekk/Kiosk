@@ -11,7 +11,7 @@ Tarkibi:
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
                              QPushButton, QLineEdit, QScrollArea, QLabel, QFrame,
                              QGraphicsDropShadowEffect)
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QByteArray, QRectF
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QByteArray, QRectF, QTimer
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QIcon
 from PyQt6.QtSvg import QSvgRenderer
 
@@ -237,6 +237,17 @@ class VideosScreen(QWidget):
         # aks holda kartalar chapga surilib o'ngda bo'sh joy qoladi.
         for cidx in range(16):
             self.grid.setColumnStretch(cidx, 1 if cidx < cols else 0)
+        # Layout o'rnashgach ustun sonini qayta tekshiramiz (birinchi ochilishda
+        # viewport kengligi hali yakuniy emas — kartalar kichik/siqilgan chiqadi).
+        QTimer.singleShot(0, self._recheck_cols)
+
+    def _recheck_cols(self):
+        if self.all_items and self.isVisible() and self._calc_cols() != self._cols:
+            self._render()
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        QTimer.singleShot(0, self._recheck_cols)
 
     # Ekran kengligiga qarab ustunlar soni. Kichik ekranda ham qatorda kamida
     # 3 ta kartochka turishi uchun maqbul kenglik kichikroq (~300px) olinadi va

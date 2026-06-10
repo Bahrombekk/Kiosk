@@ -53,6 +53,7 @@ class NavBar(QWidget):
             btn = QPushButton()
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setIconSize(QSize(T.s(24), T.s(24)))
+            btn.setFixedHeight(T.s(52))   # qat'iy balandlik — radius yarmiga = to'liq pill
             btn.clicked.connect(lambda _c, k=key: self.navigate.emit(k))
             self.buttons[key] = [btn, label, os.path.join(ICON_DIR, icon_file)]
             pl.addWidget(btn)
@@ -81,9 +82,13 @@ class NavBar(QWidget):
 
     def _restyle(self):
         c = self.theme
+        # To'liq pill (kapsula): radius = balandlikning yarmi.
+        btn_h = T.s(52)
+        btn_r = btn_h // 2
+        pill_r = (btn_h + 2 * T.s(8)) // 2     # pill konteyner balandligi = tugma + margin
         self.pill.setStyleSheet(
             f"#navPill {{ background: {c['surface']};"
-            f" border-radius: {T.RADIUS['pill']}px; }}")
+            f" border-radius: {pill_r}px; }}")
         self.right.setStyleSheet(
             f"#navRight {{ color: {c['text']}; font-size: {T.FONT['clock']}px;"
             f" font-weight: 600; }}")
@@ -94,8 +99,8 @@ class NavBar(QWidget):
                 btn.setStyleSheet(
                     f"QPushButton {{ background: {c['accent']};"
                     f" color: {c['accent_text']}; border: none;"
-                    f" border-radius: {T.RADIUS['pill'] - T.s(8)}px;"
-                    f" padding: {T.s(10)}px {T.s(20)}px; font-size: {T.FONT['nav']}px;"
+                    f" border-radius: {btn_r}px;"
+                    f" padding: 0 {T.s(22)}px; font-size: {T.FONT['nav']}px;"
                     f" font-weight: 600; }}")
             else:
                 btn.setText("")
@@ -103,5 +108,5 @@ class NavBar(QWidget):
                 btn.setIcon(colored_icon(icon_path, c["text"]))
                 btn.setStyleSheet(
                     f"QPushButton {{ background: transparent; border: none;"
-                    f" border-radius: {T.RADIUS['pill'] - T.s(8)}px; padding: {T.s(10)}px {T.s(14)}px; }}"
+                    f" border-radius: {btn_r}px; padding: 0 {T.s(16)}px; }}"
                     f"QPushButton:hover {{ background: {c['surface2']}; }}")

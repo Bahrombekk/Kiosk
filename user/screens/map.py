@@ -20,7 +20,8 @@ from PyQt6.QtGui import QPixmap, QColor, QPen, QBrush, QFont, QPainter
 
 import theme as T
 from threads import track
-from widgets.slippymap import SlippyMap
+from widgets.icons import svg_pixmap
+from widgets.routemap import RouteMap
 
 ASSETS = os.path.join(os.path.dirname(__file__), "..", "assets", "design")
 TRAIN_IMG = os.path.join(ASSETS, "train.png")
@@ -161,9 +162,9 @@ class MapScreen(QWidget):
         left.addWidget(self.route)
         chips = QHBoxLayout()
         chips.setSpacing(T.s(14))
-        self.chip_date = self._chip("📅", "")
-        self.chip_depart = self._chip("🕐", "")
-        self.chip_dur = self._chip("🏁", "")
+        self.chip_date = self._chip("calendar", "")
+        self.chip_depart = self._chip("clock", "")
+        self.chip_dur = self._chip("flag", "")
         for ch in (self.chip_date, self.chip_depart, self.chip_dur):
             chips.addWidget(ch)
         chips.addStretch(1)
@@ -197,21 +198,23 @@ class MapScreen(QWidget):
         self.tl_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         body.addWidget(self.tl_scroll)
 
-        self.slippy = SlippyMap(radius=T.s(22))
-        self.slippy.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        body.addWidget(self.slippy, 1)
+        self.routemap = RouteMap(radius=T.s(22))
+        self.routemap.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        body.addWidget(self.routemap, 1)
 
         cv.addLayout(body, 1)
         root.addWidget(self.card)
 
-    def _chip(self, emoji, text):
+    def _chip(self, icon_name, text):
         chip = QFrame()
         chip.setObjectName("chip")
         chip.setFixedHeight(T.s(48))
         lay = QHBoxLayout(chip)
         lay.setContentsMargins(T.s(16), 0, T.s(18), 0)
         lay.setSpacing(T.s(9))
-        ic = QLabel(emoji); ic.setObjectName("chipIc")
+        ic = QLabel(); ic.setObjectName("chipIc")
+        # Chip foni har mavzuda oq — ikonka rangi matn bilan bir xil (#2B3340)
+        ic.setPixmap(svg_pixmap(icon_name, "#2B3340", T.s(20)))
         lbl = QLabel(text); lbl.setObjectName("chipTxt")
         lay.addWidget(ic)
         lay.addWidget(lbl)
@@ -243,7 +246,7 @@ class MapScreen(QWidget):
         self.chip_depart._text.setText(f"Jo'nash: {settings.get('depart_time') or '—'}")
         self.chip_dur._text.setText(settings.get("duration") or "—")
         self.timeline.set_data(stops, self.current, self.theme_name)
-        self.slippy.set_route(stops, self.current, self.theme_name)
+        self.routemap.set_route(stops, self.current, self.theme_name)
 
     def _today(self):
         d = datetime.now()
@@ -269,4 +272,4 @@ class MapScreen(QWidget):
             f"#tlScroll QWidget {{ background: transparent; }}")
         if self.stops:
             self.timeline.set_data(self.stops, self.current, name)
-            self.slippy.set_route(self.stops, self.current, name)
+            self.routemap.set_route(self.stops, self.current, name)

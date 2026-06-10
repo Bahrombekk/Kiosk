@@ -44,7 +44,7 @@ def _excepthook(exc_type, exc, tb):
 sys.excepthook = _excepthook
 
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QStackedWidget,
-                             QLabel)
+                             QLabel, QFrame, QHBoxLayout)
 from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt6.QtGui import QPixmap, QPainter, QColor
 
@@ -54,6 +54,7 @@ from threads import track
 from api import ApiClient
 from ws_client import WSClient
 from widgets.navbar import NavBar
+from widgets.icons import svg_pixmap
 from screens.connecting import ConnectingScreen
 from screens.home import HomeScreen
 from screens.map import MapScreen
@@ -147,11 +148,22 @@ class MainWindow(QWidget):
         self.conn_timer.timeout.connect(self.check_connection)
         self.conn_timer.start(config.RECONNECT_INTERVAL_MS)
 
-        # E'lon banneri (announcement uchun) — ustki qatlam
-        self.banner = QLabel("", self)
+        # E'lon banneri (announcement uchun) — ustki qatlam.
+        # Ikonka + matn (emoji o'rniga haqiqiy ikonka, assets/icons/megaphone.svg)
+        self.banner = QFrame(self)
         self.banner.setObjectName("banner")
-        self.banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.banner.setWordWrap(True)
+        bl = QHBoxLayout(self.banner)
+        bl.setContentsMargins(T.s(20), T.s(14), T.s(20), T.s(14))
+        bl.setSpacing(T.s(12))
+        bl.addStretch(1)
+        self.banner_ic = QLabel()
+        self.banner_ic.setStyleSheet("background: transparent;")
+        bl.addWidget(self.banner_ic, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.banner_lbl = QLabel("")
+        self.banner_lbl.setObjectName("bannerTxt")
+        self.banner_lbl.setWordWrap(True)
+        bl.addWidget(self.banner_lbl, 0, Qt.AlignmentFlag.AlignVCenter)
+        bl.addStretch(1)
         self.banner.hide()
         self.banner_timer = QTimer(self)
         self.banner_timer.setSingleShot(True)
@@ -197,7 +209,7 @@ class MainWindow(QWidget):
         """Admin yuborgan e'lonni ustki bannerda ko'rsatadi (10 soniya)."""
         if not text:
             return
-        self.banner.setText("📢  " + text)
+        self.banner_lbl.setText(text)
         self.banner.show()
         self.banner.raise_()
         self._place_banner()
@@ -257,8 +269,11 @@ class MainWindow(QWidget):
             page.apply_theme(self.theme_name)
         if hasattr(self, "banner"):
             self.banner.setStyleSheet(
-                f"#banner {{ background: {c['accent']}; color: {c['accent_text']};"
-                f" font-size: {T.FONT['nav']}px; font-weight: 600; padding: 14px; }}")
+                f"#banner {{ background: {c['accent']}; }}"
+                f"#bannerTxt {{ background: transparent; color: {c['accent_text']};"
+                f" font-size: {T.FONT['nav']}px; font-weight: 600; }}")
+            self.banner_ic.setPixmap(
+                svg_pixmap("megaphone", c["accent_text"], T.s(26)))
 
     # --- Tugmalarni boshqarish (kiosk qulflash, TZ 13.1) ---
     def keyPressEvent(self, e):

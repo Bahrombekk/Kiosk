@@ -15,9 +15,10 @@ import sys
 import vlc
 from PyQt6.QtWidgets import (QWidget, QFrame, QHBoxLayout, QVBoxLayout,
                              QPushButton, QLabel, QSlider)
-from PyQt6.QtCore import Qt, QTimer, QEvent, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, QEvent, pyqtSignal, QSize
 
 import theme as T
+from widgets.icons import svg_icon, svg_pixmap
 
 
 def _fmt(ms):
@@ -102,7 +103,7 @@ class VideoPlayer(QWidget):
         top = QHBoxLayout(self.top_bar)
         top.setContentsMargins(T.s(24), T.s(16), T.s(24), T.s(16))
         top.setSpacing(T.s(16))
-        self.x_btn = self._round_btn("✕", T.s(60))
+        self.x_btn = self._round_btn("", T.s(60), icon="x")
         self.x_btn.clicked.connect(self.stop_and_close)
         self.title_lbl = QLabel(self.title)
         self.title_lbl.setStyleSheet(
@@ -126,7 +127,7 @@ class VideoPlayer(QWidget):
         center.setSpacing(T.s(28))
         center.addStretch(1)
         self.back_btn = self._round_btn("« 10", T.s(72))
-        self.play_btn = self._round_btn("⏸", T.s(96))
+        self.play_btn = self._round_btn("", T.s(96), icon="pause")
         self.fwd_btn = self._round_btn("10 »", T.s(72))
         self.back_btn.clicked.connect(lambda: self._seek_relative(-10000))
         self.play_btn.clicked.connect(self.toggle_play)
@@ -155,8 +156,9 @@ class VideoPlayer(QWidget):
         self.progress.sliderPressed.connect(lambda: setattr(self, "_dragging", True))
         self.progress.sliderReleased.connect(self._on_seek)
 
-        self.vol_lbl = QLabel("🔊")
-        self.vol_lbl.setStyleSheet(f"color:#FFFFFF; font-size:{T.s(18)}px; background:transparent;")
+        self.vol_lbl = QLabel()
+        self.vol_lbl.setPixmap(svg_pixmap("volume-2", "#FFFFFF", T.s(22)))
+        self.vol_lbl.setStyleSheet("background:transparent;")
         self.vol = QSlider(Qt.Orientation.Horizontal)
         self.vol.setObjectName("volBar")
         self.vol.setRange(0, 100)
@@ -185,16 +187,26 @@ class VideoPlayer(QWidget):
             f"  margin: {-(hh // 2 - gh // 2)}px 0; border-radius: {hh // 2}px;"
             "  background: #FFFFFF; }")
 
-    def _round_btn(self, text, size):
+    def _round_btn(self, text, size, icon=None):
         b = QPushButton(text)
         b.setCursor(Qt.CursorShape.PointingHandCursor)
         b.setFixedSize(size, size)
+        if icon:
+            b.setIcon(svg_icon(icon, "#FFFFFF", 64))
+            b.setIconSize(QSize(int(size * 0.42), int(size * 0.42)))
         b.setStyleSheet(
             f"QPushButton {{ background: rgba(0,0,0,0.45); color:#FFFFFF;"
             f" border:none; border-radius:{size // 2}px; font-size:{T.s(20)}px;"
             f" font-weight:600; }}"
             f"QPushButton:hover {{ background: rgba(37,99,235,0.85); }}")
         return b
+
+    def _set_play_icon(self, name):
+        # _refresh har yarim soniyada chaqiriladi — ikonkani keshlaymiz.
+        if getattr(self, "_play_icon_name", None) == name:
+            return
+        self._play_icon_name = name
+        self.play_btn.setIcon(svg_icon(name, "#FFFFFF", 64))
 
     # ---------- O'ynatish ----------
     def start(self):
@@ -268,12 +280,12 @@ class VideoPlayer(QWidget):
 
         # play / pauza / qayta o'ynatish belgisi
         if state == vlc.State.Ended:
-            self.play_btn.setText("↻")
+            self._set_play_icon("rotate-ccw")
             self._show_controls()           # tugagach — chiqish/qayta uchun
         elif state == vlc.State.Playing:
-            self.play_btn.setText("⏸")
+            self._set_play_icon("pause")
         else:
-            self.play_btn.setText("▶")
+            self._set_play_icon("play")
 
         length = self._mp.get_length()
         cur = self._mp.get_time()

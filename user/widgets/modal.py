@@ -4,8 +4,9 @@ Detal oynalari (video/kitob) shu asosdan foydalanadi. Ota-widget ustini
 to'liq qoplaydi; tashqi xira joyga yoki X bosilsa yopiladi.
 """
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QPushButton
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QSize
 import theme as T
+from widgets.icons import svg_icon
 
 
 class Modal(QWidget):
@@ -31,10 +32,11 @@ class Modal(QWidget):
         top = QHBoxLayout()
         top.setContentsMargins(0, T.s(8), T.s(8), 0)
         top.addStretch(1)
-        self.close_btn = QPushButton("✕")
+        self.close_btn = QPushButton()
         self.close_btn.setObjectName("modalClose")
         self.close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.close_btn.setFixedSize(T.s(36), T.s(36))
+        self.close_btn.setIconSize(QSize(T.s(18), T.s(18)))
         self.close_btn.clicked.connect(self.close_modal)
         top.addWidget(self.close_btn)
         self.body.addLayout(top)
@@ -67,6 +69,7 @@ class Modal(QWidget):
 
     def _restyle(self):
         c = T.THEMES[self.theme_name]
+        self.close_btn.setIcon(svg_icon("x", c["text"], T.s(36)))
         self.setStyleSheet(
             f"Modal {{ background: rgba(0,0,0,0.55); }}")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)

@@ -12,7 +12,8 @@ Kontent va holat serverdan yuklanadi (dinamik).
 import os
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel,
                              QPushButton, QSizePolicy, QGraphicsView, QGraphicsScene)
-from PyQt6.QtCore import (Qt, QThread, pyqtSignal, QTimer, QByteArray, QRectF)
+from PyQt6.QtCore import (Qt, QThread, pyqtSignal, QTimer, QByteArray, QRectF,
+                          QSize)
 from PyQt6.QtGui import QPixmap, QPainter, QPainterPath
 from PyQt6.QtSvg import QSvgRenderer
 
@@ -24,6 +25,7 @@ import theme as T
 from threads import track
 from widgets.cover import CoverLabel, _Fetcher
 from widgets.card import fmt_duration
+from widgets.icons import svg_icon
 from reader import Reader
 from audio_player import AudioPlayer
 
@@ -342,13 +344,16 @@ class _HomeCanvas(QWidget):
         btext.addWidget(self.book_title)
         btext.addWidget(self.book_author)
         btext.addStretch(1)
-        self.listen_btn = QPushButton("🎧  Tinglash")
+        self.listen_btn = QPushButton(" Tinglash")
         self.listen_btn.setObjectName("listenBtn")
-        self.read_btn = QPushButton("📖  O'qish")
+        self.listen_btn.setIcon(svg_icon("headphones", "#FFFFFF", 48))
+        self.read_btn = QPushButton(" O'qish")
         self.read_btn.setObjectName("readBtn")
+        self.read_btn.setIcon(svg_icon("book-open", "#FFFFFF", 48))
         for b in (self.listen_btn, self.read_btn):
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             b.setFixedHeight(58)
+            b.setIconSize(QSize(24, 24))
         self.listen_btn.clicked.connect(self._listen_book)
         self.read_btn.clicked.connect(self._read_book)
         btext.addWidget(self.listen_btn)
