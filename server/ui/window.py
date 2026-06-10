@@ -12,6 +12,7 @@ from ui.helpers import local_ips
 from ui.server_thread import ServerThread
 from ui.pages.dashboard import DashboardPageMixin
 from ui.pages.content import ContentPageMixin
+from ui.pages.ads import AdsPageMixin
 from ui.pages.crud import CrudPagesMixin
 from ui.pages.settings import SettingsPageMixin
 
@@ -19,8 +20,8 @@ from ui.pages.settings import SettingsPageMixin
 # ----------------------------------------------------------------------------
 #  Asosiy admin oynasi
 # ----------------------------------------------------------------------------
-class AdminWindow(DashboardPageMixin, ContentPageMixin, CrudPagesMixin,
-                  SettingsPageMixin, QMainWindow):
+class AdminWindow(DashboardPageMixin, ContentPageMixin, AdsPageMixin,
+                  CrudPagesMixin, SettingsPageMixin, QMainWindow):
     NAV = [
         ("dashboard", "Boshqaruv", "layout-dashboard"),
         ("content", "Kontent", "clapperboard"),

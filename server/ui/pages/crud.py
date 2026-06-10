@@ -1,17 +1,14 @@
-"""ui/pages/crud.py — Generik CRUD sahifalar mixin'i (Reklama/Saytlar/Bekatlar)."""
-import os
-
+"""ui/pages/crud.py — Generik CRUD sahifalar mixin'i (Saytlar/Bekatlar)."""
 from PyQt6.QtWidgets import (
     QHBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QHeaderView,
     QMessageBox
 )
 from PyQt6.QtGui import QColor
 
-import config
 import db
 from ui.styles import C_MUTED
 from ui.helpers import _pill
-from ui.dialogs import AdDialog, RecordDialog
+from ui.dialogs import RecordDialog
 
 
 class CrudPagesMixin:
@@ -78,20 +75,6 @@ class CrudPagesMixin:
                         dash.setForeground(QColor("#94A3B8"))
                         table.setItem(r, col, dash)
                     continue
-                if key == "media_kind":
-                    if val == "Video":
-                        table.setItem(r, col, QTableWidgetItem(""))
-                        table.setCellWidget(
-                            r, col, _pill("Video", "#1D4ED8", "#DBEAFE"))
-                    elif val == "Rasm":
-                        table.setItem(r, col, QTableWidgetItem(""))
-                        table.setCellWidget(
-                            r, col, _pill("Rasm", "#047857", "#D1FAE5"))
-                    else:
-                        dash = QTableWidgetItem("— yo'q")
-                        dash.setForeground(QColor("#B91C1C"))
-                        table.setItem(r, col, dash)
-                    continue
                 item = QTableWidgetItem("" if val is None else str(val))
                 if key == "id":
                     item.setForeground(QColor(C_MUTED))
@@ -147,43 +130,6 @@ class CrudPagesMixin:
             db.log_action(f"{name}_deleted", f"#{item['id']}")
             self._crud_refresh(name)
             self.statusBar().showMessage("Yozuv o'chirildi.", 3000)
-
-    # --- Reklama sahifasi ---
-    @staticmethod
-    def _ads_rows():
-        """Reklamalar + jadval uchun hisoblangan ustunlar (media turi,
-        davomiylik va vaqt oralig'i matnlari)."""
-        rows = db.get_ads(active_only=False)
-        for ad in rows:
-            mp = ad.get("media_path") or ""
-            # Fayl diskda haqiqatan bormi? Yo'q bo'lsa qizil "yo'q" ko'rinadi —
-            # kiosk bunday reklamani baribir o'tkazib yuboradi.
-            if mp and os.path.isfile(os.path.join(config.ADS_DIR, mp)):
-                ad["media_kind"] = ("Video" if AdDialog._is_video(mp) else "Rasm")
-            else:
-                ad["media_kind"] = None
-            if ad["media_kind"] == "Video" and not ad.get("duration"):
-                ad["dur_disp"] = "Video oxirigacha"
-            else:
-                ad["dur_disp"] = f"{ad.get('duration') or 10} s"
-            st, en = ad.get("start_time"), ad.get("end_time")
-            ad["time_disp"] = f"{st} – {en}" if st and en else "Doim"
-            ad["int_disp"] = f"har {ad['interval_min']} daq" \
-                if ad.get("interval_min") else "Standart"
-        return rows
-
-    def _ads_page(self):
-        return self._crud_page(
-            "ads", "Reklama",
-            "Kioskda qalqib chiquvchi rasm/video reklamalar — namoyish "
-            "davomiyligi va kunlik vaqt oralig'i bilan (oraliq: Sozlamalar)",
-            columns=[("ID", "id"), ("Sarlavha", "title"), ("Media", "media_kind"),
-                     ("Namoyish", "dur_disp"), ("Oraliq", "int_disp"),
-                     ("Vaqt oralig'i", "time_disp"), ("Faol", "is_active")],
-            fields=None,
-            get_all=self._ads_rows,
-            add_fn=db.add_ad, update_fn=db.update_ad, delete_fn=db.delete_ad,
-            dialog_title="reklama", dialog_cls=AdDialog)
 
     # --- Saytlar sahifasi ---
     def _sites_page(self):
