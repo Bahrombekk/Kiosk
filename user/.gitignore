@@ -1,0 +1,12 @@
+# PyInstaller / Inno Setup yig'ish artefaktlari
+build/
+build_tmp/
+dist/
+release/
+Output/
+*.spec.bak
+
+# Runtime
+crash.log
+__pycache__/
+*.pyc
