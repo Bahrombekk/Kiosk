@@ -6,7 +6,7 @@ faylini ochib nima bo'lganini ko'ra olishi kerak. Loglar 1MB ga yetganda
 aylanadi (3 ta zaxira), disk to'lib ketmaydi.
 
 Ishlatish:
-    import logsetup
+    from core import logsetup
     logsetup.setup()                 # main() boshida bir marta
     log = logsetup.get_logger(__name__)
     log.warning("Server javob bermadi: %s", e)
@@ -21,9 +21,8 @@ _initialized = False
 
 def base_dir():
     """Exe (frozen) yoki loyiha papkasi — server.txt bilan bir xil mantiq."""
-    if getattr(sys, "frozen", False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
+    from core.config import APP_DIR
+    return APP_DIR
 
 
 def setup():

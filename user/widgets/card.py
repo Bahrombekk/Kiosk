@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
 from PyQt6.QtCore import Qt, pyqtSignal, QByteArray, QRectF
 from PyQt6.QtGui import QColor, QPixmap, QPainter
 from PyQt6.QtSvg import QSvgRenderer
-import theme as T
+from core import theme as T
 from widgets.cover import CoverLabel
 
 # Kitob kartasidagi belgilar (muqova ustidagi oq pill ichida) — inline SVG.
@@ -39,16 +39,16 @@ def _svg_pixmap(svg, color_hex, size):
     return pm
 
 
-def fmt_duration(seconds):
-    """Soniyani '1 soat 50 daqiqa' ko'rinishiga keltiradi."""
-    if not seconds:
-        return ""
-    h, m = seconds // 3600, (seconds % 3600) // 60
-    if h and m:
-        return f"{h} soat {m} daqiqa"
-    if h:
-        return f"{h} soat"
-    return f"{m} daqiqa"
+# Davomiylik formati endi til-sezgir (i18n) — eski import joylari buzilmasin
+# deb shu nom bilan re-eksport qilinadi.
+from core.i18n import fmt_duration  # noqa: E402,F401
+
+
+def _set_pressed(widget, on):
+    """Sensorda bosish his etilsin: dynamic property + QSS [pressed="true"]."""
+    widget.setProperty("pressed", on)
+    widget.style().unpolish(widget)
+    widget.style().polish(widget)
 
 
 class ContentCard(QFrame):
@@ -107,12 +107,18 @@ class ContentCard(QFrame):
         c = T.THEMES[name]
         self.setStyleSheet(
             f"#videoCard {{ background: {c['surface']}; border-radius: {T.s(24)}px; }}"
+            f"#videoCard[pressed=\"true\"] {{ background: {c['surface2']}; }}"
             f"#cardTitle {{ background: transparent; color: {c['text']};"
             f" font-size: {T.FONT['card_title']}px; font-weight: 700; }}"
             f"#cardSub {{ background: transparent; color: {c['text_secondary']};"
             f" font-size: {T.FONT['small']}px; }}")
 
+    def mousePressEvent(self, e):
+        _set_pressed(self, True)
+        super().mousePressEvent(e)
+
     def mouseReleaseEvent(self, e):
+        _set_pressed(self, False)
         if e.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit(self.item)
         super().mouseReleaseEvent(e)
@@ -229,6 +235,7 @@ class BookCard(QFrame):
         # Dizayn (Kitoblar.html): card radius 26, title 42/700 #1c2230, author 32/500 #8b94a4
         self.setStyleSheet(
             f"#bookCard {{ background: {c['surface']}; border-radius: {T.s(26)}px; }}"
+            f"#bookCard[pressed=\"true\"] {{ background: {c['surface2']}; }}"
             f"#cardTitle {{ background: transparent; color: {c['text']};"
             f" font-size: {T.FONT['card_title']}px; font-weight: 700; }}"
             f"#cardSub {{ background: transparent; color: {c['text_secondary']};"
@@ -242,7 +249,12 @@ class BookCard(QFrame):
         self._place_badge()
         self._elide_title()
 
+    def mousePressEvent(self, e):
+        _set_pressed(self, True)
+        super().mousePressEvent(e)
+
     def mouseReleaseEvent(self, e):
+        _set_pressed(self, False)
         if e.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit(self.item)
         super().mouseReleaseEvent(e)

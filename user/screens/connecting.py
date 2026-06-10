@@ -6,7 +6,9 @@ Server bilan ulanish o'rnatilgunча ko'rsatiladi. Ulanish bo'lmasa
 """
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel
 from PyQt6.QtCore import Qt
-import theme as T
+from core import theme as T
+from core.i18n import tr
+from widgets.spinner import Spinner
 
 
 class ConnectingScreen(QWidget):
@@ -20,12 +22,17 @@ class ConnectingScreen(QWidget):
         self.logo.setObjectName("splashLogo")
         self.logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self.status = QLabel("Serverga ulanmoqda...")
+        self.status = QLabel(tr("conn.connecting"))
         self.status.setObjectName("splashStatus")
         self.status.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
+        self.spinner = Spinner(size=T.s(44), line=T.s(4))
+
         lay.addWidget(self.logo)
         lay.addWidget(self.status)
+        lay.addSpacing(T.s(10))
+        lay.addWidget(self.spinner, 0, Qt.AlignmentFlag.AlignHCenter)
+        self.spinner.start()
 
     def set_status(self, text):
         self.status.setText(text)
@@ -38,3 +45,4 @@ class ConnectingScreen(QWidget):
         self.status.setStyleSheet(
             f"#splashStatus {{ color: {c['text_secondary']};"
             f" font-size: {T.FONT['h2']}px; }}")
+        self.spinner.apply_theme(name)

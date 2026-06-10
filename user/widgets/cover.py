@@ -9,13 +9,14 @@ import logging
 from collections import OrderedDict
 
 import requests
-from PyQt6.QtWidgets import QLabel, QSizePolicy
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QByteArray, QRectF, QSize
+from PyQt6.QtWidgets import QLabel, QSizePolicy, QGraphicsOpacityEffect
+from PyQt6.QtCore import (Qt, QThread, pyqtSignal, QByteArray, QRectF, QSize,
+                          QPropertyAnimation, QEasingCurve)
 from PyQt6.QtGui import QPixmap, QPainter, QColor
 from PyQt6.QtSvg import QSvgRenderer
-import cache
-import theme as T
-from threads import track
+from core import cache
+from core import theme as T
+from core.threads import track
 
 log = logging.getLogger(__name__)
 
@@ -157,8 +158,28 @@ class CoverLabel(QLabel):
             if getattr(self, "_url", None):
                 _mem_put(self._url, self._orig)
             self._render_scaled()
+            self._fade_in()   # faqat tarmoq/diskdan kelganda (mem-hit instant)
         except RuntimeError:
             pass
+
+    def _fade_in(self):
+        """Yangi yuklangan muqovani yumshoq paydo qiladi (220ms)."""
+        eff = QGraphicsOpacityEffect(self)
+        self.setGraphicsEffect(eff)
+        self._fade = QPropertyAnimation(eff, b"opacity", self)
+        self._fade.setDuration(220)
+        self._fade.setStartValue(0.0)
+        self._fade.setEndValue(1.0)
+        self._fade.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._fade.finished.connect(self._end_fade)
+        self._fade.start()
+
+    def _end_fade(self):
+        # Effektni olib tashlaymiz — doimiy offscreen bufer scroll'ni sekinlatadi
+        try:
+            self.setGraphicsEffect(None)
+        except RuntimeError:
+            pass  # karta ro'yxat qayta renderida o'chirilgan bo'lishi mumkin
 
     def _render_scaled(self):
         if self._orig is None or self._w < 2 or self._h < 2:

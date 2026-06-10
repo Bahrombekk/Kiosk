@@ -15,12 +15,15 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QByteArray, QRectF, QTi
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QIcon
 from PyQt6.QtSvg import QSvgRenderer
 
-import theme as T
-from threads import track
+from core import theme as T
+from core.i18n import tr
+from core.threads import track
 from widgets.card import ContentCard, fmt_duration
+from widgets.empty import EmptyState
 from widgets.modal import Modal
 from widgets.cover import CoverLabel
-from player import VideoPlayer
+from widgets.spinner import StatusLabel
+from players.video import VideoPlayer
 
 # Tab nomi -> qaysi turlar ko'rsatiladi (+ dizayndagi inline SVG ikonka)
 # Ikonkalar Videolar.html dizaynidan aynan ko'chirilgan.
@@ -44,11 +47,12 @@ _SEARCH_SVG = ("<svg viewBox='0 0 24 24' fill='none'>"
                "<circle cx='11' cy='11' r='7' stroke='currentColor' stroke-width='2.2'/>"
                "<path d='m20 20-4-4' stroke='currentColor' stroke-width='2.2' stroke-linecap='round'/></svg>")
 
+# (yorliq tr-kaliti, content turlari, ikonka) — yorliq i18n orqali tarjima qilinadi
 TABS = [
-    ("Barchasi",    ("movie", "cartoon", "music"), _GRID_SVG),
-    ("Kinolar",     ("movie",),                    _FILM_SVG),
-    ("Multfilmlar", ("cartoon",),                  _WAND_SVG),
-    ("Musiqa",      ("music",),                    _MUSIC_SVG),
+    ("common.tab_all",      ("movie", "cartoon", "music"), _GRID_SVG),
+    ("videos.tab.movies",   ("movie",),                    _FILM_SVG),
+    ("videos.tab.cartoons", ("cartoon",),                  _WAND_SVG),
+    ("videos.tab.music",    ("music",),                    _MUSIC_SVG),
 ]
 
 
@@ -115,8 +119,8 @@ class VideosScreen(QWidget):
         tl.setContentsMargins(0, 0, 0, 0)
         tl.setSpacing(T.s(44))
         self.tab_btns = []
-        for i, (name, _types, _svg) in enumerate(TABS):
-            b = QPushButton(" " + name)
+        for i, (name_key, _types, _svg) in enumerate(TABS):
+            b = QPushButton(" " + tr(name_key))
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             b.setCheckable(True)
             b.setIconSize(QSize(T.s(28), T.s(28)))
@@ -137,7 +141,7 @@ class VideosScreen(QWidget):
         self.search_icon.setFixedSize(T.s(24), T.s(24))
         self.search = QLineEdit()
         self.search.setObjectName("searchInput")
-        self.search.setPlaceholderText("Nomi bo'yicha qidirish")
+        self.search.setPlaceholderText(tr("videos.search"))
         self.search.setFrame(False)
         self.search.textChanged.connect(self._on_search)
         sl.addWidget(self.search_icon)
@@ -150,10 +154,11 @@ class VideosScreen(QWidget):
         head.addWidget(self.search_box, 0, Qt.AlignmentFlag.AlignBottom)
         root.addLayout(head)
 
-        # Holat matni (yuklanmoqda / bo'sh)
-        self.status = QLabel("")
-        self.status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Holat (spinner + matn) va bo'sh holat komponentlari
+        self.status = StatusLabel(self.theme_name)
         root.addWidget(self.status)
+        self.empty = EmptyState(icon="video", theme=self.theme_name)
+        root.addWidget(self.empty)
 
         # Kartochkalar to'ri (scroll ichida) — 3 ustun
         self.scroll = QScrollArea()
@@ -178,10 +183,12 @@ class VideosScreen(QWidget):
             self.reload()
 
     def reload(self):
-        self.status.setText("Yuklanmoqda...")
+        self.empty.hide()
+        self.status.loading(tr("common.loading"))
         self._loader = track(_Loader(self.api))
         self._loader.done.connect(self._on_loaded)
-        self._loader.fail.connect(lambda: self.status.setText("Yuklab bo'lmadi"))
+        self._loader.fail.connect(
+            lambda: self.status.text(tr("common.load_failed")))
         self._loader.start()
 
     def _on_loaded(self, items):
@@ -221,9 +228,12 @@ class VideosScreen(QWidget):
 
         items = self._filtered()
         if not items:
-            self.status.setText("Hech narsa topilmadi")
+            self.status.clear()
+            self.empty.set_message(tr("common.nothing_found"))
+            self.empty.show()
             return
-        self.status.setText("")
+        self.status.clear()
+        self.empty.hide()
 
         cols = self._calc_cols()
         self._cols = cols
@@ -278,8 +288,7 @@ class VideosScreen(QWidget):
             self._modal.close_modal()
         # Oflaynda striming ishlamaydi — pleyerni ochib qotirmaymiz
         if self.api.offline:
-            self.status.setText(
-                "Server bilan aloqa yo'q — video vaqtincha mavjud emas")
+            self.status.text(tr("videos.offline"))
             return
         # Avvalgi pleyer hali ochiq bo'lsa — yopamiz (VLC resurslari bo'shasin va
         # ishlab turgan obyekt referenssiz qolib GC tomonidan abort qilinmasin).
@@ -298,11 +307,13 @@ class VideosScreen(QWidget):
         self.theme_name = name
         c = T.THEMES[name]
         # Sahifa foni (satin) ko'rinsin — scroll/host shaffof
-        self.scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        self.scroll.setStyleSheet(
+            "QScrollArea { background: transparent; border: none; }"
+            + T.scrollbar_qss(c))
         self.scroll.viewport().setStyleSheet("background: transparent;")
         self.grid_host.setStyleSheet("#gridHost { background: transparent; }")
-        self.status.setStyleSheet(
-            f"color: {c['text_secondary']}; font-size: {T.FONT['h2']}px;")
+        self.status.apply_theme(name)
+        self.empty.apply_theme(name)
         # Qidiruv qutisi
         self.tabs_frame.setStyleSheet(
             f"#tabsFrame {{ border-bottom: 2px solid {c['border']}; }}")
@@ -328,7 +339,8 @@ class VideosScreen(QWidget):
                 f" border: none; border-bottom: {T.s(4)}px solid {border};"
                 f" padding: {T.s(6)}px {T.s(4)}px {T.s(16)}px {T.s(4)}px;"
                 f" font-size: {T.s(22)}px;"
-                f" font-weight: {'700' if active else '600'}; }}")
+                f" font-weight: {'700' if active else '600'}; }}"
+                f"QPushButton:pressed {{ color: {c['accent']}; }}")
 
 
 class _VideoDetail(Modal):
@@ -387,7 +399,7 @@ class _VideoDetail(Modal):
         self.desc.setWordWrap(True)
         self.desc.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        self.watch = QPushButton("▶  Tomosha qilish")
+        self.watch = QPushButton(tr("videos.watch"))
         self.watch.setObjectName("watchBtn")
         self.watch.setCursor(Qt.CursorShape.PointingHandCursor)
         self.watch.setFixedHeight(T.s(64))
@@ -425,4 +437,5 @@ class _VideoDetail(Modal):
             f"#watchBtn {{ background: {c['accent']}; color: {c['accent_text']};"
             f" border: none; border-radius: {T.RADIUS['button']}px;"
             f" font-size: {T.FONT['nav']}px; font-weight: 700; }}"
-            f"#watchBtn:hover {{ background: #1D4ED8; }}")
+            f"#watchBtn:hover {{ background: #1D4ED8; }}"
+            f"#watchBtn:pressed {{ background: #1E40AF; }}")

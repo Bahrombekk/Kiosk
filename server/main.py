@@ -290,10 +290,40 @@ def book_text(content_id: int):
         raise HTTPException(500, f"Matn faylini o'qib bo'lmadi: {e}")
 
 
-# --- Boshqa ---
+# --- Reklama ---
+_AD_VIDEO_EXT = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v"}
+
+
+def _ad_media_type(name):
+    """Fayl kengaytmasidan reklama turi: video | image | None."""
+    if not name:
+        return None
+    ext = os.path.splitext(name)[1].lower()
+    return "video" if ext in _AD_VIDEO_EXT else "image"
+
+
 @app.get("/api/ads")
 def ads():
-    return db.get_ads()
+    """Faol reklamalar. Har biriga media_type qo'shiladi; vaqt oralig'i
+    (start_time/end_time) kioskda tekshiriladi — oflayn keshda ham to'g'ri
+    ishlashi uchun filtr mijoz tomonda."""
+    out = []
+    for ad in db.get_ads():
+        ad["media_type"] = _ad_media_type(ad.get("media_path"))
+        out.append(ad)
+    return out
+
+
+@app.get("/api/ads/{ad_id}/media")
+def ad_media(ad_id: int, request: Request):
+    """Reklama fayli (rasm yoki video; video HTTP Range bilan)."""
+    ad = db.get_ad_by_id(ad_id)
+    if not ad or not ad.get("media_path"):
+        raise HTTPException(404, "Reklama topilmadi")
+    path = _safe_join(config.ADS_DIR, ad["media_path"])
+    if not path or not os.path.isfile(path):
+        raise HTTPException(404, "Reklama fayli mavjud emas")
+    return _range_response(path, request)
 
 
 @app.get("/api/sites")
@@ -325,6 +355,46 @@ def _safe_int(v, default):
         return default
 
 
+def _hhmm_to_min(t):
+    """'HH:MM' ni daqiqaga o'giradi; noto'g'ri format — None."""
+    try:
+        h, m = str(t).split(":")
+        return int(h) * 60 + int(m)
+    except (ValueError, AttributeError):
+        return None
+
+
+def _current_stop(stops, now_min):
+    """Joriy bekatni aniqlaydi — YARIM TUNDAN O'TADIGAN reyslarda ham to'g'ri.
+
+    Oddiy 'HH:MM <= now' string solishtirish 22:34 da jo'nab 01:01 da keyingi
+    bekatga yetadigan poyezdda buziladi. Yechim: bekat vaqtlarini ketma-ket
+    yurib, kamaygan joyda +24 soat qo'shamiz (kun aylanishi); so'ng joriy
+    vaqtni shu o'qda joylashtiramiz."""
+    if not stops:
+        return None
+    seq, prev = [], None
+    for st in stops:
+        t = _hhmm_to_min(st.get("arrival_time") or st.get("departure_time"))
+        if t is not None and prev is not None and t < prev:
+            t += 1440  # yarim tundan o'tdi
+        seq.append(t)
+        if t is not None:
+            prev = t
+    valid = [(i, t) for i, t in enumerate(seq) if t is not None]
+    if not valid or now_min is None:
+        return stops[0]["name"]
+    start, end = valid[0][1], valid[-1][1]
+    cand = now_min
+    if cand < start and cand + 1440 <= end + 60:
+        cand += 1440   # joriy vaqt safarning "ertasi kun" qismida
+    cur_idx = valid[0][0]
+    for i, t in valid:
+        if t <= cand:
+            cur_idx = i
+    return stops[cur_idx]["name"]
+
+
 def status_payload():
     """Poyezd holati dict'i (REST va WebSocket ikkalasi ishlatadi).
 
@@ -333,11 +403,8 @@ def status_payload():
     """
     s = db.get_settings()
     stops = db.get_route()
-    now = datetime.now().strftime("%H:%M")
-    current = stops[0]["name"] if stops else None
-    for st in stops:
-        if st.get("arrival_time") and st["arrival_time"] <= now:
-            current = st["name"]
+    now = datetime.now()
+    current = _current_stop(stops, now.hour * 60 + now.minute)
     return {
         "speed": _safe_int(s.get("speed"), 210),
         "temperature": _safe_int(s.get("temperature"), 22),

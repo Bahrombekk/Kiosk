@@ -18,7 +18,7 @@ from PyQt6.QtCore import Qt, QTimer, QPointF, QRectF
 from PyQt6.QtGui import (QPainter, QColor, QPen, QBrush, QFont, QFontMetrics,
                          QPainterPath, QLinearGradient)
 
-import theme as T
+from core import theme as T
 
 # Asosiy O'zbekiston shaharlari — (lon, lat). Kalitlar normalizatsiya qilingan.
 _CITY = {

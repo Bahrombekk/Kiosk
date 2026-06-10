@@ -16,7 +16,7 @@ tugagach (`finished` signali asosiy oqimga queued yetkaziladi), havola olib
 tashlanadi va obyekt odatdagidek yig'iladi.
 
 Foydalanish:
-    from threads import track
+    from core.threads import track
     self._loader = track(_Loader(self.api))
     self._loader.start()
 """

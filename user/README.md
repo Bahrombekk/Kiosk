@@ -20,13 +20,13 @@ python main.py
 - `Ctrl+Shift+Q` — admin chiqishi (kiosk'dan chiqish)
 
 ## Tuzilma
-- `config.py` — server manzili va ulanish sozlamalari (SHU YERNI o'zgartiring).
-- `theme.py` — barcha ranglar va o'lchamlar (Figma bilan moslash uchun).
-- `api.py` — server REST API mijozi (health + katalog metodlari).
+- `core/config.py` — server manzili va ulanish sozlamalari (SHU YERNI o'zgartiring).
+- `core/theme.py` — barcha ranglar va o'lchamlar (Figma bilan moslash uchun).
+- `services/api.py` — server REST API mijozi (health + katalog metodlari).
 - `main.py` — kiosk oyna, ulanish boshqaruvi, navigatsiya, mavzu.
-- `player.py` — to'liq ekran VLC video pleyer (boshqaruv, bufer, seek).
-- `reader.py` — kitob matn o'quvchi (boblar, sahifalash, hisoblagich).
-- `audio_player.py` — audiokitob pleyeri (progress, 10s, tezlik 1x/1.5x/2x).
+- `players/video.py` — to'liq ekran VLC video pleyer (boshqaruv, bufer, seek).
+- `players/reader.py` — kitob matn o'quvchi (boblar, sahifalash, hisoblagich).
+- `players/audio.py` — audiokitob pleyeri (progress, 10s, tezlik 1x/1.5x/2x).
 - `widgets/navbar.py` — yuqori navigatsiya paneli.
 - `widgets/cover.py` — muqovani serverdan yuklab ko'rsatuvchi label (SVG/rasm).
 - `widgets/card.py` — kontent kartochkasi (muqova, nom, janr·davomiylik).

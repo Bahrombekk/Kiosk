@@ -5,7 +5,7 @@ slippymap.py — Lokal OSM plitkalaridan real (offline) xarita.
 bekatlarni ustiga joylaydi. Sichqoncha bilan suriladi (drag) va g'ildirak
 bilan zumlanadi (faqat yuklab olingan zoom'lar oralig'ida). Internet kerak emas.
 
-Plitkalarni oldindan yuklash: `py maptiles.py` (internet bor paytda bir marta).
+Plitkalarni oldindan yuklash: `py services/maptiles.py` (internet bor paytda bir marta).
 """
 import os
 import math
@@ -15,7 +15,7 @@ from PyQt6.QtCore import Qt, QPointF, QRectF, QRect
 from PyQt6.QtGui import (QPixmap, QPainter, QPainterPath, QColor, QPen, QBrush,
                          QFont)
 
-import theme as T
+from core import theme as T
 
 TILES_DIR = os.path.join(os.path.dirname(__file__), "..", "map_tiles")
 TILE = 256

@@ -10,10 +10,18 @@ import sys
 
 
 def _base_dir():
-    """Exe (frozen) yoki loyiha papkasi — server.txt/loglar shu yerda."""
+    """Exe (frozen) yoki loyiha papkasi — server.txt/loglar shu yerda.
+
+    MUHIM: bu fayl endi core/ ichida — manba rejimida bir pog'ona yuqoriga
+    (user/ ildiziga) chiqamiz."""
     if getattr(sys, "frozen", False):
         return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+# Ilova ildiz papkasi (exe yonidagi yoki user/ manba papkasi) — server.txt,
+# cache/, logs/ shu yerda. Boshqa modullar ham shu yagona qiymatni ishlatadi.
+APP_DIR = _base_dir()
 
 
 def _read_server_txt():

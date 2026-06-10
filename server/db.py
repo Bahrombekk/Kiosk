@@ -63,10 +63,15 @@ CREATE TABLE IF NOT EXISTS content (
 
 CREATE TABLE IF NOT EXISTS ads (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    image_path  TEXT,
+    image_path  TEXT,                      -- eski ustun (media_path'ga ko'chirilgan)
+    media_path  TEXT,                      -- reklama fayli: rasm YOKI video
     title       TEXT,
     subtitle    TEXT,
     link_url    TEXT,
+    duration    INTEGER DEFAULT 10,        -- namoyish (soniya); video uchun 0 = oxirigacha
+    interval_min INTEGER,                  -- har necha daqiqada chiqadi (bo'sh = umumiy sozlama)
+    start_time  TEXT,                      -- HH:MM — shu vaqtdan ko'rsatiladi (bo'sh = doim)
+    end_time    TEXT,                      -- HH:MM — shu vaqtgacha
     is_active   INTEGER DEFAULT 1,
     sort_order  INTEGER DEFAULT 0
 );
@@ -87,12 +92,14 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 
 CREATE TABLE IF NOT EXISTS route_stops (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    name         TEXT NOT NULL,
-    arrival_time TEXT,                    -- HH:MM
-    latitude     REAL,
-    longitude    REAL,
-    sort_order   INTEGER DEFAULT 0
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    name           TEXT NOT NULL,
+    arrival_time   TEXT,                  -- HH:MM (kelish)
+    departure_time TEXT,                  -- HH:MM (jo'nash)
+    latitude       REAL,
+    longitude      REAL,
+    distance_km    INTEGER,               -- boshlang'ich bekatdan masofa
+    sort_order     INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS audit_log (
@@ -110,6 +117,32 @@ def init_db():
     conn = connect()
     try:
         conn.executescript(SCHEMA)
+        # Eski bazalarga yangi ustunlar (CREATE IF NOT EXISTS mavjud jadvalni
+        # o'zgartirmaydi — guarded ALTER bilan migratsiya qilamiz)
+        cols = {r["name"] for r in
+                conn.execute("PRAGMA table_info(route_stops)").fetchall()}
+        if "departure_time" not in cols:
+            conn.execute(
+                "ALTER TABLE route_stops ADD COLUMN departure_time TEXT")
+        if "distance_km" not in cols:
+            conn.execute(
+                "ALTER TABLE route_stops ADD COLUMN distance_km INTEGER")
+        # ads: media (rasm/video), davomiylik va vaqt oralig'i ustunlari
+        acols = {r["name"] for r in
+                 conn.execute("PRAGMA table_info(ads)").fetchall()}
+        if "media_path" not in acols:
+            conn.execute("ALTER TABLE ads ADD COLUMN media_path TEXT")
+            # Eski yozuvlardagi rasm nomini yangi ustunga ko'chiramiz
+            conn.execute("UPDATE ads SET media_path = image_path"
+                         " WHERE media_path IS NULL")
+        if "duration" not in acols:
+            conn.execute("ALTER TABLE ads ADD COLUMN duration INTEGER DEFAULT 10")
+        if "interval_min" not in acols:
+            conn.execute("ALTER TABLE ads ADD COLUMN interval_min INTEGER")
+        if "start_time" not in acols:
+            conn.execute("ALTER TABLE ads ADD COLUMN start_time TEXT")
+        if "end_time" not in acols:
+            conn.execute("ALTER TABLE ads ADD COLUMN end_time TEXT")
         conn.commit()
         # Bo'sh bo'lsa seed qilamiz
         if conn.execute("SELECT COUNT(*) AS n FROM content").fetchone()["n"] == 0:
@@ -218,6 +251,13 @@ def get_ads(active_only=True):
     return [dict(r) for r in rows]
 
 
+def get_ad_by_id(ad_id):
+    conn = connect()
+    row = conn.execute("SELECT * FROM ads WHERE id=?", (ad_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
 def get_sites():
     conn = connect()
     rows = conn.execute("SELECT * FROM sites ORDER BY sort_order, id").fetchall()
@@ -248,9 +288,11 @@ def get_settings():
 CONTENT_COLS = ["type", "title", "author", "genre", "description", "duration",
                 "pages", "cover_path", "file_path", "text_path",
                 "category_tab", "is_recommended"]
-ADS_COLS = ["image_path", "title", "subtitle", "link_url", "is_active", "sort_order"]
+ADS_COLS = ["media_path", "title", "subtitle", "link_url", "duration",
+            "interval_min", "start_time", "end_time", "is_active", "sort_order"]
 SITE_COLS = ["name", "url", "description", "features", "icon", "sort_order"]
-STOP_COLS = ["name", "arrival_time", "latitude", "longitude", "sort_order"]
+STOP_COLS = ["name", "arrival_time", "departure_time", "latitude", "longitude",
+             "distance_km", "sort_order"]
 
 
 def _insert(table, cols, data):

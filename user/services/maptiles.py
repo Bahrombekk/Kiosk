@@ -6,14 +6,14 @@ xarita plitkalarini bir marta (internet bor paytda) yuklab olamiz va
 `user/map_tiles/{z}/{x}/{y}.png` ga saqlaymiz. Keyin xarita to'liq offline ishlaydi.
 
 Ishlatish (user/ ichida, internet bor paytda):
-  py maptiles.py
+  py services/maptiles.py
 """
 import os
 import math
 import time
 import urllib.request
 
-TILES_DIR = os.path.join(os.path.dirname(__file__), "map_tiles")
+TILES_DIR = os.path.join(os.path.dirname(__file__), "..", "map_tiles")
 # CARTO "voyager" bazaviy xaritasi (OSM ma'lumotidan, ruxsat etilgan, rangli, nomli).
 # OSM rasmiy serveri bulk yuklashni bloklaydi, shuning uchun CARTO ishlatamiz.
 TILE_URL = "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"

@@ -20,6 +20,8 @@ content/media/
 # Secrets
 .env
 *.env
+# server.txt'da API kalit bor — git'ga tushmasin (installer/dev yozadi)
+user/server.txt
 
 # Runtime crash log (main.py yozadi)
 crash.log

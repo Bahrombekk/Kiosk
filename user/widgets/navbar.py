@@ -9,7 +9,8 @@ from PyQt6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QLabel, QFrame
 from PyQt6.QtCore import Qt, pyqtSignal, QSize, QRectF
 from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor
 from PyQt6.QtSvg import QSvgRenderer
-import theme as T
+from core import i18n
+from core import theme as T
 
 ICON_DIR = os.path.join(os.path.dirname(__file__), "..", "assets", "icons")
 
@@ -30,12 +31,13 @@ def colored_icon(path, color_hex, size=48):
 
 class NavBar(QWidget):
     navigate = pyqtSignal(str)
+    lang_changed = pyqtSignal(str)   # til almashtirgich bosilganda ("uz"/"ru"/"en")
 
     def __init__(self):
         super().__init__()
         self.active = "home"
         self.theme = T.THEMES["light"]
-        self.buttons = {}          # kalit -> [btn, label, icon_path]
+        self.buttons = {}          # kalit -> [btn, icon_path]
         self._build()
 
     def _build(self):
@@ -49,24 +51,50 @@ class NavBar(QWidget):
         pl.setContentsMargins(T.s(8), T.s(8), T.s(8), T.s(8))
         pl.setSpacing(T.s(6))
 
-        for key, label, icon_file, _title in T.NAV_ITEMS:
+        for key, icon_file in T.NAV_ITEMS:
             btn = QPushButton()
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setIconSize(QSize(T.s(24), T.s(24)))
             btn.setFixedHeight(T.s(52))   # qat'iy balandlik — radius yarmiga = to'liq pill
             btn.clicked.connect(lambda _c, k=key: self.navigate.emit(k))
-            self.buttons[key] = [btn, label, os.path.join(ICON_DIR, icon_file)]
+            self.buttons[key] = [btn, os.path.join(ICON_DIR, icon_file)]
             pl.addWidget(btn)
 
         root.addWidget(self.pill, alignment=Qt.AlignmentFlag.AlignLeft)
         root.addStretch(1)
 
+        # Til almashtirgich: UZ | RU | EN (segmentli pill, nav pill uslubida).
+        # Maxfiy chiqish tap-zonasi (self.right) bilan aralashmasin — alohida
+        # widget, soat yorlig'idan chapda turadi.
+        self.lang_pill = QFrame()
+        self.lang_pill.setObjectName("langPill")
+        ll = QHBoxLayout(self.lang_pill)
+        ll.setContentsMargins(T.s(6), T.s(6), T.s(6), T.s(6))
+        ll.setSpacing(T.s(4))
+        self.lang_btns = {}
+        for code in i18n.LANGS:
+            b = QPushButton(code.upper())
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.setFixedSize(T.s(64), T.s(44))
+            b.clicked.connect(lambda _c, c=code: self.lang_changed.emit(c))
+            self.lang_btns[code] = b
+            ll.addWidget(b)
+        root.addWidget(self.lang_pill, alignment=Qt.AlignmentFlag.AlignRight)
+        root.addSpacing(T.s(14))
+
         # Oflayn indikatori — server uzilib keshdan ishlayotganda ko'rinadi
-        self.offline_lbl = QLabel("● Oflayn")
+        self.offline_lbl = QLabel(i18n.tr("common.offline"))
         self.offline_lbl.setObjectName("navOffline")
         self.offline_lbl.hide()
         root.addWidget(self.offline_lbl, alignment=Qt.AlignmentFlag.AlignRight)
 
+        # Soat — BARCHA sahifalarda doim ko'rinadi (maxfiy chiqish zonasi ham shu)
+        self.clock = QLabel("")
+        self.clock.setObjectName("navClock")
+        root.addWidget(self.clock, alignment=Qt.AlignmentFlag.AlignRight)
+        root.addSpacing(T.s(18))
+
+        # Sahifa nomi (Asosiy'da bo'sh) — soatdan o'ngda
         self.right = QLabel("")
         self.right.setObjectName("navRight")
         root.addWidget(self.right, alignment=Qt.AlignmentFlag.AlignRight)
@@ -76,13 +104,13 @@ class NavBar(QWidget):
         self.offline_lbl.setVisible(bool(offline))
 
     def set_clock(self, text):
-        if self.active == "home":
-            self.right.setText(text)
+        # Soat barcha sahifalarda ko'rinadi (alohida yorliqda)
+        self.clock.setText(text)
 
     def set_active(self, key):
         self.active = key
-        title = next((t for k, _l, _i, t in T.NAV_ITEMS if k == key), "")
-        self.right.setText("" if key == "home" else title)
+        self.right.setText(
+            "" if key == "home" else i18n.tr(f"title.{key}").upper())
         self._restyle()
 
     def apply_theme(self, name):
@@ -101,12 +129,36 @@ class NavBar(QWidget):
         self.right.setStyleSheet(
             f"#navRight {{ color: {c['text']}; font-size: {T.FONT['clock']}px;"
             f" font-weight: 600; }}")
+        self.clock.setStyleSheet(
+            f"#navClock {{ color: {c['text']}; font-size: {T.FONT['clock']}px;"
+            f" font-weight: 600; }}")
+        self.offline_lbl.setText(i18n.tr("common.offline"))
         self.offline_lbl.setStyleSheet(
             f"#navOffline {{ color: #F59E0B; font-size: {T.FONT['nav']}px;"
             f" font-weight: 700; padding-right: {T.s(14)}px; }}")
-        for key, (btn, label, icon_path) in self.buttons.items():
+        # Til almashtirgich pill: faol til — accent, qolganlari shaffof
+        lang_r = (T.s(44) + 2 * T.s(6)) // 2
+        self.lang_pill.setStyleSheet(
+            f"#langPill {{ background: {c['surface']};"
+            f" border-radius: {lang_r}px; }}")
+        for code, b in self.lang_btns.items():
+            if code == i18n.get_lang():
+                b.setStyleSheet(
+                    f"QPushButton {{ background: {c['accent']};"
+                    f" color: {c['accent_text']}; border: none;"
+                    f" border-radius: {T.s(44) // 2}px;"
+                    f" font-size: {T.FONT['nav']}px; font-weight: 700; }}")
+            else:
+                b.setStyleSheet(
+                    f"QPushButton {{ background: transparent; border: none;"
+                    f" color: {c['text_secondary']};"
+                    f" border-radius: {T.s(44) // 2}px;"
+                    f" font-size: {T.FONT['nav']}px; font-weight: 600; }}"
+                    f"QPushButton:hover {{ background: {c['surface2']}; }}"
+                    f"QPushButton:pressed {{ background: {c['border']}; }}")
+        for key, (btn, icon_path) in self.buttons.items():
             if key == self.active:
-                btn.setText(" " + label)
+                btn.setText(" " + i18n.tr(f"nav.{key}"))
                 btn.setIcon(colored_icon(icon_path, c["accent_text"]))
                 btn.setStyleSheet(
                     f"QPushButton {{ background: {c['accent']};"
@@ -121,4 +173,5 @@ class NavBar(QWidget):
                 btn.setStyleSheet(
                     f"QPushButton {{ background: transparent; border: none;"
                     f" border-radius: {btn_r}px; padding: 0 {T.s(16)}px; }}"
-                    f"QPushButton:hover {{ background: {c['surface2']}; }}")
+                    f"QPushButton:hover {{ background: {c['surface2']}; }}"
+                    f"QPushButton:pressed {{ background: {c['border']}; }}")

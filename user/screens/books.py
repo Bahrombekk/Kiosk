@@ -12,14 +12,17 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QTimer
 from PyQt6.QtGui import QIcon
 
-import theme as T
-from threads import track
+from core import theme as T
+from core.i18n import tr
+from core.threads import track
 from widgets.card import BookCard, can_read, can_listen, _svg_pixmap
+from widgets.empty import EmptyState
 from widgets.icons import svg_icon
 from widgets.modal import Modal
 from widgets.cover import CoverLabel
-from reader import Reader
-from audio_player import AudioPlayer
+from widgets.spinner import StatusLabel
+from players.reader import Reader
+from players.audio import AudioPlayer
 
 # Tab ikonkalari — Kitoblar.html dizaynidan AYNAN ko'chirilgan inline SVG.
 _GRID_SVG = ("<svg viewBox='0 0 24 24' fill='currentColor'>"
@@ -48,13 +51,15 @@ _SPARK_SVG = ("<svg viewBox='0 0 24 24' fill='none'>"
               "<path d='M18 14v3M16.5 15.5h3M6 3v2M5 4h2' stroke='currentColor'"
               " stroke-width='1.6' stroke-linecap='round'/></svg>")
 
-# (nom, qaysi SVG ikonka)
+# (DB category_tab kaliti, yorliq tr-kaliti, SVG ikonka).
+# MUHIM: [0] — DB'dagi o'zbekcha qiymat (filtr SHU bilan ishlaydi, tarjima
+# qilinmaydi); [1] — ekranda ko'rinadigan, til almashadigan yorliq.
 TABS = [
-    ("Barchasi",  _GRID_SVG),
-    ("Badiiy",    _GLOBE_SVG),
-    ("Tarixiy",   _BANK_SVG),
-    ("Biznes",    _CASE_SVG),
-    ("Bolalarga", _SPARK_SVG),
+    (None,        "common.tab_all",     _GRID_SVG),
+    ("Badiiy",    "books.tab.fiction",  _GLOBE_SVG),
+    ("Tarixiy",   "books.tab.history",  _BANK_SVG),
+    ("Biznes",    "books.tab.business", _CASE_SVG),
+    ("Bolalarga", "books.tab.kids",     _SPARK_SVG),
 ]
 BOOK_TYPES = ("book", "audiobook")
 
@@ -101,8 +106,8 @@ class BooksScreen(QWidget):
         tl.setContentsMargins(0, 0, 0, 0)
         tl.setSpacing(T.s(44))
         self.tab_btns = []
-        for i, (name, _svg) in enumerate(TABS):
-            b = QPushButton(" " + name)
+        for i, (_match, label_key, _svg) in enumerate(TABS):
+            b = QPushButton(" " + tr(label_key))
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             b.setCheckable(True)
             b.setIconSize(QSize(T.s(28), T.s(28)))
@@ -112,9 +117,10 @@ class BooksScreen(QWidget):
         tl.addStretch(1)
         root.addWidget(self.tabs_frame)
 
-        self.status = QLabel("")
-        self.status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.status = StatusLabel(self.theme_name)
         root.addWidget(self.status)
+        self.empty = EmptyState(icon="book", theme=self.theme_name)
+        root.addWidget(self.empty)
 
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
@@ -138,10 +144,12 @@ class BooksScreen(QWidget):
             self.reload()
 
     def reload(self):
-        self.status.setText("Yuklanmoqda...")
+        self.empty.hide()
+        self.status.loading(tr("common.loading"))
         self._loader = track(_Loader(self.api))
         self._loader.done.connect(self._on_loaded)
-        self._loader.fail.connect(lambda: self.status.setText("Yuklab bo'lmadi"))
+        self._loader.fail.connect(
+            lambda: self.status.text(tr("common.load_failed")))
         self._loader.start()
 
     def _on_loaded(self, items):
@@ -158,11 +166,11 @@ class BooksScreen(QWidget):
 
     def _filtered(self):
         out = []
-        tab = TABS[self.active_tab][0]
+        tab = TABS[self.active_tab][0]   # DB category_tab kaliti (None=Barchasi)
         for it in self.all_items:
             if it.get("type") not in BOOK_TYPES:
                 continue
-            if self.active_tab != 0 and (it.get("category_tab") != tab):
+            if tab is not None and (it.get("category_tab") != tab):
                 continue
             out.append(it)
         return out
@@ -175,9 +183,12 @@ class BooksScreen(QWidget):
         self.cards = []
         items = self._filtered()
         if not items:
-            self.status.setText("Hech narsa topilmadi")
+            self.status.clear()
+            self.empty.set_message(tr("common.nothing_found"))
+            self.empty.show()
             return
-        self.status.setText("")
+        self.status.clear()
+        self.empty.hide()
         cols = self._calc_cols()
         self._cols = cols
         for i, it in enumerate(items):
@@ -237,8 +248,7 @@ class BooksScreen(QWidget):
             self._modal.close_modal()
         # Oflaynda striming ishlamaydi — pleyerni ochib qotirmaymiz
         if self.api.offline:
-            self.status.setText(
-                "Server bilan aloqa yo'q — audio vaqtincha mavjud emas")
+            self.status.text(tr("audio.offline"))
             return
         old = getattr(self, "_audio", None)
         if old is not None:
@@ -252,13 +262,15 @@ class BooksScreen(QWidget):
         self.theme_name = name
         c = T.THEMES[name]
         # Sahifa foni (satin) ko'rinsin — scroll/host shaffof
-        self.scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        self.scroll.setStyleSheet(
+            "QScrollArea { background: transparent; border: none; }"
+            + T.scrollbar_qss(c))
         self.scroll.viewport().setStyleSheet("background: transparent;")
         self.grid_host.setStyleSheet("#gridHost { background: transparent; }")
         self.tabs_frame.setStyleSheet(
             f"#tabsFrame {{ border-bottom: 2px solid {c['border']}; }}")
-        self.status.setStyleSheet(
-            f"color: {c['text_secondary']}; font-size: {T.FONT['h2']}px;")
+        self.status.apply_theme(name)
+        self.empty.apply_theme(name)
         self._restyle_tabs()
         for card in self.cards:
             card.apply_theme(name)
@@ -269,13 +281,14 @@ class BooksScreen(QWidget):
             active = (i == self.active_tab)
             color = c["accent"] if active else c["text_secondary"]
             border = c["accent"] if active else "transparent"
-            b.setIcon(QIcon(_svg_pixmap(TABS[i][1], color, T.s(30))))
+            b.setIcon(QIcon(_svg_pixmap(TABS[i][2], color, T.s(30))))
             b.setStyleSheet(
                 f"QPushButton {{ background: transparent; color: {color};"
                 f" border: none; border-bottom: {T.s(4)}px solid {border};"
                 f" padding: {T.s(6)}px {T.s(4)}px {T.s(16)}px {T.s(4)}px;"
                 f" font-size: {T.s(22)}px;"
-                f" font-weight: {'700' if active else '600'}; }}")
+                f" font-weight: {'700' if active else '600'}; }}"
+                f"QPushButton:pressed {{ color: {c['accent']}; }}")
 
 
 class _BookDetail(Modal):
@@ -324,7 +337,7 @@ class _BookDetail(Modal):
         pages = item.get("pages")
         self.pages_badge = None
         if pages:
-            self.pages_badge = QLabel(f"{pages} sahifa", self.cover_box)
+            self.pages_badge = QLabel(tr("books.pages", n=pages), self.cover_box)
             self.pages_badge.setObjectName("bPages")
             self.pages_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
         left = QVBoxLayout()
@@ -361,7 +374,7 @@ class _BookDetail(Modal):
         btns = QHBoxLayout()
         btns.setSpacing(T.s(16))
         if can_listen(item):
-            self.listen_btn = QPushButton(" Tinglash")
+            self.listen_btn = QPushButton(tr("common.listen"))
             self.listen_btn.setObjectName("listenBtn")
             self.listen_btn.setIcon(svg_icon("headphones", "#FFFFFF", T.s(48)))
             self.listen_btn.setIconSize(QSize(T.s(24), T.s(24)))
@@ -370,7 +383,7 @@ class _BookDetail(Modal):
             self.listen_btn.clicked.connect(lambda: self.listen.emit(self.item))
             btns.addWidget(self.listen_btn, 1)
         if can_read(item):
-            self.read_btn = QPushButton(" O'qish")
+            self.read_btn = QPushButton(tr("common.read"))
             self.read_btn.setObjectName("readBtn")
             self.read_btn.setIcon(svg_icon("book-open", "#FFFFFF", T.s(48)))
             self.read_btn.setIconSize(QSize(T.s(24), T.s(24)))
@@ -410,10 +423,12 @@ class _BookDetail(Modal):
             f" border-radius: {T.RADIUS['button']}px;"
             f" font-size: {T.s(21)}px; font-weight: 700; }}"
             f"#listenBtn:hover {{ background: #D97706; }}"
+            f"#listenBtn:pressed {{ background: #B45309; }}"
             f"#readBtn {{ background: {c['accent']}; color: {c['accent_text']};"
             f" border: none; border-radius: {T.RADIUS['button']}px;"
             f" font-size: {T.s(21)}px; font-weight: 700; }}"
-            f"#readBtn:hover {{ background: #1D4ED8; }}")
+            f"#readBtn:hover {{ background: #1D4ED8; }}"
+            f"#readBtn:pressed {{ background: #1E40AF; }}")
         # 'N sahifa' belgisini muqova pastiga, markazga joylashtiramiz
         if self.pages_badge is not None:
             self.pages_badge.adjustSize()

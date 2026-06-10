@@ -14,7 +14,7 @@ import platform
 import websockets
 from PyQt6.QtCore import QThread, pyqtSignal
 
-import config
+from core import config
 
 log = logging.getLogger(__name__)
 

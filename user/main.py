@@ -26,7 +26,7 @@ from datetime import datetime
 # hodisasi (paintEvent/slot) ichidagi ushlanmagan istisno yoki C++ darajasidagi
 # nosozlik konsolga hech narsa chiqarmasdan jarayonni tugatishi mumkin.
 # Quyidagi blok HAR QANDAY crash'ni `crash.log` fayliga va konsolga yozadi.
-import logsetup
+from core import logsetup
 
 _LOG = os.path.join(logsetup.base_dir(), "crash.log")
 # crash.log cheksiz o'smasin — 1MB dan oshsa eskisini chetga suramiz
@@ -63,68 +63,38 @@ def _excepthook(exc_type, exc, tb):
 sys.excepthook = _excepthook
 
 # --- O'rnatilgan (PyInstaller) nusxada birga keladigan VLC'ni ulaymiz ---
-# MUHIM: `player` (import vlc) yuklanishidan OLDIN bo'lishi shart. VLC
-# o'rnatilmagan kompyuterda ham video ishlashi uchun libvlc dasturga qo'shib
-# beriladi (_internal/vlc), python-vlc'ga yo'lini env orqali ko'rsatamiz.
-if getattr(sys, "frozen", False):
-    _vlc_dir = os.path.join(getattr(sys, "_MEIPASS",
-                            os.path.dirname(os.path.abspath(__file__))), "vlc")
-    if os.path.isdir(_vlc_dir):
-        os.environ.setdefault("PYTHON_VLC_LIB_PATH",
-                              os.path.join(_vlc_dir, "libvlc.dll"))
-        os.environ.setdefault("VLC_PLUGIN_PATH",
-                              os.path.join(_vlc_dir, "plugins"))
-        os.add_dll_directory(_vlc_dir)
+# MUHIM: `players.video` (import vlc) yuklanishidan OLDIN bo'lishi shart
+# (python-vlc env'ni import paytida o'qiydi) — system/vlcsetup.py ga qarang.
+from system.vlcsetup import setup_vlc
 
-from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QStackedWidget,
-                             QLabel, QFrame, QHBoxLayout)
-from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal, QEvent, QPoint, QRect
+setup_vlc()
+
+from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QStackedWidget
+from PyQt6.QtCore import Qt, QTimer, QEvent
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QIcon
 
-import cache
-import config
-import theme as T
-from threads import track
-from api import ApiClient
-from ws_client import WSClient
+from core import cache
+from core import config
+from core import i18n
+from core import theme as T
+from core.security import ExitGuard
+from core.threads import track
+from services.api import ApiClient
+from services.ads import AdManager
+from services.health import HealthChecker, _SettingsPrefetch
+from services.ws_client import WSClient
+from widgets.banner import AnnouncementBanner
 from widgets.navbar import NavBar
-from widgets.icons import svg_pixmap
 from widgets.screensaver import ScreenSaver
-from player import VideoPlayer
-from audio_player import AudioPlayer
-from reader import Reader
+from players.video import VideoPlayer
+from players.audio import AudioPlayer
+from players.reader import Reader
 from screens.connecting import ConnectingScreen
 from screens.home import HomeScreen
 from screens.map import MapScreen
 from screens.videos import VideosScreen
 from screens.books import BooksScreen
 from screens.sites import SitesScreen
-
-
-class HealthChecker(QThread):
-    """Serverga ulanishni alohida oqimda tekshiradi (UI qotib qolmasligi uchun)."""
-    result = pyqtSignal(bool)
-
-    def __init__(self, api):
-        super().__init__()
-        self.api = api
-
-    def run(self):
-        self.result.emit(self.api.health())
-
-
-class _SettingsPrefetch(QThread):
-    """Sozlamalarni oldindan yuklab keshlaydi (chiqish PIN xeshi yangilansin)."""
-
-    def __init__(self, api):
-        super().__init__()
-        self.api = api
-
-    def run(self):
-        try:
-            self.api.get_settings()   # _cached() o'zi diskka yozadi
-        except Exception:
-            pass  # tarmoq xatosi — keyingi ulanishda yana uriniladi
 
 
 class MainWindow(QWidget):
@@ -138,12 +108,20 @@ class MainWindow(QWidget):
         # chiziladi, shunda har bir ekranda (xarita ham) bir xil fon ko'rinadi.
         self._bg = QPixmap(T.BG_IMAGE)
 
-        # KIOSK REJIM: ramkasiz, doim ustda, yopib bo'lmaydi (TZ 13.1).
-        # Chiqish faqat: soatga 7 marta teginish -> PIN, yoki Ctrl+Shift+Q.
+        # --- VAQTINCHALIK (ishlab chiqish): oddiy oyna ramkasi (—, □, ✕ tugmalari).
+        # Bu rejimda oynani odatdagidek yopish/kichraytirish mumkin.
+        # PRODUCTION'da pastdagi ASL KIOSK satrini qaytaring (frameless + StaysOnTop).
         self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
+            Qt.WindowType.Window
+            | Qt.WindowType.WindowMinimizeButtonHint
+            | Qt.WindowType.WindowMaximizeButtonHint
+            | Qt.WindowType.WindowCloseButtonHint
         )
-        self.setWindowTitle("Kiosk")
+        self.setWindowTitle("Kiosk (vaqtinchalik oyna rejimi)")
+        # --- ASL KIOSK (vaqtinchalik o'chirilgan): ramkasiz, doim ustda (TZ 13.1):
+        # self.setWindowFlags(
+        #     Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
+        # self.setWindowTitle("Kiosk")
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)  # o'ng tugma o'chirildi
 
         root = QVBoxLayout(self)
@@ -166,6 +144,7 @@ class MainWindow(QWidget):
 
         self.nav = NavBar()
         self.nav.navigate.connect(self.go)
+        self.nav.lang_changed.connect(self.set_language)
         app_lay.addWidget(self.nav)
 
         self.stack = QStackedWidget()
@@ -192,26 +171,8 @@ class MainWindow(QWidget):
         self.conn_timer.timeout.connect(self.check_connection)
         self.conn_timer.start(config.RECONNECT_INTERVAL_MS)
 
-        # E'lon banneri (announcement uchun) — ustki qatlam.
-        # Ikonka + matn (emoji o'rniga haqiqiy ikonka, assets/icons/megaphone.svg)
-        self.banner = QFrame(self)
-        self.banner.setObjectName("banner")
-        bl = QHBoxLayout(self.banner)
-        bl.setContentsMargins(T.s(20), T.s(14), T.s(20), T.s(14))
-        bl.setSpacing(T.s(12))
-        bl.addStretch(1)
-        self.banner_ic = QLabel()
-        self.banner_ic.setStyleSheet("background: transparent;")
-        bl.addWidget(self.banner_ic, 0, Qt.AlignmentFlag.AlignVCenter)
-        self.banner_lbl = QLabel("")
-        self.banner_lbl.setObjectName("bannerTxt")
-        self.banner_lbl.setWordWrap(True)
-        bl.addWidget(self.banner_lbl, 0, Qt.AlignmentFlag.AlignVCenter)
-        bl.addStretch(1)
-        self.banner.hide()
-        self.banner_timer = QTimer(self)
-        self.banner_timer.setSingleShot(True)
-        self.banner_timer.timeout.connect(self.banner.hide)
+        # E'lon banneri (announcement uchun) — ustki qatlam (widgets/banner.py).
+        self.banner = AnnouncementBanner(self)
 
         # WebSocket real-time (TZ 11.2): status va e'lonlarni tinglaydi
         self.ws = track(WSClient())
@@ -221,9 +182,9 @@ class MainWindow(QWidget):
 
         # Maxfiy texnik chiqish: yuqori-o'ng burchakka EXIT_TAPS marta teginish
         # PIN klaviaturani ochadi (sensorli, klaviaturasiz ekranlar uchun ham).
-        # Filtr QApplication'ga o'rnatiladi — bosish qaysi vidjetga tushsa ham ko'ramiz.
-        self._exit_taps = []
-        self._pin_open = False
+        # Mantiq core/security.py (ExitGuard) ichida; filtr QApplication'ga
+        # o'rnatiladi — bosish qaysi vidjetga tushsa ham ko'ramiz.
+        self._exit_guard = ExitGuard(self, self._exit_app)
         self._allow_exit = False   # faqat PIN/admin chiqishi True qiladi
         QApplication.instance().installEventFilter(self)
 
@@ -236,10 +197,21 @@ class MainWindow(QWidget):
         self.idle_timer.setInterval(config.SCREENSAVER_IDLE_MIN * 60_000)
         self.idle_timer.timeout.connect(self._maybe_screensaver)
 
+        # Qalqib chiquvchi reklamalar: qaysi bo'lim ochiq bo'lishidan qat'i
+        # nazar belgilangan oraliqda popup chiqaradi (services/ads.py).
+        self.ad_manager = AdManager(self, self.api)
+        self.ad_manager.start()
+
         self.apply_theme()
         self.outer.setCurrentWidget(self.connecting)
         self.go("home")
         self.check_connection()  # darhol birinchi tekshiruv
+
+    @property
+    def _pin_open(self):
+        """PIN oynasi ochiqmi? (zastavka/til/reklama tekshiruvlari uchun —
+        haqiqiy holat ExitGuard'da turadi)."""
+        return self._exit_guard.pin_open
 
     # --- Ulanish boshqaruvi ---
     def check_connection(self):
@@ -267,8 +239,7 @@ class MainWindow(QWidget):
             self.outer.setCurrentWidget(self.app)
         else:
             # Birinchi ishga tushish (kesh yo'q) — ulanish ekrani
-            self.connecting.set_status(
-                "Serverga ulanib bo'lmadi, qayta urinilmoqda...")
+            self.connecting.set_status(i18n.tr("conn.retry"))
             self.outer.setCurrentWidget(self.connecting)
 
     # --- Real-time (WebSocket) ---
@@ -278,19 +249,7 @@ class MainWindow(QWidget):
 
     def show_announcement(self, text):
         """Admin yuborgan e'lonni ustki bannerda ko'rsatadi (10 soniya)."""
-        if not text:
-            return
-        self.banner_lbl.setText(text)
-        self.banner.show()
-        self.banner.raise_()
-        self._place_banner()
-        self.banner_timer.start(10000)
-
-    def _place_banner(self):
-        self.banner.setFixedWidth(self.width())
-        self.banner.adjustSize()
-        self.banner.move(0, 0)
-        self.banner.setFixedWidth(self.width())
+        self.banner.show_message(text)
 
     def paintEvent(self, e):
         """Butun oynani orqa fon rasmi bilan qoplaydi (nisbatni saqlab, kesib
@@ -309,7 +268,7 @@ class MainWindow(QWidget):
 
     def resizeEvent(self, e):
         if hasattr(self, "banner"):
-            self._place_banner()
+            self.banner.reposition()
         # Zastavka mustaqil top-level oyna (o'z ekraniga to'liq cho'ziladi) —
         # bu yerda boshqarish shart emas.
         super().resizeEvent(e)
@@ -321,6 +280,50 @@ class MainWindow(QWidget):
         self.nav.set_active(key)
         page.on_show()
         self._tick()
+
+    # --- Til almashtirish (UZ/RU/EN) ---
+    def set_language(self, code):
+        """Navbar'dagi til tugmasi bosilganda — sahifalarni yangi tilda qayta
+        quradi. Pleyer/o'quvchi/PIN ochiq bo'lsa rad etiladi (xavfsiz)."""
+        if code == i18n.get_lang():
+            return
+        if self._media_open() or self._pin_open:
+            return
+        i18n.set_lang(code)
+        self._rebuild_pages()
+
+    def _rebuild_pages(self):
+        """5 sahifani joriy tilda qaytadan yaratadi (matnlar _build paytida
+        tr() bilan olinadi — retranslate mexanizmi shart emas)."""
+        cur = self.nav.active
+        for p in self.pages.values():
+            # Fon ishlarini uzamiz: timerlar to'xtaydi, uchayotgan loader'lar
+            # o'chirilgan widgetga signal yubormasin (RuntimeError -> crash).
+            canvas = getattr(p, "canvas", p)
+            t = getattr(canvas, "timer", None)
+            if t is not None:
+                t.stop()
+            for holder in (p, canvas):
+                th = getattr(holder, "_loader", None)
+                if th is not None:
+                    for sig in ("done", "fail"):
+                        try:
+                            getattr(th, sig).disconnect()
+                        except (TypeError, AttributeError, RuntimeError):
+                            pass  # signal ulanmagan bo'lishi mumkin
+            self.stack.removeWidget(p)
+            p.deleteLater()
+        self.pages = {
+            "home":   HomeScreen(self.api, self),
+            "map":    MapScreen(self.api),
+            "videos": VideosScreen(self.api),
+            "books":  BooksScreen(self.api),
+            "sites":  SitesScreen(self.api),
+        }
+        for page in self.pages.values():
+            self.stack.addWidget(page)
+        self.apply_theme()   # yangi sahifalar + navbar (yangi til yorliqlari)
+        self.go(cur)         # joriy sahifa saqlanadi; on_show qayta yuklaydi
 
     def _tick(self):
         self.nav.set_clock(datetime.now().strftime("%H:%M"))
@@ -341,12 +344,7 @@ class MainWindow(QWidget):
         for page in self.pages.values():
             page.apply_theme(self.theme_name)
         if hasattr(self, "banner"):
-            self.banner.setStyleSheet(
-                f"#banner {{ background: {c['accent']}; }}"
-                f"#bannerTxt {{ background: transparent; color: {c['accent_text']};"
-                f" font-size: {T.FONT['nav']}px; font-weight: 600; }}")
-            self.banner_ic.setPixmap(
-                svg_pixmap("megaphone", c["accent_text"], T.s(26)))
+            self.banner.apply_theme(c)
 
     # --- Global kirish filtri: maxfiy chiqish + zastavka boshqaruvi ---
     _ACTIVITY = (QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonRelease,
@@ -369,7 +367,7 @@ class MainWindow(QWidget):
                 self.idle_timer.start()   # har harakatda hisob qaytadan
                 if t == QEvent.Type.MouseButtonPress:
                     try:
-                        self._register_secret_tap(ev.globalPosition().toPoint())
+                        self._exit_guard.register_tap(ev.globalPosition().toPoint())
                     except Exception:
                         # chiqish mexanizmi hech qachon ilovani yiqitmasin
                         logsetup.get_logger(__name__).exception(
@@ -396,107 +394,47 @@ class MainWindow(QWidget):
             self.idle_timer.start()   # band — keyinroq yana tekshiramiz
             return
         self.saver.show_over()
+        # Ommaviy kiosk: yo'lovchi tilni almashtirib ketgan bo'lsa, zastavka
+        # paytida standart (UZ) tilga qaytaramiz — rebuild zastavka ortida
+        # bo'lgani uchun ko'rinmaydi.
+        if i18n.get_lang() != i18n.DEFAULT:
+            i18n.set_lang(i18n.DEFAULT)
+            self._rebuild_pages()
 
     def _dismiss_saver(self):
         self.saver.hide()
         self.idle_timer.start()
 
-    def _register_secret_tap(self, gpos):
-        """Navbar'dagi SOAT ustiga ketma-ket teginishlarni sanaydi.
-
-        Soat ko'rinmasa (masalan, 'ulanmoqda' ekrani) — zaxira sifatida ekran
-        yuqori-o'ng burchagi ishlaydi (server o'chiq bo'lsa ham chiqib bo'lsin)."""
-        import time as _time
-        lbl = self.nav.right
-        if lbl.isVisible() and lbl.width() > 0:
-            # Soat yorlig'ining global to'rtburchagi + barmoq uchun qo'shimcha joy
-            pad = T.s(18)
-            zone = QRect(lbl.mapToGlobal(QPoint(0, 0)), lbl.size())
-            zone = zone.adjusted(-pad, -pad, pad, pad)
-            in_zone = zone.contains(gpos)
-        else:
-            g = (self.screen() or QApplication.primaryScreen()).geometry()
-            size = T.s(config.EXIT_CORNER_PX)
-            in_zone = (gpos.x() >= g.right() - size and gpos.y() <= g.top() + size)
-        if not in_zone:
-            self._exit_taps.clear()   # boshqa joyga tegilsa hisob qaytadan
-            return
-        now = _time.monotonic()
-        # Bitta fizik bosish filtrga ikki marta kelishi mumkin (QWindow + widget)
-        # — 50ms ichidagi takrorni bitta teginish deb hisoblaymiz.
-        if self._exit_taps and now - self._exit_taps[-1] < 0.05:
-            return
-        self._exit_taps.append(now)
-        self._exit_taps = [t for t in self._exit_taps
-                           if now - t <= config.EXIT_TAP_WINDOW_S]
-        if len(self._exit_taps) >= config.EXIT_TAPS:
-            self._exit_taps.clear()
-            self._ask_exit_pin()
-
-    def _verify_pin(self, entered):
-        """Kiritilgan PIN to'g'rimi? Ustuvorlik:
-          1) KIOSK_EXIT_PIN muhit o'zgaruvchisi (faqat ishlab chiqish)
-          2) serverda admin o'rnatgan xesh (settings keshi — oflaynda ham bor)
-          3) default PIN (config.EXIT_PIN)"""
-        import hmac as _hmac
-        import pinhash
-        env_pin = os.environ.get("KIOSK_EXIT_PIN")
-        if env_pin:
-            return _hmac.compare_digest(entered.encode(), env_pin.encode())
-        hit = cache.load_json("settings")
-        stored = hit[0].get("exit_pin_hash") if hit else None
-        if stored:
-            return pinhash.verify_secret(entered, stored)
-        return _hmac.compare_digest(entered.encode(),
-                                    config.EXIT_PIN.encode())
-
-    def _ask_exit_pin(self):
-        if self._pin_open:
-            return
-        # Urinishlar tugagan bo'lsa — 60 soniya blok (brute-force qiyinlashadi)
-        import time as _time
-        if _time.monotonic() < getattr(self, "_pin_block_until", 0):
-            return
-        self._pin_open = True
-        try:
-            from widgets.pinpad import PinDialog
-            dlg = PinDialog(self, self._verify_pin, theme=self.theme_name)
-            ok = dlg.exec()
-            if dlg.lockout:
-                self._pin_block_until = _time.monotonic() + 60
-                logsetup.get_logger(__name__).warning(
-                    "PIN 5 marta noto'g'ri kiritildi — 60s blok")
-        finally:
-            self._pin_open = False
-        if ok:
-            self._exit_app()
-
     def _exit_app(self):
         """Yagona chiqish nuqtasi: fon oqimlarini to'xtatib, ilovani yopadi."""
         self._allow_exit = True
-        import lockdown
+        from system import lockdown
         lockdown.uninstall()   # klaviatura quli ochilsin (texnik xizmat uchun)
         self._shutdown()
         QApplication.quit()
 
     # --- Tugmalarni boshqarish (kiosk qulflash, TZ 13.1) ---
     def keyPressEvent(self, e):
-        # Esc ni e'tiborsiz qoldiramiz (chiqib ketmasin)
+        # --- VAQTINCHALIK (ishlab chiqish): Esc -> darhol chiqish (PIN'siz).
+        # ASL kiosk xatti-harakati: Esc'ni e'tiborsiz qoldirish edi. Ishlab
+        # chiqishdan keyin pastdagi 2 qatorni o'chiring (yoki `return` ga qaytaring).
         if e.key() == Qt.Key.Key_Escape:
+            self._exit_app()
             return
         # Ctrl+Shift+Q yoki Ctrl+Shift+C -> admin chiqishi (PIN talab qilinadi —
         # klaviatura ulagan yo'lovchi PIN'siz chiqib keta olmasin)
         if (e.key() in (Qt.Key.Key_Q, Qt.Key.Key_C)
                 and (e.modifiers() & Qt.KeyboardModifier.ControlModifier)
                 and (e.modifiers() & Qt.KeyboardModifier.ShiftModifier)):
-            self._ask_exit_pin()
+            self._exit_guard.ask_exit_pin()
             return
         super().keyPressEvent(e)
 
     def _shutdown(self):
         """Barcha fon oqimlarini xavfsiz to'xtatadi (Qt 'thread still running' bo'lmasin)."""
-        import threads
+        from core import threads
         self.ws.stop()
+        self.ad_manager.stop()
         # Yangi fon ishi paydo bo'lmasin — sahifalardagi taymerlarni to'xtatamiz
         for p in self.pages.values():
             canvas = getattr(p, "canvas", p)
@@ -508,11 +446,11 @@ class MainWindow(QWidget):
         threads.wait_all(2000)
 
     def closeEvent(self, e):
-        # KIOSK: tashqi yopish urinishlari bloklanadi (Alt+F4 va h.k.).
-        # Faqat maxfiy PIN / Ctrl+Shift+Q chiqishi (_allow_exit) ruxsat etiladi.
-        if not self._allow_exit:
-            e.ignore()
-            return
+        # --- VAQTINCHALIK: ✕ / Alt+F4 bilan yopishga ruxsat (oyna rejimi).
+        # ASL KIOSK xatti-harakati (tashqi yopishni bloklash) — pastda izohda:
+        #   if not self._allow_exit:
+        #       e.ignore()
+        #       return
         self._shutdown()
         e.accept()
 
@@ -530,12 +468,12 @@ def main():
         if screen is not None:
             T.init_scale(screen.size())
         # OS-darajali klaviatura qulfi (Win/Alt+Tab) — faqat frozen buildda
-        # yoki KIOSK_LOCKDOWN=1 bo'lsa (lockdown.py'ga qarang)
-        import lockdown
+        # yoki KIOSK_LOCKDOWN=1 bo'lsa (system/lockdown.py'ga qarang)
+        from system import lockdown
         lockdown.install()
         win = MainWindow()
-        win.showFullScreen()  # KIOSK: butun ekran
-        win.start_splash()     # logotipli splash (fullscreen'dan keyin)
+        win.showMaximized()    # VAQTINCHALIK: oyna rejimi (ASL: win.showFullScreen())
+        win.start_splash()     # logotipli splash
         sys.exit(app.exec())
     except Exception:
         # Yaratish paytidagi istisnoni ham yozamiz (excepthook ba'zan kech ulanadi)

@@ -3,9 +3,11 @@ modal.py — Markaziy modal oyna asosi (xira fon + panel).
 Detal oynalari (video/kitob) shu asosdan foydalanadi. Ota-widget ustini
 to'liq qoplaydi; tashqi xira joyga yoki X bosilsa yopiladi.
 """
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QPushButton
-from PyQt6.QtCore import Qt, pyqtSignal, QSize
-import theme as T
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFrame,
+                             QPushButton, QGraphicsOpacityEffect)
+from PyQt6.QtCore import (Qt, pyqtSignal, QSize, QPropertyAnimation,
+                          QEasingCurve)
+from core import theme as T
 from widgets.icons import svg_icon
 
 
@@ -49,13 +51,30 @@ class Modal(QWidget):
         outer.addWidget(self.panel)
 
     def show_over(self, name="light"):
-        """Ota-widgetni to'liq qoplab ko'rsatadi."""
+        """Ota-widgetni to'liq qoplab ko'rsatadi (yumshoq fade bilan)."""
         self.theme_name = name
         self._restyle()
         if self.parent():
             self.setGeometry(self.parent().rect())
         self.show()
         self.raise_()
+        # Fade-in (180ms). MUHIM: tugagach effekt olib tashlanadi — doimiy
+        # opacity effekti butun modalni offscreen buferda chizdirib sekinlatadi.
+        eff = QGraphicsOpacityEffect(self)
+        self.setGraphicsEffect(eff)
+        self._fade = QPropertyAnimation(eff, b"opacity", self)
+        self._fade.setDuration(180)
+        self._fade.setStartValue(0.0)
+        self._fade.setEndValue(1.0)
+        self._fade.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._fade.finished.connect(self._end_fade)
+        self._fade.start()
+
+    def _end_fade(self):
+        try:
+            self.setGraphicsEffect(None)
+        except RuntimeError:
+            pass  # modal allaqachon yopilgan/o'chirilgan bo'lishi mumkin
 
     def close_modal(self):
         self.hide()
@@ -78,4 +97,5 @@ class Modal(QWidget):
             f" border-radius: {T.RADIUS['card']}px; }}"
             f"#modalClose {{ background: {c['surface2']}; color: {c['text']};"
             f" border: none; border-radius: {T.s(18)}px; font-size: {T.s(18)}px; }}"
-            f"#modalClose:hover {{ background: {c['border']}; }}")
+            f"#modalClose:hover {{ background: {c['border']}; }}"
+            f"#modalClose:pressed {{ background: {c['text_secondary']}; }}")

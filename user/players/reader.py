@@ -11,8 +11,9 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QGraphicsDropShadowEffect)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QColor
-import theme as T
-from threads import track
+from core import theme as T
+from core.i18n import tr
+from core.threads import track
 
 PAGE_CHARS = 900   # bitta sahifaga taxminan necha belgi
 
@@ -78,7 +79,7 @@ class Reader(QWidget):
         top = QHBoxLayout()
         top.setContentsMargins(T.SPACE["page"], T.SPACE["gap"],
                                T.SPACE["page"], T.SPACE["gap"])
-        self.back = QPushButton("←  Ortga")
+        self.back = QPushButton(tr("common.back"))
         self.back.setObjectName("rBack")
         self.back.setCursor(Qt.CursorShape.PointingHandCursor)
         self.back.clicked.connect(self.close_reader)
@@ -114,7 +115,7 @@ class Reader(QWidget):
         self.page.setGraphicsEffect(psh)
         pl = QVBoxLayout(self.page)
         pl.setContentsMargins(T.s(54), T.s(48), T.s(54), T.s(54))
-        self.text = QLabel("Yuklanmoqda...")
+        self.text = QLabel(tr("common.loading"))
         self.text.setObjectName("rText")
         self.text.setWordWrap(True)
         self.text.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
@@ -152,7 +153,8 @@ class Reader(QWidget):
         self.showFullScreen()
         self._loader = track(_TextLoader(self.api, self.item["id"]))
         self._loader.done.connect(self._on_text)
-        self._loader.fail.connect(lambda: self.text.setText("Matnni yuklab bo'lmadi"))
+        self._loader.fail.connect(
+            lambda: self.text.setText(tr("reader.text_failed")))
         self._loader.start()
 
     def _on_text(self, data):
@@ -196,7 +198,8 @@ class Reader(QWidget):
             f" border: none; border-radius: {T.RADIUS['pill']}px;"
             f" padding: {T.s(12)}px {T.s(26)}px; font-size: {T.FONT['nav']}px;"
             f" font-weight: 600; }}"
-            f"#rBack:hover {{ background: {c['surface2']}; }}")
+            f"#rBack:hover {{ background: {c['surface2']}; }}"
+            f"#rBack:pressed {{ background: {c['border']}; }}")
         self.chapter.setStyleSheet(
             f"#rChapter {{ color: {c['text']}; font-size: {T.FONT['h2']}px;"
             f" font-weight: 600; }}")
@@ -214,6 +217,7 @@ class Reader(QWidget):
                f" border: 1px solid {c['border']}; border-radius: {T.s(56) // 2}px;"
                f" font-size: {T.s(26)}px; font-weight: 700; }}"
                f"#rNav:hover {{ background: {c['surface2']}; }}"
+               f"#rNav:pressed {{ background: {c['border']}; }}"
                f"#rNav:disabled {{ color: {c['border']}; }}")
         self.prev_btn.setStyleSheet(nav)
         self.next_btn.setStyleSheet(nav)

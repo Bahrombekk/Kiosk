@@ -13,19 +13,13 @@ import hashlib
 import json
 import logging
 import os
-import sys
 import time
+
+from core.config import APP_DIR
 
 log = logging.getLogger(__name__)
 
-
-def _base_dir():
-    if getattr(sys, "frozen", False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
-
-
-CACHE_DIR = os.path.join(_base_dir(), "cache")
+CACHE_DIR = os.path.join(APP_DIR, "cache")
 COVERS_DIR = os.path.join(CACHE_DIR, "covers")
 
 

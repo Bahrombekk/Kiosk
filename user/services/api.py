@@ -13,8 +13,9 @@ import time
 from urllib.parse import quote
 
 import requests
-import cache
-import config
+
+from core import cache
+from core import config
 
 log = logging.getLogger(__name__)
 
@@ -68,6 +69,12 @@ class ApiClient:
             try:
                 r = requests.get(url, timeout=self.timeout,
                                  headers=self._headers, **kwargs)
+                if r.status_code == 401:
+                    # Aniq sabab logga — operator darhol tushunsin
+                    log.error(
+                        "Server API kalitni rad etdi (401). server.txt'da "
+                        "`key=...` qatori bormi / kalit to'g'rimi tekshiring "
+                        "(admin oynasi -> Boshqaruv -> Nusxalash).")
                 r.raise_for_status()
                 return r
             except (requests.ConnectionError, requests.Timeout) as e:
@@ -116,8 +123,12 @@ class ApiClient:
             lambda: self._get(f"/api/book/{content_id}/text").json())
 
     def get_ads(self):
-        """Faol reklama bannerlari."""
+        """Faol reklama bannerlari (media_type, duration, vaqt oralig'i bilan)."""
         return self._cached("ads", lambda: self._get("/api/ads").json())
+
+    def ad_media_url(self, ad_id):
+        """Reklama media manzili (rasm yoki video striming)."""
+        return f"{self.base_url}/api/ads/{ad_id}/media{self._url_key}"
 
     def get_sites(self):
         """Saytlar ro'yxati."""

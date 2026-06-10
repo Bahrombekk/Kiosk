@@ -11,8 +11,9 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QLabel, QSizePolicy, QGraphicsDropShadowEffect)
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize
 from PyQt6.QtGui import QColor, QPainter
-import theme as T
-from player import _fmt
+from core import theme as T
+from core.i18n import tr
+from players.video import _fmt
 from widgets.cover import CoverLabel
 from widgets.icons import svg_icon
 
@@ -122,7 +123,7 @@ class AudioPlayer(QWidget):
 
         # Tepa: Ortga
         top = QHBoxLayout()
-        self.back = QPushButton("←  Ortga")
+        self.back = QPushButton(tr("common.back"))
         self.back.setObjectName("aBack")
         self.back.setCursor(Qt.CursorShape.PointingHandCursor)
         self.back.clicked.connect(self.stop_and_close)
@@ -286,7 +287,8 @@ class AudioPlayer(QWidget):
             f" border: none; border-radius: {T.RADIUS['pill']}px;"
             f" padding: {T.s(12)}px {T.s(26)}px; font-size: {T.FONT['nav']}px;"
             f" font-weight: 600; }}"
-            f"#aBack:hover {{ background: {c['surface2']}; }}")
+            f"#aBack:hover {{ background: {c['surface2']}; }}"
+            f"#aBack:pressed {{ background: {c['border']}; }}")
         self.title.setStyleSheet(
             f"#aTitle {{ color: {c['text']}; font-size: {T.FONT['h2']}px;"
             f" font-weight: 700; }}")
@@ -300,6 +302,8 @@ class AudioPlayer(QWidget):
             f" border: 1px solid {c['border']}; border-radius: {T.s(64) // 2}px;"
             f" font-size: {T.s(16)}px; font-weight: 600; }}"
             f"#aBtn:hover {{ background: {c['surface2']}; }}"
+            f"#aBtn:pressed {{ background: {c['border']}; }}"
             f"#aAccent {{ background: {c['accent']}; color: {c['accent_text']};"
             f" border: none; border-radius: {T.s(88) // 2}px; font-size: {T.s(26)}px; }}"
-            f"#aAccent:hover {{ background: #1D4ED8; }}"))
+            f"#aAccent:hover {{ background: #1D4ED8; }}"
+            f"#aAccent:pressed {{ background: #1E40AF; }}"))

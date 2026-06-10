@@ -22,13 +22,14 @@ from PyQt6.QtSvg import QSvgRenderer
 # ekranga bir tekis miqyoslanadi (Figma fit() kabi) — katta ekranda buzilmaydi.
 BASE_W, BASE_H = 1500, 980
 
-import theme as T
-from threads import track
+from core import theme as T
+from core.i18n import tr
+from core.threads import track
 from widgets.cover import CoverLabel, _Fetcher
 from widgets.card import fmt_duration
 from widgets.icons import svg_icon
-from reader import Reader
-from audio_player import AudioPlayer
+from players.reader import Reader
+from players.audio import AudioPlayer
 
 log = logging.getLogger(__name__)
 
@@ -286,8 +287,10 @@ class _HomeCanvas(QWidget):
 
         metrics = QHBoxLayout()
         metrics.setSpacing(T.SPACE["gap"])
-        self.speed_card, self.speed_val = self._metric_card("Tezlik", IC_SPEED)
-        self.temp_card, self.temp_val = self._metric_card("Harorat", IC_TEMP)
+        self.speed_card, self.speed_val = self._metric_card(
+            tr("home.speed"), IC_SPEED)
+        self.temp_card, self.temp_val = self._metric_card(
+            tr("home.temp"), IC_TEMP)
         metrics.addWidget(self.speed_card)
         metrics.addWidget(self.temp_card)
         left.addLayout(metrics)
@@ -300,7 +303,7 @@ class _HomeCanvas(QWidget):
         lh.addWidget(self._tile(IC_TRAIN, 92))
         lv = QVBoxLayout()
         lv.setSpacing(4)
-        self.loc_title = QLabel("Joylashuv")
+        self.loc_title = QLabel(tr("home.location"))
         self.loc_title.setObjectName("tBig")
         self.loc_note = QLabel("")
         self.loc_note.setObjectName("tNote")
@@ -311,7 +314,8 @@ class _HomeCanvas(QWidget):
         left.addWidget(self.loc_card)
 
         # Reklama banner — chap ustunning qolgan balandligini to'ldiradi
-        # (Figma object-fit: cover). Kanvas bilan birga miqyoslanadi.
+        # (Figma object-fit: cover). Reklamalarning o'zi endi qalqib chiquvchi
+        # oynada chiqadi (ads.AdManager) — bu yer statik bezak rasmi.
         self.ad = BannerImage(mode="box", radius=T.RADIUS["card"])
         if not self.ad.set_file(AD_IMAGE):
             self.ad.hide()
@@ -322,7 +326,7 @@ class _HomeCanvas(QWidget):
         rl = QVBoxLayout(self.right)
         rl.setContentsMargins(34, 30, 34, 34)
         rl.setSpacing(0)
-        self.rec_head = QLabel("Tavsiya etamiz")
+        self.rec_head = QLabel(tr("home.recommend"))
         self.rec_head.setObjectName("recHead")
         rl.addWidget(self.rec_head)
         rl.addSpacing(20)
@@ -354,10 +358,10 @@ class _HomeCanvas(QWidget):
         btext.addWidget(self.book_title)
         btext.addWidget(self.book_author)
         btext.addStretch(1)
-        self.listen_btn = QPushButton(" Tinglash")
+        self.listen_btn = QPushButton(tr("common.listen"))
         self.listen_btn.setObjectName("listenBtn")
         self.listen_btn.setIcon(svg_icon("headphones", "#FFFFFF", 48))
-        self.read_btn = QPushButton(" O'qish")
+        self.read_btn = QPushButton(tr("common.read"))
         self.read_btn.setObjectName("readBtn")
         self.read_btn.setIcon(svg_icon("book-open", "#FFFFFF", 48))
         for b in (self.listen_btn, self.read_btn):
@@ -427,7 +431,9 @@ class _HomeCanvas(QWidget):
         self.speed_val.setText(f"{s.get('speed', '—')} km/h")
         self.temp_val.setText(f"+{s.get('temperature', '—')}°C")
         wagon = s.get("wagon")
-        self.loc_title.setText(f"Joylashuv: {wagon}-vagon" if wagon else "Joylashuv")
+        self.loc_title.setText(
+            tr("home.location_wagon", wagon=wagon) if wagon
+            else tr("home.location"))
         self.loc_note.setText(s.get("wagon_note") or "")
 
     def _cycle_movie(self, delta):
@@ -473,7 +479,7 @@ class _HomeCanvas(QWidget):
     def _play_movie(self, item):
         if self._modal:
             self._modal.close_modal()
-        from player import VideoPlayer
+        from players.video import VideoPlayer
         old = getattr(self, "_player", None)
         if old is not None:
             old.stop_and_close()
@@ -518,9 +524,12 @@ class _HomeCanvas(QWidget):
             f"#listenBtn {{ background: {c['orange']}; color: #FFFFFF; border: none;"
             f" border-radius: {T.RADIUS['button']}px; font-size: 24px; font-weight: 600; }}"
             f"#listenBtn:hover {{ background: #D97706; }}"
+            f"#listenBtn:pressed {{ background: #B45309; }}"
             f"#readBtn {{ background: {c['accent']}; color: {c['accent_text']}; border: none;"
             f" border-radius: {T.RADIUS['button']}px; font-size: 24px; font-weight: 600; }}"
-            f"#readBtn:hover {{ background: #1D4ED8; }}")
+            f"#readBtn:hover {{ background: #1D4ED8; }}"
+            f"#readBtn:pressed {{ background: #1E40AF; }}"
+            f"#pArr:pressed {{ color: {c['accent']}; }}")
 
 
 class HomeScreen(QWidget):

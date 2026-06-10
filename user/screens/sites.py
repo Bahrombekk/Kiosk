@@ -12,11 +12,14 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt6.QtGui import QColor
 
-import theme as T
-from threads import track
+from core import theme as T
+from core.i18n import tr
+from core.threads import track
+from widgets.empty import EmptyState
 from widgets.modal import Modal
 from widgets.qr import QRWidget
-from widgets.card import _svg_pixmap
+from widgets.card import _svg_pixmap, _set_pressed
+from widgets.spinner import StatusLabel
 
 # --- Sayt turiga qarab ikonka (inline SVG, stroke=currentColor) ---
 _ICONS = {
@@ -197,6 +200,7 @@ class SiteCard(QFrame):
             f"#siteCard {{ background: {c['surface']};"
             f" border-radius: {T.RADIUS['card']}px; }}"
             f"#siteCard:hover {{ background: {c['surface2']}; }}"
+            f"#siteCard[pressed=\"true\"] {{ background: {c['border']}; }}"
             f"#siteName {{ background: transparent; color: {c['text']};"
             f" font-size: {T.FONT['card_title']}px; font-weight: 700; }}"
             f"#siteUrl {{ background: transparent; color: {c['accent']};"
@@ -208,7 +212,12 @@ class SiteCard(QFrame):
             f" border-radius: {T.s(23)}px; font-size: {T.s(22)}px; font-weight: 600; }}")
         self._place_wm()
 
+    def mousePressEvent(self, e):
+        _set_pressed(self, True)
+        super().mousePressEvent(e)
+
     def mouseReleaseEvent(self, e):
+        _set_pressed(self, False)
         if e.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit(self.item)
 
@@ -230,9 +239,10 @@ class SitesScreen(QWidget):
         root.setContentsMargins(T.SPACE["page"], 0, T.SPACE["page"], T.SPACE["page"])
         root.setSpacing(T.SPACE["gap"])
 
-        self.status = QLabel("")
-        self.status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.status = StatusLabel(self.theme_name)
         root.addWidget(self.status)
+        self.empty = EmptyState(icon="globe", theme=self.theme_name)
+        root.addWidget(self.empty)
 
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
@@ -253,10 +263,12 @@ class SitesScreen(QWidget):
             self.reload()
 
     def reload(self):
-        self.status.setText("Yuklanmoqda...")
+        self.empty.hide()
+        self.status.loading(tr("common.loading"))
         self._loader = track(_Loader(self.api))
         self._loader.done.connect(self._on_loaded)
-        self._loader.fail.connect(lambda: self.status.setText("Yuklab bo'lmadi"))
+        self._loader.fail.connect(
+            lambda: self.status.text(tr("common.load_failed")))
         self._loader.start()
 
     def _on_loaded(self, sites):
@@ -270,9 +282,12 @@ class SitesScreen(QWidget):
                 w.deleteLater()
         self.cards = []
         if not self.sites:
-            self.status.setText("Saytlar yo'q")
+            self.status.clear()
+            self.empty.set_message(tr("sites.empty"))
+            self.empty.show()
             return
-        self.status.setText("")
+        self.status.clear()
+        self.empty.hide()
         cols = self._calc_cols()
         self._cols = cols
         for i, s in enumerate(self.sites):
@@ -318,11 +333,13 @@ class SitesScreen(QWidget):
         self.theme_name = name
         c = T.THEMES[name]
         # Sahifa foni (satin) ko'rinsin — scroll/host shaffof
-        self.scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        self.scroll.setStyleSheet(
+            "QScrollArea { background: transparent; border: none; }"
+            + T.scrollbar_qss(c))
         self.scroll.viewport().setStyleSheet("background: transparent;")
         self.grid_host.setStyleSheet("#gridHost { background: transparent; }")
-        self.status.setStyleSheet(
-            f"color: {c['text_secondary']}; font-size: {T.FONT['h2']}px;")
+        self.status.apply_theme(name)
+        self.empty.apply_theme(name)
         for card in self.cards:
             card.apply_theme(name)
 
@@ -355,7 +372,7 @@ class _SiteDetail(Modal):
 
         # ← Ortga
         backrow = QHBoxLayout()
-        self.back = QPushButton("←  Ortga")
+        self.back = QPushButton(tr("common.back"))
         self.back.setObjectName("sdBack")
         self.back.setCursor(Qt.CursorShape.PointingHandCursor)
         self.back.clicked.connect(self.close_modal)
@@ -418,16 +435,12 @@ class _SiteDetail(Modal):
 
         steps = QVBoxLayout()
         steps.setSpacing(T.s(10))
-        self.qr_title = QLabel("Telefoningizda oching")
+        self.qr_title = QLabel(tr("sites.qr_title"))
         self.qr_title.setObjectName("sdQrTitle")
         steps.addWidget(self.qr_title)
         steps.addSpacing(T.s(4))
         self._step_nums = []
-        step_texts = [
-            "Telefon kamerasini QR kodga yo'llang",
-            "Havolaga bosiladi — brauzerda ochiladi",
-            "Xizmatdan uyda ham foydalanishingiz mumkin",
-        ]
+        step_texts = [tr("sites.step1"), tr("sites.step2"), tr("sites.step3")]
         for i, txt in enumerate(step_texts, 1):
             srow = QHBoxLayout()
             srow.setSpacing(T.s(12))
@@ -461,6 +474,7 @@ class _SiteDetail(Modal):
             f" border-radius: {T.RADIUS['pill']}px; padding: {T.s(10)}px {T.s(24)}px;"
             f" font-size: {T.FONT['nav']}px; font-weight: 700; }}"
             f"#sdBack:hover {{ background: {c['border']}; }}"
+            f"#sdBack:pressed {{ background: {c['border']}; color: {c['text']}; }}"
             f"#sdHeader {{ background: {accent_soft}; border-radius: {T.s(18)}px; }}"
             f"#sdName {{ background: transparent; color: {c['text']};"
             f" font-size: {T.s(26)}px; font-weight: 700; }}"

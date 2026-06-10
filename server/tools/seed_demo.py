@@ -15,13 +15,16 @@ Manbalar (barchasi erkin):
   - Lorem Picsum (erkin fotosuratlar — demo muqovalar)
 
 Ishlatish (server/ ichida):
-  py seed_demo.py
+  py tools/seed_demo.py
 """
 import os
 import sys
 import time
 import json
 import urllib.request
+
+# Skript tools/ ichida — server ildizidagi config/db modullarini topish uchun
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import config
 import db

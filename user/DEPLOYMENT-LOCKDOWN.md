@@ -8,7 +8,7 @@ olmaydigan holatga keltirish bosqichlarini tushuntiradi.
 | Qatlam | Nima qiladi | Qayerda |
 |---|---|---|
 | Ilova (Qt) | Esc, Alt+F4, o'ng tugma bloklangan; chiqish faqat PIN bilan | `main.py` |
-| Klaviatura hook | Win, Alt+Tab, Alt+Esc, Ctrl+Esc bloklanadi | `lockdown.py` (frozen buildda avto) |
+| Klaviatura hook | Win, Alt+Tab, Alt+Esc, Ctrl+Esc bloklanadi | `system/lockdown.py` (frozen buildda avto) |
 | Registry siyosatlari | Task Manager, Win+L, Win tugmalari o'chadi | installer "lockdown" vazifasi |
 | Watchdog | Ilova qulasa avto qayta ochadi | `KioskWatchdog.exe` (autostart) |
 | Maxsus foydalanuvchi + shell | Explorer (ish stoli/panel) umuman yuklanmaydi | quyidagi qo'lda bosqich |

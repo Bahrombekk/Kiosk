@@ -18,16 +18,15 @@ from PyQt6.QtWidgets import (QWidget, QFrame, QLabel, QHBoxLayout, QVBoxLayout,
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QRectF
 from PyQt6.QtGui import QPixmap, QColor, QPen, QBrush, QFont, QPainter
 
-import theme as T
-from threads import track
+from core import i18n
+from core import theme as T
+from core.i18n import tr
+from core.threads import track
 from widgets.icons import svg_pixmap
 from widgets.routemap import RouteMap
 
 ASSETS = os.path.join(os.path.dirname(__file__), "..", "assets", "design")
 TRAIN_IMG = os.path.join(ASSETS, "train.png")
-
-UZ_MONTHS = ["", "Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun",
-             "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"]
 
 
 class _Loader(QThread):
@@ -105,13 +104,19 @@ class Timeline(QWidget):
                 p.setBrush(QBrush(QColor("#FFFFFF"))); p.setPen(QPen(gray, T.s(3)))
                 r = T.s(7); p.drawEllipse(int(x - r), int(y - r), 2 * r, 2 * r)
 
-            time = s.get("arrival_time") or ""
+            arr = s.get("arrival_time") or ""
+            dep = s.get("departure_time") or ""
             if i == 0:
-                detail = f"Jo'nagan: {time}" if time else ""
+                t = dep or arr
+                detail = tr("map.departed", t=t) if t else ""
             elif i == n - 1:
-                detail = f"Yetib kelish: {time}" if time else ""
+                detail = tr("map.arrival", t=arr) if arr else ""
             else:
-                detail = time
+                # Oraliq bekat: "kelish – jo'nash" (ikkalasi bo'lsa)
+                detail = f"{arr} – {dep}" if (arr and dep) else (arr or dep)
+            km = s.get("distance_km")
+            if km:
+                detail = f"{detail}  ·  {km} km" if detail else f"{km} km"
 
             p.setFont(name_font)
             p.setPen(accent if i == self.current else QColor(c["text"]))
@@ -154,7 +159,7 @@ class MapScreen(QWidget):
         hh.setContentsMargins(T.s(34), T.s(26), T.s(30), T.s(26))
         left = QVBoxLayout()
         left.setSpacing(T.s(6))
-        self.train_name = QLabel("Poyezd")
+        self.train_name = QLabel(tr("map.train"))
         self.train_name.setObjectName("hTitle")
         self.route = QLabel("")
         self.route.setObjectName("hSub")
@@ -233,7 +238,7 @@ class MapScreen(QWidget):
         self.current = next((i for i, s in enumerate(stops)
                              if s.get("name") == cur_name), 0)
         self.train_name.setText(status.get("train_name")
-                                or settings.get("train_name") or "Poyezd")
+                                or settings.get("train_name") or tr("map.train"))
         route = status.get("route") or settings.get("route") or ""
         if "→" in route:
             a, _, b = route.partition("→")
@@ -243,14 +248,16 @@ class MapScreen(QWidget):
         else:
             self.route.setText(route)
         self.chip_date._text.setText(self._today())
-        self.chip_depart._text.setText(f"Jo'nash: {settings.get('depart_time') or '—'}")
+        self.chip_depart._text.setText(
+            tr("map.depart", t=settings.get("depart_time") or "—"))
         self.chip_dur._text.setText(settings.get("duration") or "—")
         self.timeline.set_data(stops, self.current, self.theme_name)
         self.routemap.set_route(stops, self.current, self.theme_name)
 
     def _today(self):
         d = datetime.now()
-        return f"{d.day}-{UZ_MONTHS[d.month]}, {d.year}"
+        return tr("map.date_fmt", day=d.day,
+                  month=i18n.month_name(d.month), year=d.year)
 
     # ---- Mavzu ----
     def apply_theme(self, name):
@@ -270,6 +277,7 @@ class MapScreen(QWidget):
             f" font-size: {T.s(18)}px; font-weight: 600; }}"
             f"#tlScroll {{ background: transparent; }}"
             f"#tlScroll QWidget {{ background: transparent; }}")
+        self.tl_scroll.setStyleSheet(T.scrollbar_qss(c))
         if self.stops:
             self.timeline.set_data(self.stops, self.current, name)
             self.routemap.set_route(self.stops, self.current, name)

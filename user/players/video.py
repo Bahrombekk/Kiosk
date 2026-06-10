@@ -17,8 +17,10 @@ from PyQt6.QtWidgets import (QWidget, QFrame, QHBoxLayout, QVBoxLayout,
                              QPushButton, QLabel, QSlider)
 from PyQt6.QtCore import Qt, QTimer, QEvent, pyqtSignal, QSize
 
-import theme as T
+from core import theme as T
+from core.i18n import tr
 from widgets.icons import svg_icon, svg_pixmap
+from widgets.spinner import Spinner
 
 
 def _fmt(ms):
@@ -115,11 +117,22 @@ class VideoPlayer(QWidget):
 
         c.addStretch(1)
 
-        # Markaz: bufer indikatori + 10s orqaga, play/pauza, 10s oldinga
-        self.buffering = QLabel("Yuklanmoqda...")
-        self.buffering.setStyleSheet(
-            f"color: #FFFFFF; font-size: {T.s(22)}px; font-weight:600; background: transparent;")
-        self.buffering.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Markaz: bufer indikatori (oq spinner + matn) + boshqaruv tugmalari
+        self.buffering = QWidget()
+        self.buffering.setStyleSheet("background: transparent;")
+        _brow = QHBoxLayout(self.buffering)
+        _brow.setContentsMargins(0, 0, 0, 0)
+        _brow.setSpacing(T.s(12))
+        _brow.addStretch(1)
+        self._buf_spin = Spinner(size=T.s(28), line=T.s(3), color="#FFFFFF")
+        _buf_lbl = QLabel(tr("common.loading"))
+        _buf_lbl.setStyleSheet(
+            f"color: #FFFFFF; font-size: {T.s(22)}px; font-weight:600;"
+            f" background: transparent;")
+        _brow.addWidget(self._buf_spin)
+        _brow.addWidget(_buf_lbl)
+        _brow.addStretch(1)
+        self._buf_spin.start()   # parent hide bo'lganda pauza, show'da davom
         self.buffering.hide()
         c.addWidget(self.buffering)
 
@@ -198,7 +211,8 @@ class VideoPlayer(QWidget):
             f"QPushButton {{ background: rgba(0,0,0,0.45); color:#FFFFFF;"
             f" border:none; border-radius:{size // 2}px; font-size:{T.s(20)}px;"
             f" font-weight:600; }}"
-            f"QPushButton:hover {{ background: rgba(37,99,235,0.85); }}")
+            f"QPushButton:hover {{ background: rgba(37,99,235,0.85); }}"
+            f"QPushButton:pressed {{ background: rgba(37,99,235,1.0); }}")
         return b
 
     def _set_play_icon(self, name):

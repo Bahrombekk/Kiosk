@@ -10,8 +10,9 @@ harakatsizlikdan keyin ham o'zi yopiladi (yo'lovchi tasodifan ochib qo'ysa).
 """
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QGridLayout,
                              QLabel, QPushButton, QFrame)
-from PyQt6.QtCore import Qt, QTimer, QSize
-import theme as T
+from PyQt6.QtCore import (Qt, QTimer, QSize, QPropertyAnimation, QEasingCurve)
+from core import theme as T
+from core.i18n import tr
 from widgets.icons import svg_icon
 
 MAX_ATTEMPTS = 5
@@ -43,6 +44,17 @@ class PinDialog(QDialog):
 
         self._build()
 
+    def showEvent(self, e):
+        # Yumshoq paydo bo'lish: top-level dialog uchun windowOpacity animatsiyasi
+        super().showEvent(e)
+        self.setWindowOpacity(0.0)
+        self._fade = QPropertyAnimation(self, b"windowOpacity", self)
+        self._fade.setDuration(160)
+        self._fade.setStartValue(0.0)
+        self._fade.setEndValue(1.0)
+        self._fade.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._fade.start()
+
     def _build(self):
         c = self.c
         outer = QVBoxLayout(self)
@@ -61,7 +73,7 @@ class PinDialog(QDialog):
         lay.setContentsMargins(m, m, m, m)
         lay.setSpacing(T.s(14))
 
-        title = QLabel("Texnik chiqish")
+        title = QLabel(tr("pin.title"))
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setStyleSheet(f"color: {c['text']}; font-size: {T.s(22)}px;"
                             f" font-weight: 700; background: transparent;")
@@ -97,7 +109,7 @@ class PinDialog(QDialog):
         grid.addWidget(ok, 3, 2)
         lay.addLayout(grid)
 
-        cancel = QPushButton("Bekor qilish")
+        cancel = QPushButton(tr("pin.cancel"))
         cancel.setCursor(Qt.CursorShape.PointingHandCursor)
         cancel.setFixedHeight(T.s(46))
         cancel.setStyleSheet(
@@ -155,8 +167,7 @@ class PinDialog(QDialog):
             self.lockout = True
             self.reject()
             return
-        self.err.setText(
-            f"Noto'g'ri PIN ({MAX_ATTEMPTS - self._attempts} urinish qoldi)")
+        self.err.setText(tr("pin.wrong", n=MAX_ATTEMPTS - self._attempts))
 
     # Klaviatura ulangan bo'lsa, undan ham kiritish mumkin
     def keyPressEvent(self, e):

@@ -37,7 +37,8 @@ ERROR_ALREADY_EXISTS = 183
 def _base_dir():
     if getattr(sys, "frozen", False):
         return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
+    # Manba rejimi: bu fayl system/ ichida — user/ ildiziga chiqamiz
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _setup_log():

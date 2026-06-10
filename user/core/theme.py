@@ -7,7 +7,7 @@ import os
 
 # Sahifa orqa fon rasmi (oq atlas tekstura — noshaffof, burmalari ko'rinadigan).
 # Asl Background.png juda shaffof (alfa~24%) edi; och fon ustiga bakelangan.
-BG_IMAGE = os.path.join(os.path.dirname(__file__), "images",
+BG_IMAGE = os.path.join(os.path.dirname(__file__), "..", "images",
                         "bg_satin.png").replace("\\", "/")
 
 # Ranglar Figma eksportidan pixel-sampling orqali olingan.
@@ -26,6 +26,7 @@ THEMES = {
         "nav_inactive":  "#1C2333",   # faol bo'lmagan nav ikonka rangi (to'q)
         "danger":        "#EF4444",   # xato / uzilish
         "ok":            "#22C55E",   # ulanish bor
+        "scroll":        "rgba(32,36,46,0.28)",   # scrollbar dastasi
     },
     "dark": {
         "bg":            "#1E293B",
@@ -40,6 +41,7 @@ THEMES = {
         "nav_inactive":  "#94A3B8",
         "danger":        "#F87171",
         "ok":            "#4ADE80",
+        "scroll":        "rgba(148,163,184,0.38)",
     },
 }
 
@@ -95,13 +97,40 @@ def init_scale(size, lo=0.8, hi=1.7):
     SPACE.update({k: max(1, round(v * SCALE)) for k, v in bs.items()})
     RADIUS.update({k: max(1, round(v * SCALE)) for k, v in br.items()})
 
-# Navigatsiya bo'limlari: (kalit, ko'rinadigan nom, ikonka fayli, sarlavha)
+# Navigatsiya bo'limlari: (kalit, ikonka fayli). Yorliq/sarlavha matnlari
+# i18n.tr(f"nav.{kalit}") va tr(f"title.{kalit}") dan olinadi (3 til).
 NAV_ITEMS = [
-    ("home",   "Asosiy",   "home.svg",  ""),
-    ("map",    "Xarita",   "map.svg",   "XARITA"),
-    ("videos", "Videolar", "video.svg", "VIDEOLAR"),
-    ("books",  "Kitoblar", "book.svg",  "KITOBLAR"),
-    ("sites",  "Saytlar",  "globe.svg", "SAYTLAR"),
+    ("home",   "home.svg"),
+    ("map",    "map.svg"),
+    ("videos", "video.svg"),
+    ("books",  "book.svg"),
+    ("sites",  "globe.svg"),
 ]
+
+
+# --- Sensorbop ingichka scrollbar (barcha QScrollArea'larga qo'shiladi) ---
+def scrollbar_qss(c):
+    """Ingichka, strelkasiz, yumaloq scrollbar QSS (mavzu ranglariga mos)."""
+    w, r = s(8), s(4)
+    handle = c.get("scroll", "rgba(32,36,46,0.28)")
+    return (
+        f" QScrollBar:vertical {{ background: transparent; width: {w}px;"
+        f"  margin: {s(4)}px {s(2)}px {s(4)}px 0; }}"
+        f" QScrollBar::handle:vertical {{ background: {handle};"
+        f"  border-radius: {r}px; min-height: {s(56)}px; }}"
+        f" QScrollBar::handle:vertical:pressed {{ background: {c['accent']}; }}"
+        f" QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical"
+        f"  {{ height: 0; background: none; border: none; }}"
+        f" QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical"
+        f"  {{ background: none; }}"
+        f" QScrollBar:horizontal {{ background: transparent; height: {w}px;"
+        f"  margin: 0 {s(4)}px {s(2)}px {s(4)}px; }}"
+        f" QScrollBar::handle:horizontal {{ background: {handle};"
+        f"  border-radius: {r}px; min-width: {s(56)}px; }}"
+        f" QScrollBar::handle:horizontal:pressed {{ background: {c['accent']}; }}"
+        f" QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal"
+        f"  {{ width: 0; background: none; border: none; }}"
+        f" QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal"
+        f"  {{ background: none; }}")
 
 

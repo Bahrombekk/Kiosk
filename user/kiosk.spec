@@ -55,7 +55,7 @@ exe = EXE(
 # Watchdog — Kiosk qulasa avtomatik qayta ko'taradigan ikkinchi exe.
 # Autostart registri (installer.iss) Kiosk.exe o'rniga SHU exe'ni ko'rsatadi.
 wd_a = Analysis(
-    ["watchdog.py"],
+    ["system/watchdog.py"],
     pathex=[],
     binaries=[],
     datas=[],
