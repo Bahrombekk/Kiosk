@@ -18,6 +18,7 @@ from PyQt6.QtSvg import QSvgRenderer
 from core import theme as T
 from core.i18n import tr
 from core.threads import track
+from services import stats
 from widgets.card import ContentCard, fmt_duration
 from widgets.empty import EmptyState
 from widgets.modal import Modal
@@ -160,20 +161,20 @@ class VideosScreen(QWidget):
         self.empty = EmptyState(icon="video", theme=self.theme_name)
         root.addWidget(self.empty)
 
-        # Kartochkalar to'ri (scroll ichida) — 3 ustun
+        # Janr bo'limlari (scroll ichida): har janr — sarlavha + kartalar to'ri
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
         self.scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.grid_host = QWidget()
         self.grid_host.setObjectName("gridHost")
-        self.grid = QGridLayout(self.grid_host)
-        self.grid.setContentsMargins(0, T.s(8), 0, T.s(40))
-        self.grid.setHorizontalSpacing(T.s(28))
-        self.grid.setVerticalSpacing(T.s(34))
-        self.grid.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.vbox = QVBoxLayout(self.grid_host)
+        self.vbox.setContentsMargins(0, T.s(8), 0, T.s(40))
+        self.vbox.setSpacing(T.s(16))
+        self.vbox.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.scroll.setWidget(self.grid_host)
         root.addWidget(self.scroll, 1)
+        self._headers = []   # (bar, lbl, cnt) — mavzu almashganda restyle
 
         self.tab_btns[0].setChecked(True)
 
@@ -208,23 +209,70 @@ class VideosScreen(QWidget):
         self._render()
 
     def _filtered(self):
+        from core.i18n import content_visible
         types = TABS[self.active_tab][1]
         out = []
         for it in self.all_items:
             if it.get("type") not in types:
+                continue
+            if not content_visible(it):   # faqat joriy tildagi kontent
                 continue
             if self.search_text and self.search_text not in (it.get("title") or "").lower():
                 continue
             out.append(it)
         return out
 
+    @staticmethod
+    def _group_by_genre(items):
+        """Kontentni janr bo'yicha guruhlaydi (ko'p janrli «Hujjatli, Tabiat»
+        birinchi janriga kiradi). Janrsizlar None kaliti bilan oxirida."""
+        groups, order = {}, []
+        for it in items:
+            g = (it.get("genre") or "").split(",")[0].strip()
+            key = g or None
+            if key not in groups:
+                groups[key] = []
+                order.append(key)
+            groups[key].append(it)
+        named = sorted((k for k in order if k), key=str.lower)
+        keys = named + ([None] if None in groups else [])
+        return [(k, groups[k]) for k in keys]
+
+    def _genre_header(self, text, count):
+        """Zamonaviy bo'lim sarlavhasi: accent ustuncha + janr nomi + son."""
+        c = T.THEMES[self.theme_name]
+        w = QWidget()
+        h = QHBoxLayout(w)
+        h.setContentsMargins(0, T.s(10), 0, 0)
+        h.setSpacing(T.s(12))
+        bar = QFrame()
+        bar.setFixedSize(T.s(6), T.s(26))
+        bar.setStyleSheet(
+            f"background: {c['accent']}; border-radius: {T.s(3)}px;")
+        lbl = QLabel(text)
+        lbl.setStyleSheet(
+            f"background: transparent; color: {c['text']};"
+            f" font-size: {T.s(24)}px; font-weight: 800;")
+        cnt = QLabel(str(count))
+        cnt.setStyleSheet(
+            f"background: {c['surface']}; color: {c['text_secondary']};"
+            f" border-radius: {T.s(12)}px; padding: {T.s(2)}px {T.s(12)}px;"
+            f" font-size: {T.s(15)}px; font-weight: 700;")
+        h.addWidget(bar)
+        h.addWidget(lbl)
+        h.addWidget(cnt)
+        h.addStretch(1)
+        self._headers.append((bar, lbl, cnt))
+        return w
+
     def _render(self):
-        # Eski kartochkalarni tozalaymiz
-        while self.grid.count():
-            w = self.grid.takeAt(0).widget()
+        # Eski bo'limlarni tozalaymiz
+        while self.vbox.count():
+            w = self.vbox.takeAt(0).widget()
             if w:
                 w.deleteLater()
         self.cards = []
+        self._headers = []
 
         items = self._filtered()
         if not items:
@@ -237,16 +285,35 @@ class VideosScreen(QWidget):
 
         cols = self._calc_cols()
         self._cols = cols
-        for i, it in enumerate(items):
-            card = ContentCard(it, self.api, self.theme_name)
-            card.clicked.connect(self._open_detail)
-            self.cards.append(card)
-            self.grid.addWidget(card, i // cols, i % cols)
-        # Faol ustunlar teng cho'ziladi; avvalgi (ko'proq ustunli) renderdan
-        # qolishi mumkin bo'lgan barcha "fantom" ustun stretch'larini nollaymiz —
-        # aks holda kartalar chapga surilib o'ngda bo'sh joy qoladi.
-        for cidx in range(16):
-            self.grid.setColumnStretch(cidx, 1 if cidx < cols else 0)
+        if self.active_tab == 0:
+            # «Barchasi» — janrga bo'linmaydi, hammasi bitta to'rda ko'rinadi
+            groups = [(None, items)]
+            show_headers = False
+        else:
+            groups = self._group_by_genre(items)
+            # Hammasi janrsiz bo'lsa — sarlavhasiz oddiy to'r
+            show_headers = not (len(groups) == 1 and groups[0][0] is None)
+        for gname, gitems in groups:
+            if show_headers:
+                self.vbox.addWidget(self._genre_header(
+                    gname or tr("common.other"), len(gitems)))
+            host = QWidget()
+            host.setStyleSheet("background: transparent;")
+            grid = QGridLayout(host)
+            grid.setContentsMargins(0, T.s(4), 0, T.s(12))
+            grid.setHorizontalSpacing(T.s(28))
+            grid.setVerticalSpacing(T.s(34))
+            grid.setAlignment(Qt.AlignmentFlag.AlignTop)
+            for i, it in enumerate(gitems):
+                card = ContentCard(it, self.api, self.theme_name)
+                card.clicked.connect(self._open_detail)
+                self.cards.append(card)
+                grid.addWidget(card, i // cols, i % cols)
+            # Faol ustunlar teng cho'ziladi — to'liq bo'lmagan qatorda ham
+            # kartalar chap-tepada to'g'ri turadi.
+            for cidx in range(16):
+                grid.setColumnStretch(cidx, 1 if cidx < cols else 0)
+            self.vbox.addWidget(host)
         # Layout o'rnashgach ustun sonini qayta tekshiramiz (birinchi ochilishda
         # viewport kengligi hali yakuniy emas — kartalar kichik/siqilgan chiqadi).
         QTimer.singleShot(0, self._recheck_cols)
@@ -266,7 +333,7 @@ class VideosScreen(QWidget):
         avail = self.scroll.viewport().width()
         if avail <= 0:
             avail = self.width() - 2 * T.SPACE["page"]
-        spacing = self.grid.horizontalSpacing()
+        spacing = T.s(28)   # bo'lim to'rlarining gorizontal oralig'i
         target = T.s(300)
         cols = (avail + spacing) // (target + spacing)
         return max(3, int(cols))
@@ -286,16 +353,23 @@ class VideosScreen(QWidget):
     def _play(self, item):
         if self._modal:
             self._modal.close_modal()
-        # Oflaynda striming ishlamaydi — pleyerni ochib qotirmaymiz
-        if self.api.offline:
+        url = self.api.play_url(item["id"])   # lokal kesh bo'lsa — fayl
+        # Oflaynda striming ishlamaydi — lekin lokal nusxa bo'lsa ijro etamiz
+        if self.api.offline and url.startswith("http"):
             self.status.text(tr("videos.offline"))
             return
         # Avvalgi pleyer hali ochiq bo'lsa — yopamiz (VLC resurslari bo'shasin va
         # ishlab turgan obyekt referenssiz qolib GC tomonidan abort qilinmasin).
         if self._player is not None:
             self._player.stop_and_close()
-        url = self.api.stream_url(item["id"])
+        stats.event("content_open", id=item.get("id"),
+                    title=item.get("title"), type=item.get("type"))
         self._player = VideoPlayer(url, item.get("title", ""))
+        # "Media" reklama algoritmida kino boshida/o'rtasida/oxirida reklama
+        # chiqadi (boshqa rejimlarda hook hech narsa qilmaydi).
+        mgr = getattr(self.window(), "ad_manager", None)
+        if mgr is not None:
+            self._player.ad_hook = mgr.media_ad
         self._player.closed.connect(self._on_player_closed)
         self._player.start()
 
@@ -326,6 +400,16 @@ class VideosScreen(QWidget):
         self._restyle_tabs()
         for card in self.cards:
             card.apply_theme(name)
+        for bar, lbl, cnt in self._headers:
+            bar.setStyleSheet(
+                f"background: {c['accent']}; border-radius: {T.s(3)}px;")
+            lbl.setStyleSheet(
+                f"background: transparent; color: {c['text']};"
+                f" font-size: {T.s(24)}px; font-weight: 800;")
+            cnt.setStyleSheet(
+                f"background: {c['surface']}; color: {c['text_secondary']};"
+                f" border-radius: {T.s(12)}px; padding: {T.s(2)}px {T.s(12)}px;"
+                f" font-size: {T.s(15)}px; font-weight: 700;")
 
     def _restyle_tabs(self):
         c = T.THEMES[self.theme_name]

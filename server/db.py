@@ -57,6 +57,9 @@ CREATE TABLE IF NOT EXISTS content (
     file_path     TEXT,                   -- video/audio fayl
     text_path     TEXT,                   -- kitob matni fayli
     category_tab  TEXT,
+    lang          TEXT,                    -- uz|ru|en; NULL = barcha tillarda
+    lang_group    INTEGER,                 -- bir asarning til versiyalari guruhi
+    cache_enabled INTEGER DEFAULT 1,       -- 1 = kiosklar lokal keshiga yuklansin
     is_recommended INTEGER DEFAULT 0,
     created_at    TEXT DEFAULT (datetime('now'))
 );
@@ -72,6 +75,7 @@ CREATE TABLE IF NOT EXISTS ads (
     interval_min INTEGER,                  -- har necha daqiqada chiqadi (bo'sh = umumiy sozlama)
     start_time  TEXT,                      -- HH:MM — shu vaqtdan ko'rsatiladi (bo'sh = doim)
     end_time    TEXT,                      -- HH:MM — shu vaqtgacha
+    placement   TEXT DEFAULT 'popup',      -- popup | banner (asosiy sahifa) | both
     is_active   INTEGER DEFAULT 1,
     sort_order  INTEGER DEFAULT 0
 );
@@ -102,17 +106,42 @@ CREATE TABLE IF NOT EXISTS route_stops (
     sort_order     INTEGER DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS kiosks (
+    device_id  TEXT PRIMARY KEY,            -- kiosk hostname (barqaror ID)
+    kiosk_no   TEXT,                        -- o'rnatuvchi bergan raqam (server.txt)
+    room       TEXT,                        -- xona/vagon raqami (server.txt)
+    ip         TEXT,
+    platform   TEXT,
+    cached_n   INTEGER DEFAULT 0,           -- lokal keshlangan media soni
+    cached_ids TEXT,                        -- keshlangan kontent id'lari (JSON)
+    disk_total INTEGER,                     -- kiosk diski hajmi (bayt)
+    disk_free  INTEGER,                     -- bo'sh joy (bayt)
+    first_seen TEXT DEFAULT (datetime('now','localtime')),
+    last_seen  TEXT                         -- oxirgi heartbeat vaqti
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
     id      INTEGER PRIMARY KEY AUTOINCREMENT,
     ts      TEXT DEFAULT (datetime('now','localtime')),
     action  TEXT NOT NULL,
     details TEXT
 );
+
+CREATE TABLE IF NOT EXISTS stats_events (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    device_id TEXT,
+    session   TEXT,                        -- kiosk sessiya id'si
+    ts        TEXT,                        -- kiosk vaqti (ISO, lokal)
+    event     TEXT NOT NULL,               -- session_start|screen_view|content_open|ad_play|...
+    data      TEXT                         -- JSON qo'shimcha maydonlar
+);
+CREATE INDEX IF NOT EXISTS idx_stats_ts ON stats_events(ts);
+CREATE INDEX IF NOT EXISTS idx_stats_event ON stats_events(event);
 """
 
 
 def init_db():
-    """Bazani yaratadi va bo'sh bo'lsa test ma'lumot bilan to'ldiradi."""
+    """Bazani yaratadi, migratsiya qiladi va minimal default sozlamalarni yozadi."""
     os.makedirs(config.CONTENT_DIR, exist_ok=True)
     conn = connect()
     try:
@@ -127,6 +156,18 @@ def init_db():
         if "distance_km" not in cols:
             conn.execute(
                 "ALTER TABLE route_stops ADD COLUMN distance_km INTEGER")
+        # content: til ustunlari (ko'p tilli katalog). Mavjud yozuvlar 'uz'
+        # deb belgilanadi (kiosk qat'iy til filtri bilan ishlaydi).
+        ccols = {r["name"] for r in
+                 conn.execute("PRAGMA table_info(content)").fetchall()}
+        if "lang" not in ccols:
+            conn.execute("ALTER TABLE content ADD COLUMN lang TEXT"
+                         " DEFAULT 'uz'")
+        if "lang_group" not in ccols:
+            conn.execute("ALTER TABLE content ADD COLUMN lang_group INTEGER")
+        if "cache_enabled" not in ccols:
+            conn.execute("ALTER TABLE content ADD COLUMN cache_enabled"
+                         " INTEGER DEFAULT 1")
         # ads: media (rasm/video), davomiylik va vaqt oralig'i ustunlari
         acols = {r["name"] for r in
                  conn.execute("PRAGMA table_info(ads)").fetchall()}
@@ -143,13 +184,92 @@ def init_db():
             conn.execute("ALTER TABLE ads ADD COLUMN start_time TEXT")
         if "end_time" not in acols:
             conn.execute("ALTER TABLE ads ADD COLUMN end_time TEXT")
+        if "placement" not in acols:
+            conn.execute("ALTER TABLE ads ADD COLUMN placement TEXT"
+                         " DEFAULT 'popup'")
+        # kiosks: kesh ro'yxati va disk ma'lumotlari (keyin qo'shilgan)
+        kcols = {r["name"] for r in
+                 conn.execute("PRAGMA table_info(kiosks)").fetchall()}
+        for col, ddl in (("cached_ids", "TEXT"), ("disk_total", "INTEGER"),
+                         ("disk_free", "INTEGER")):
+            if col not in kcols:
+                conn.execute(f"ALTER TABLE kiosks ADD COLUMN {col} {ddl}")
         conn.commit()
-        # Bo'sh bo'lsa seed qilamiz
-        if conn.execute("SELECT COUNT(*) AS n FROM content").fetchone()["n"] == 0:
-            _seed(conn)
+        _ensure_defaults(conn)
+        _remove_legacy_seed(conn)
         conn.commit()
     finally:
         conn.close()   # xato bo'lsa ham ulanish (handle) oqib qolmasin
+
+
+def _ensure_defaults(conn):
+    """Ilova ishlashi uchun kerakli, lekin demo katalog bo'lmagan sozlamalar."""
+    conn.executemany(
+        "INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)",
+        [
+            ("default_theme", "light"),
+            ("ad_interval_min", "5"),
+            ("ad_algorithm", "weighted"),
+            ("media_cache", "1"),
+            ("sos_enabled", "0"),
+        ])
+
+
+def _remove_legacy_seed(conn):
+    """Avvalgi buildlarda avtomatik qo'shilgan demo yozuvlarni tozalaydi."""
+    done = conn.execute(
+        "SELECT value FROM settings WHERE key='legacy_seed_cleanup_done'"
+    ).fetchone()
+    if done and done["value"] == "1":
+        return
+    conn.execute(
+        """DELETE FROM content
+           WHERE (title,file_path) IN (
+             ('Baron','baron.mp4'),
+             ('Sarob','sarob.mp4'),
+             ('Zumrad va Qimmat','zumrad.mp4'),
+             ('Yulduz Usmonova вЂ” Konsert','concert.mp4'),
+             ('Mehrobdan chayon','mehrob.mp3')
+           )
+           OR (title='O''tkan kunlar' AND text_path='otkan.json')""")
+    conn.execute(
+        """DELETE FROM content
+           WHERE file_path IN (
+             'sintel.mp4',
+             'jellyfish.mp4',
+             'w3sample.mp4',
+             'elephants_dream.mp4',
+             'tears_of_steel.mp4',
+             'big_buck_bunny.mp4',
+             'concert.mp3',
+             'music2.mp4',
+             'mehrob.wav'
+           )
+           OR text_path IN ('bahor.json','otkan.json')""")
+    conn.execute(
+        "DELETE FROM ads WHERE title=? AND link_url=?",
+        ("Afrosiyob bilan tez va qulay", "https://railway.uz"))
+    conn.execute(
+        """DELETE FROM sites
+           WHERE (name,url) IN (
+             ('Rasmiy sayt','https://railway.uz'),
+             ('E-Chipta portali','https://chipta.railway.uz'),
+             ('Telegram kanal','https://t.me/railway_uz')
+           )""")
+    conn.execute(
+        """DELETE FROM route_stops
+           WHERE name IN ('Toshkent','Guliston','Jizzax','Samarqand')
+             AND COALESCE(sort_order, -1) BETWEEN 0 AND 3""")
+    conn.execute(
+        """DELETE FROM route_stops
+           WHERE name IN (
+             'Toshkent-Janubiy','Jum''a','Kattaqo''rg''on','Zirabuloq',
+             'Ziyovuddin','Navoiy','Qiziltepa','Buxoro-1','Jayhun',
+             'Hazorasp','Urganch','Xiva'
+           )""")
+    conn.execute(
+        "INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)",
+        ("legacy_seed_cleanup_done", "1"))
 
 
 def _seed(conn):
@@ -232,11 +352,60 @@ def get_content(content_type=None):
     return [dict(r) for r in rows]
 
 
+def content_field_values(field, content_type=None):
+    """Mavjud kontentda ishlatilgan qiymatlar ro'yxati (takrorsiz) — admin
+    dialogidagi Janr/Tab combo takliflari uchun. `field` faqat ruxsat etilgan
+    ustunlardan bo'ladi (SQL inyeksiyasidan himoya)."""
+    if field not in ("genre", "category_tab"):
+        return []
+    conn = connect()
+    sql = (f"SELECT DISTINCT {field} AS v FROM content"
+           f" WHERE {field} IS NOT NULL AND TRIM({field}) != ''")
+    args = ()
+    if content_type:
+        sql += " AND type=?"
+        args = (content_type,)
+    rows = conn.execute(sql + " ORDER BY v COLLATE NOCASE", args).fetchall()
+    conn.close()
+    return [r["v"] for r in rows]
+
+
 def get_content_by_id(content_id):
     conn = connect()
     row = conn.execute("SELECT * FROM content WHERE id=?", (content_id,)).fetchone()
     conn.close()
     return dict(row) if row else None
+
+
+def upsert_kiosk(device_id, **fields):
+    """Kiosk heartbeat ma'lumotini yangilaydi (birinchi marta — yaratadi).
+    Bir marta ulangan kiosk ro'yxatda DOIM qoladi (oflayn bo'lsa ham)."""
+    if not device_id:
+        return
+    allowed = ("kiosk_no", "room", "ip", "platform", "cached_n",
+               "cached_ids", "disk_total", "disk_free", "last_seen")
+    f = {k: v for k, v in fields.items() if k in allowed}
+    if not f:
+        return
+    with _conn() as c:
+        cur = c.execute(
+            "UPDATE kiosks SET " + ",".join(f"{k}=?" for k in f)
+            + " WHERE device_id=?", [*f.values(), device_id])
+        if cur.rowcount == 0:
+            cols = ["device_id", *f.keys()]
+            c.execute(
+                f"INSERT INTO kiosks ({','.join(cols)})"
+                f" VALUES ({','.join('?' * len(cols))})",
+                [device_id, *f.values()])
+
+
+def get_kiosks():
+    """Ro'yxatdan o'tgan barcha kiosklar (admin jadvali uchun)."""
+    conn = connect()
+    rows = conn.execute(
+        "SELECT * FROM kiosks ORDER BY kiosk_no, device_id").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 
 def get_ads(active_only=True):
@@ -287,9 +456,11 @@ def get_settings():
 
 CONTENT_COLS = ["type", "title", "author", "genre", "description", "duration",
                 "pages", "cover_path", "file_path", "text_path",
-                "category_tab", "is_recommended"]
+                "category_tab", "lang", "lang_group", "cache_enabled",
+                "is_recommended"]
 ADS_COLS = ["media_path", "title", "subtitle", "link_url", "duration",
-            "interval_min", "start_time", "end_time", "is_active", "sort_order"]
+            "interval_min", "start_time", "end_time", "placement",
+            "is_active", "sort_order"]
 SITE_COLS = ["name", "url", "description", "features", "icon", "sort_order"]
 STOP_COLS = ["name", "arrival_time", "departure_time", "latitude", "longitude",
              "distance_km", "sort_order"]
@@ -457,6 +628,93 @@ def log_action(action, details=""):
                       (action, str(details)[:500]))
     except Exception:
         log.warning("Audit log yozilmadi: %s", action, exc_info=True)
+
+
+# --- Foydalanish statistikasi (kioskdan keladi — POST /api/stats) ---
+STATS_EVENTS = ("session_start", "session_end", "screen_view", "lang_change",
+                "content_open", "ad_play", "qr_route", "site_qr", "sos_open")
+
+
+def insert_stats(device_id, events):
+    """Kioskdan kelgan event to'plamini saqlaydi. Noma'lum/buzilgan yozuvlar
+    jim tashlanadi (kiosk eski/yangi versiyada bo'lishi mumkin). Saqlangan
+    yozuvlar sonini qaytaradi."""
+    import json as _json
+    rows = []
+    for ev in events:
+        if not isinstance(ev, dict):
+            continue
+        name = str(ev.get("event") or "")[:40]
+        if name not in STATS_EVENTS:
+            continue
+        rows.append((str(device_id or "")[:64],
+                     str(ev.get("session") or "")[:32],
+                     str(ev.get("ts") or "")[:32],
+                     name,
+                     _json.dumps(ev.get("data") or {}, ensure_ascii=False)[:1000]))
+    if not rows:
+        return 0
+    with _conn() as c:
+        c.executemany(
+            "INSERT INTO stats_events (device_id,session,ts,event,data)"
+            " VALUES (?,?,?,?,?)", rows)
+    return len(rows)
+
+
+def _stats_since(days):
+    """Oxirgi `days` kunni qoplaydigan ISO sana chegarasi (ts bilan string
+    solishtiriladi — ts ISO formatda, leksikografik tartib to'g'ri ishlaydi)."""
+    from datetime import datetime, timedelta
+    return (datetime.now() - timedelta(days=days - 1)).strftime("%Y-%m-%d")
+
+
+def stats_daily_sessions(days=7):
+    """Kunlik sessiyalar: [{day, sessions, avg_s}] (session_end bo'yicha)."""
+    conn = connect()
+    rows = conn.execute(
+        """SELECT substr(ts,1,10) AS day, COUNT(*) AS sessions,
+                  CAST(AVG(json_extract(data,'$.duration_s')) AS INTEGER) AS avg_s
+           FROM stats_events
+           WHERE event='session_end' AND ts >= ?
+           GROUP BY day ORDER BY day DESC""", (_stats_since(days),)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def stats_top(event, key, days=7, limit=10):
+    """Berilgan event ichidagi data.<key> bo'yicha TOP ro'yxat:
+    [{name, n}] — masalan content_open/title yoki screen_view/screen."""
+    conn = connect()
+    rows = conn.execute(
+        f"""SELECT json_extract(data,'$.{key}') AS name, COUNT(*) AS n
+            FROM stats_events
+            WHERE event=? AND ts >= ? AND name IS NOT NULL
+            GROUP BY name ORDER BY n DESC LIMIT ?""",
+        (event, _stats_since(days), limit)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def stats_totals(days=7):
+    """Umumiy hisoblar: {sessions, content_opens, ad_plays, devices}."""
+    conn = connect()
+    since = _stats_since(days)
+
+    def _count(ev):
+        return conn.execute(
+            "SELECT COUNT(*) AS n FROM stats_events WHERE event=? AND ts >= ?",
+            (ev, since)).fetchone()["n"]
+
+    out = {
+        "sessions": _count("session_end"),
+        "content_opens": _count("content_open"),
+        "ad_plays": _count("ad_play"),
+        "devices": conn.execute(
+            "SELECT COUNT(DISTINCT device_id) AS n FROM stats_events"
+            " WHERE ts >= ?", (since,)).fetchone()["n"],
+    }
+    conn.close()
+    return out
 
 
 # --- API kalit (kiosk <-> server autentifikatsiyasi) ---

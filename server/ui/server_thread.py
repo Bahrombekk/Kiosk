@@ -3,6 +3,7 @@ import uvicorn
 from PyQt6.QtCore import QThread
 
 import config
+from main import app as fastapi_app
 
 
 class ServerThread(QThread):
@@ -10,8 +11,8 @@ class ServerThread(QThread):
 
     def __init__(self):
         super().__init__()
-        cfg = uvicorn.Config("main:app", host=config.HOST, port=config.PORT,
-                             log_level="warning")
+        cfg = uvicorn.Config(fastapi_app, host=config.HOST, port=config.PORT,
+                             log_level="warning", log_config=None)
         self.server = uvicorn.Server(cfg)
         # Asosiy oqimda emasligi uchun signal handlerlarni o'chiramiz
         self.server.install_signal_handlers = lambda: None

@@ -15,23 +15,56 @@ tashqariga bosish ham yopmaydi).
     teskari hisob shu vaqtdan boshlanadi; EndOfMedia kelsa ham yopiladi.
   - `start_time`/`end_time` (HH:MM) — faqat shu kunlik oraliqda chiqadi
     (yarim tundan o'tadigan 22:00–06:00 kabi oraliq ham to'g'ri).
-  - Har reklamaning O'Z takrorlanish oralig'i bor (`interval_min` — admin
-    dialogidagi «Har necha daqiqada»); berilmagan eski yozuvlar uchun umumiy
-    `ad_interval_min` sozlamasi. Ikki reklama orasida kamida MIN_GAP_S pauza —
-    yo'lovchining "badiga urmasin". Pleyer/o'quvchi/PIN/zastavka ochiq
-    bo'lsa chiqmaydi.
+
+REJALASHTIRISH — "global kadans + adolatli rotatsiya" (yo'lovchining
+"badiga urmasin"; reklamalar soni 5 ta ham, 50 ta ham bo'lsin, foydalanuvchi
+ko'radigan popup chastotasi O'ZGARMAYDI):
+
+  - Umumiy `ad_interval_min` sozlamasi (standart 5 daq) — popup "slot"lari
+    oralig'i. Har slotda faqat BITTA reklama chiqadi; slotlar to'planmaydi
+    (band paytda o'tib ketgan slotlar uchun keyin ketma-ket popup yog'maydi).
+  - Slotda QAYSI reklama chiqishini admin tanlagan ALGORITM belgilaydi
+    (`ad_algorithm` sozlamasi — server Sozlamalar sahifasida):
+      * weighted (standart) — "o'z intervaliga nisbatan eng ko'p kutgani":
+        score = kutgan_vaqt / interval_min. Har reklamaning `interval_min`i
+        (admin dialogidagi «Har necha daqiqada») chastota VAZNI — kichik
+        intervalli tez-tez, kattasi kamroq chiqadi; score < 1 bo'lgan
+        (yaqinda ko'rsatilgan) reklama qayta chiqmaydi.
+      * queue — qat'iy navbat: har slotda ro'yxatdagi keyingi reklama
+        ("har N daqiqada navbat bilan bittadan"); reklamalarning o'z
+        `interval_min`lari e'tiborga olinmaydi, chastotani faqat global
+        kadans belgilaydi.
+      * random — navbat kabi, lekin tartib har slotda tasodifiy; hozirgina
+        chiqqan reklama ketma-ket takrorlanmaydi.
+      * media — popup BOSHQA JOYDA UMUMAN chiqmaydi; reklama faqat kino
+        atrofida ko'rsatiladi: boshida (pre-roll — kino reklamadan keyin
+        boshlanadi), o'rtasida (mid-roll — kino pauza qilinadi) va oxirida
+        (end-roll). Har nuqtada navbatdagi BITTA reklama (aylanma navbat).
+        Pleyer ustida alohida to'liq ekran qatlamda chiqadi (VLC videoni
+        native oynaga chizadi — oddiy bola-widget ko'rinmasdi). Qarang:
+        media_ad() va players/video.py dagi ad_hook.
+  - Faollik hurmati: foydalanuvchi ekran bilan faol ishlayotgan bo'lsa
+    (oxirgi IDLE_GRACE_S ichida teginish), popup pauzani kutadi; ammo
+    MAX_DEFER_S dan ortiq kechiktirilmaydi (uzoq faol seansda ham chiqadi).
+  - Yangi tashrif imtiyozi: zastavka yopilib yangi odam kelganda dastlabki
+    SESSION_GRACE_S davomida reklama chiqmaydi (window._dismiss_saver ->
+    on_session_start).
+  - Ikki popup orasida kamida MIN_GAP_S pauza. Pleyer/o'quvchi/PIN/zastavka
+    ochiq bo'lsa chiqmaydi.
 """
 import logging
+import random
 import time
 from datetime import datetime
 
-from PyQt6.QtWidgets import QLabel
+from PyQt6.QtWidgets import QLabel, QWidget
 from PyQt6.QtCore import Qt, QThread, QTimer, QUrl, QRectF, QObject, pyqtSignal
 from PyQt6.QtGui import QPixmap, QPainter, QPainterPath
 
 from core import cache
 from core import theme as T
 from core.threads import track
+from services import stats
 from widgets.modal import Modal
 from widgets.cover import _Fetcher
 
@@ -48,6 +81,9 @@ log = logging.getLogger(__name__)
 DEFAULT_INTERVAL_MIN = 5    # interval_min ham, umumiy sozlama ham bo'lmasa
 FIRST_DELAY_S = 45          # ishga tushgandan keyin birinchi reklamagacha
 MIN_GAP_S = 60              # ikki reklama orasidagi eng kam pauza
+IDLE_GRACE_S = 25           # oxirgi teginishdan shuncha o'tmagan — kutamiz
+MAX_DEFER_S = 180           # faollik tufayli slotni eng ko'p kechiktirish
+SESSION_GRACE_S = 60        # zastavkadan keyin yangi odamga "tinch" vaqt
 TICK_MS = 20 * 1000         # navbatni tekshirish qadami
 IMAGE_DEFAULT_S = 10        # duration berilmagan rasm uchun
 VIDEO_CAP_S = 600           # davomiyligi noma'lum video uchun himoya chegarasi
@@ -64,6 +100,12 @@ class _AdsLoader(QThread):
 
     def run(self):
         try:
+            # Sozlamalar keshi ham shu yerda yangilanadi — admin algoritm yoki
+            # oraliqni o'zgartirsa, kiosk REFRESH_MS ichida ilg'aydi.
+            try:
+                self.api.get_settings()
+            except Exception:                        # noqa: BLE001
+                pass                                 # oflayn — eski kesh qoladi
             self.done.emit(self.api.get_ads())
         except Exception:
             log.debug("Reklamalar yuklanmadi", exc_info=True)
@@ -262,6 +304,22 @@ class AdPopup(Modal):
         super().close_modal()
 
 
+class _MediaAdLayer(QWidget):
+    """Kino pleyeri USTIDA reklama ko'rsatish uchun to'liq ekran qatlam.
+
+    VLC videoni o'z native HWND'iga chizadi — pleyerning bola-widgeti uning
+    ostida qolib ketadi (pleyer boshqaruvi ham shu sababdan alohida oyna).
+    Shuning uchun reklama popup'i shu mustaqil top-level qatlamga joylanadi;
+    qatlam pleyer geometriyasini qoplaydi va ad yopilgach o'chiriladi."""
+
+    def __init__(self, geometry):
+        super().__init__(None, Qt.WindowType.FramelessWindowHint
+                         | Qt.WindowType.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet("background: rgba(0, 0, 0, 0.85);")
+        self.setGeometry(geometry)
+
+
 class AdManager(QObject):
     """Reklamalarni rejalashtiradi: ro'yxatni davriy yangilab, HAR REKLAMANING
     O'Z `interval_min` oralig'i bo'yicha vaqti kelganini popup qiladi.
@@ -275,10 +333,11 @@ class AdManager(QObject):
         self.api = api
         self.ads = []
         self._last_shown = {}       # ad_id -> monotonic vaqt (oxirgi ko'rsatilgan)
-        self._start_ts = None       # start() vaqti (birinchi reklama kechikishi)
+        self._next_slot_ts = None   # keyingi popup sloti (monotonic)
         self._last_close_ts = 0     # oxirgi popup yopilgan vaqt (MIN_GAP uchun)
         self._popup = None          # hozir ochiq popup
         self._pending = None        # birinchi kadrini kutayotgan video popup
+        self._media_ctx = None      # (qatlam, on_done) — kino atrofidagi ad
         self._fetch = None
         self._aloader = None
         self._refresh = QTimer(self)
@@ -290,14 +349,23 @@ class AdManager(QObject):
 
     # ---- Hayot sikli ----
     def start(self):
-        self._start_ts = time.monotonic()
+        self._next_slot_ts = time.monotonic() + FIRST_DELAY_S
         self.reload()
         self._refresh.start()
         self._tick_timer.start()
 
+    def on_session_start(self):
+        """Zastavka yopildi — yangi tashrif boshlandi (window chaqiradi).
+        Yangi odamga darhol reklama urilmasin: slot kamida SESSION_GRACE_S
+        keyinga suriladi (lekin allaqachon undan uzoqroq bo'lsa — tegilmaydi)."""
+        if self._next_slot_ts is not None:
+            self._next_slot_ts = max(self._next_slot_ts,
+                                     time.monotonic() + SESSION_GRACE_S)
+
     def stop(self):
         self._refresh.stop()
         self._tick_timer.stop()
+        self._finish_media_ctx(run_done=False)   # kino baribir yopilmoqda
         if self._pending is not None:
             p, self._pending = self._pending, None
             p.abort()
@@ -323,12 +391,17 @@ class AdManager(QObject):
         self._aloader.start()
 
     def _on_ads(self, ads):
-        self.ads = [a for a in ads if a.get("media_path")]
+        # Banner-only reklamalar popup bo'lib chiqmaydi — ular bosh sahifa
+        # bannerida aylanadi (screens/home.py); "both" ikkala joyda ham.
+        self.ads = [a for a in ads if a.get("media_path")
+                    and (a.get("placement") or "popup") in ("popup", "both")]
 
     # ---- Takrorlanish oralig'i ----
     @staticmethod
     def _global_interval_min():
-        """Umumiy sozlama (interval_min berilmagan eski reklamalar uchun)."""
+        """Umumiy `ad_interval_min` sozlamasi — ikki vazifada: (1) popup
+        slotlari oralig'i (global kadans), (2) interval_min berilmagan eski
+        reklamalar uchun standart interval."""
         hit = cache.load_json("settings")
         mins = None
         if hit:
@@ -391,39 +464,140 @@ class AdManager(QObject):
                 or not getattr(self.win, "connected", False))
 
     def _maybe_show(self):
-        """Har TICK: vaqti kelgan reklamalarni topib, eng "qarzdorini" chiqaradi.
+        """Har TICK: global slot vaqti kelganida BITTA reklama chiqaradi.
 
-        Reklama "vaqti keldi" deyiladi: oxirgi ko'rsatilganidan beri o'zining
-        `interval_min` daqiqasi o'tgan bo'lsa (hali ko'rsatilmagani — darhol).
-        Ikki popup orasida kamida MIN_GAP_S saqlanadi."""
+        Slot oralig'i — umumiy `ad_interval_min` sozlamasi; reklamalar soni
+        qancha bo'lmasin, popup chastotasi shu bilan chegaralanadi. Slotda
+        qaysi reklama chiqishini admin tanlagan algoritm belgilaydi (qarang:
+        _pick_candidates — queue/random/weighted). Foydalanuvchi faol bo'lsa,
+        popup pauzagacha (eng ko'pi MAX_DEFER_S) kechiktiriladi."""
         if self._popup is not None or self._pending is not None:
             return                       # allaqachon ochiq/tayyorlanmoqda
+        if self._algorithm() == "media":
+            return   # media rejimi: reklama faqat kino atrofida (media_ad)
         now = time.monotonic()
-        if self._start_ts is None or now - self._start_ts < FIRST_DELAY_S:
-            return                       # endigina ishga tushdi — shoshilmaymiz
+        if self._next_slot_ts is None or now < self._next_slot_ts:
+            return                       # slot vaqti hali kelmadi
         if now - self._last_close_ts < MIN_GAP_S:
             return                       # oldingi reklama endigina yopildi
         if self._busy():
             return
-        due = []
-        for ad in self._eligible():
-            last = self._last_shown.get(ad["id"])
-            if last is None or now - last >= self._ad_interval_s(ad):
-                due.append((last or 0, ad))
-        if not due:
+        # Faollik hurmati: odam hozir ekran bilan ishlayapti — tabiiy pauzani
+        # kutamiz; lekin slot MAX_DEFER_S dan ortiq kechikkan bo'lsa chiqamiz
+        # (aks holda uzluksiz aylanayotgan odam reklamani umuman ko'rmaydi).
+        last_act = getattr(self.win, "last_activity", 0)
+        if (now - last_act < IDLE_GRACE_S
+                and now - self._next_slot_ts < MAX_DEFER_S):
             return
-        due.sort(key=lambda t: t[0])     # eng uzoq kutgani birinchi
-        self._try_candidates([ad for _, ad in due])
+        cands = self._pick_candidates(now)
+        if not cands:
+            return                       # hammasi yaqinda ko'rsatilgan
+        self._try_candidates(cands)
+
+    @staticmethod
+    def _algorithm():
+        """Admin tanlagan rejalashtirish algoritmi (`ad_algorithm` sozlamasi):
+        'queue', 'random' yoki 'weighted' (standart / noma'lum qiymat)."""
+        hit = cache.load_json("settings")
+        algo = (hit[0].get("ad_algorithm") or "").strip() if hit else ""
+        return algo if algo in ("queue", "random", "media") else "weighted"
+
+    def _pick_candidates(self, now):
+        """Slot uchun nomzodlar ro'yxati: birinchisi ko'rsatiladi, qolganlari
+        media xatosida zaxira. Tartibni admin tanlagan algoritm belgilaydi
+        (qarang: modul sarlavhasi — queue / random / weighted)."""
+        algo = self._algorithm()
+        elig = self._eligible()
+        if algo == "queue":
+            # Eng uzoq ko'rsatilmagani birinchi (hali ko'rsatilmaganlar — 0 —
+            # yuklash, ya'ni id tartibida oldinda) = qat'iy aylanma navbat.
+            return sorted(elig, key=lambda a: (self._last_shown.get(a["id"]) or 0,
+                                               a.get("id") or 0))
+        if algo == "random":
+            pool = list(elig)
+            random.shuffle(pool)
+            if len(pool) > 1 and self._last_shown:
+                # Hozirgina chiqqani ketma-ket takrorlanmasin — eng orqaga
+                prev = max(self._last_shown, key=self._last_shown.get)
+                pool.sort(key=lambda a: a.get("id") == prev)
+            return pool
+        # weighted (standart): eng "haqdor"i birinchi — score = kutgan vaqt /
+        # o'z intervali; score < 1 (o'z oralig'i o'tmagan) chiqarilmaydi.
+        fresh, scored = [], []
+        for ad in elig:
+            last = self._last_shown.get(ad["id"])
+            if last is None:
+                fresh.append(ad)
+                continue
+            score = (now - last) / self._ad_interval_s(ad)
+            if score >= 1:
+                scored.append((score, ad))
+        scored.sort(key=lambda t: t[0], reverse=True)
+        return fresh + [ad for _, ad in scored]
+
+    # ---- Kino atrofidagi reklama (media rejimi) ----
+    def media_ad(self, host, stage, on_done):
+        """Kino atrofida BITTA reklama ko'rsatadi (players/video.py chaqiradi).
+
+        host  — pleyer oynasi (qatlam uning geometriyasini qoplaydi);
+        stage — "pre" / "mid" / "end" (statistikaga yoziladi);
+        on_done — reklama yopilganda YOKI ko'rsatib bo'lmasa (mos reklama
+        yo'q, media xato, boshqa rejim) chaqiriladi — kino HECH QACHON
+        reklamaga qarab qolib ketmaydi.
+
+        Tanlov — aylanma navbat (eng uzoq ko'rsatilmagani), algoritm
+        'media' bo'lgandagina ishlaydi."""
+        if (self._algorithm() != "media" or not self._active
+                or self._popup is not None or self._pending is not None):
+            on_done()
+            return
+        if stage == "pre" and time.monotonic() - self._last_close_ts < MIN_GAP_S:
+            # Foydalanuvchi kinolarni ketma-ket ochib-yopsa, har ochilishda
+            # pre-roll urilmasin — oxirgi reklamadan kamida MIN_GAP_S o'tsin
+            # (mid/end bunga kirmaydi: ular kino davomida tabiiy siyrak).
+            on_done()
+            return
+        cands = sorted(self._eligible(),
+                       key=lambda a: (self._last_shown.get(a["id"]) or 0,
+                                      a.get("id") or 0))
+        if len(cands) < len(self.ads):
+            # Diagnostika: nimaga ba'zi reklamalar chiqmayapti? — vaqt
+            # oralig'i (start/end_time) yoki video/multimedia filtri.
+            log.info("Media reklama (%s): %d/%d mos — qolganlari vaqt "
+                     "oralig'i/turi bo'yicha filtrlangan",
+                     stage, len(cands), len(self.ads))
+        if not cands:
+            on_done()
+            return
+        self._media_ctx = (_MediaAdLayer(host.geometry()), on_done, stage)
+        self._try_candidates(cands)
+
+    def _popup_parent(self):
+        return self._media_ctx[0] if self._media_ctx else self.win
+
+    def _finish_media_ctx(self, run_done=True):
+        """Media kontekstni yopadi: qatlam o'chiriladi, kino davom ettiriladi."""
+        if self._media_ctx is None:
+            return
+        layer, done, _ = self._media_ctx
+        self._media_ctx = None
+        layer.close()
+        layer.deleteLater()
+        if run_done:
+            try:
+                done()
+            except RuntimeError:
+                pass   # pleyer allaqachon yopilgan bo'lishi mumkin
 
     def _try_candidates(self, cands):
         """Nomzodlarni birma-bir uriniladi; media tayyor bo'lgani ko'rsatiladi."""
-        if not self._active:
+        if not self._active or not cands:
+            # Media rejimida kino javob kutmoqda — qo'yib yuboramiz
+            self._finish_media_ctx()
             return
-        if not cands:
-            return                       # birortasi ham ochilmadi — keyingi tick
         ad, rest = cands[0], cands[1:]
         if ad.get("media_type") == "video":
-            pop = AdPopup(self.win, ad, self.api)
+            pop = AdPopup(self._popup_parent(), ad, self.api)
             self._pending = pop
             pop.ready.connect(lambda ad=ad: self._on_video_ready(ad))
             pop.failed.connect(lambda ad=ad, rest=rest:
@@ -445,13 +619,14 @@ class AdManager(QObject):
         if pm.isNull():
             self._on_media_fail(ad, rest)
             return
-        self._present(AdPopup(self.win, ad, self.api, pixmap=pm), ad)
+        self._present(AdPopup(self._popup_parent(), ad, self.api, pixmap=pm), ad)
 
     def _on_video_ready(self, ad):
         pop, self._pending = self._pending, None
         if pop is None or not self._active:
             if pop is not None:
                 pop.abort()
+            self._finish_media_ctx()
             return
         self._present(pop, ad)
 
@@ -472,12 +647,26 @@ class AdManager(QObject):
     def _present(self, pop, ad):
         self._popup = pop
         pop.closed.connect(self._on_closed)
+        if self._media_ctx is not None:
+            # Kino ustidagi qatlam: avval qora fon, ustida popup
+            layer = self._media_ctx[0]
+            layer.show()
+            layer.raise_()
         pop.show_over(self.win.theme_name)
-        self._last_shown[ad["id"]] = time.monotonic()
-        log.info("Reklama ko'rsatildi: #%s %r (%s s, har %s daq)",
-                 ad.get("id"), ad.get("title"), ad.get("duration"),
-                 ad.get("interval_min") or "std")
+        now = time.monotonic()
+        self._last_shown[ad["id"]] = now
+        # Keyingi global slot — o'tib ketgan slotlar TO'PLANMAYDI: band davrdan
+        # keyin ham bitta popup chiqadi va hisob qaytadan boshlanadi.
+        self._next_slot_ts = now + self._global_interval_min() * 60
+        # Proof-of-play: har bir namoyish statistikaga yoziladi (admin
+        # «Statistika» sahifasida reklama bo'yicha hisobot ko'rinadi).
+        placement = self._media_ctx[2] if self._media_ctx else "popup"
+        stats.event("ad_play", ad_id=ad.get("id"), title=ad.get("title"),
+                    media_type=ad.get("media_type"), placement=placement)
+        log.info("Reklama ko'rsatildi: #%s %r (%s s, %s)",
+                 ad.get("id"), ad.get("title"), ad.get("duration"), placement)
 
     def _on_closed(self):
         self._popup = None
         self._last_close_ts = time.monotonic()
+        self._finish_media_ctx()   # kino kutayotgan bo'lsa — davom ettiramiz

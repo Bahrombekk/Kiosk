@@ -15,19 +15,22 @@ from ui.pages.content import ContentPageMixin
 from ui.pages.ads import AdsPageMixin
 from ui.pages.crud import CrudPagesMixin
 from ui.pages.settings import SettingsPageMixin
+from ui.pages.stats import StatsPageMixin
 
 
 # ----------------------------------------------------------------------------
 #  Asosiy admin oynasi
 # ----------------------------------------------------------------------------
 class AdminWindow(DashboardPageMixin, ContentPageMixin, AdsPageMixin,
-                  CrudPagesMixin, SettingsPageMixin, QMainWindow):
+                  CrudPagesMixin, SettingsPageMixin, StatsPageMixin,
+                  QMainWindow):
     NAV = [
         ("dashboard", "Boshqaruv", "layout-dashboard"),
         ("content", "Kontent", "clapperboard"),
         ("ads", "Reklama", "megaphone"),
         ("sites", "Saytlar", "globe"),
         ("route", "Bekatlar", "train-front"),
+        ("stats", "Statistika", "bar-chart"),
         ("settings", "Sozlamalar", "settings"),
     ]
 
@@ -36,6 +39,9 @@ class AdminWindow(DashboardPageMixin, ContentPageMixin, AdsPageMixin,
         self.setWindowTitle("Kiosk — Server admin")
         self.setWindowIcon(svg_icon("server", C_ACCENT, 64))
         self.resize(1180, 760)
+        # Oyna erkin kichraytirilsin (sahifalardagi uzun yorliqlar wordWrap
+        # bilan yoziladi — aks holda minimal kenglik matnga teng bo'lib qoladi)
+        self.setMinimumSize(880, 560)
 
         self.server = ServerThread()
         self.server.start()
@@ -43,25 +49,28 @@ class AdminWindow(DashboardPageMixin, ContentPageMixin, AdsPageMixin,
         # Generik CRUD sahifalar holati (reklama/sayt/bekat) shu yerda saqlanadi
         self._crud = {}
 
-        central = QWidget()
+        central = QWidget(self)
+        self.setCentralWidget(central)
         root = QHBoxLayout(central)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
         root.addWidget(self._sidebar())
 
-        self.pages = QStackedWidget()
+        self.pages = QStackedWidget(central)
         self._page_index = {}
+        self._page_refs = []
         builders = {
             "dashboard": self._dashboard_page, "content": self._content_page,
             "ads": self._ads_page, "sites": self._sites_page,
-            "route": self._route_page, "settings": self._settings_page,
+            "route": self._route_page, "stats": self._stats_page,
+            "settings": self._settings_page,
         }
         for key, _label, _icon in self.NAV:
             page = builders[key]()
+            self._page_refs.append(page)
             self._page_index[key] = self.pages.count()
             self.pages.addWidget(page)
         root.addWidget(self.pages, 1)
-        self.setCentralWidget(central)
         self._go("dashboard")
         self.statusBar().showMessage("Server ishga tushirilmoqda...", 3000)
 
@@ -152,6 +161,8 @@ class AdminWindow(DashboardPageMixin, ContentPageMixin, AdsPageMixin,
             b.setIcon(svg_icon(icon_name, "#FFFFFF" if active else "#94A3B8", 38))
         if key == "dashboard" and hasattr(self, "_stat_lbls"):
             self._update_stats()
+        if key == "stats":
+            self.refresh_usage_stats()
         if key == "content":
             # Sahifa ko'rinib viewport haqiqiy kenglik olgach qayta teramiz
             QTimer.singleShot(0, self._recheck_cols)
@@ -191,6 +202,15 @@ class AdminWindow(DashboardPageMixin, ContentPageMixin, AdsPageMixin,
         b.setCursor(Qt.CursorShape.PointingHandCursor)
         b.clicked.connect(slot)
         return b
+
+    def _broadcast_sync(self, scope="all"):
+        """Kiosk ilovalariga katalog/sozlama o'zgarganini darhol bildiradi."""
+        try:
+            import ws
+            ws.manager.broadcast_threadsafe(
+                {"type": "catalog_update", "scope": scope})
+        except Exception:
+            pass
 
     @staticmethod
     def _setup_table(table):

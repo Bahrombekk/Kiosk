@@ -6,12 +6,21 @@ va amal tugmalari bilan kartochka.
 """
 import os
 
-from PyQt6.QtWidgets import QHBoxLayout, QLabel, QMessageBox
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import (QHBoxLayout, QLabel, QMessageBox, QPushButton,
+                             QScrollArea)
 
 import config
 import db
-from ui.cards import AD_CARD_W, AdCard, CardGrid
+from ui.cards import AD_CARD_W, AdCard, CardFlow
 from ui.dialogs import AdDialog
+
+# Joylashuv tablari (Kontent sahifasidagi tur tablari kabi)
+PLACE_GROUPS = (
+    ("popup", "Popup"),
+    ("banner", "Banner"),
+    ("both", "Popup + Banner"),
+)
 
 
 class AdsPageMixin:
@@ -52,8 +61,32 @@ class AdsPageMixin:
         bar.addStretch(1)
         lay.addLayout(bar)
 
-        self.ads_grid = CardGrid(AD_CARD_W)
-        lay.addWidget(self.ads_grid, 1)
+        # Joylashuv tablari: Barchasi / Popup / Banner / Popup+Banner
+        tabs = QHBoxLayout()
+        tabs.setSpacing(8)
+        self._aplace = None
+        self._aplace_btns = {}
+        for key, label in ([(None, "Barchasi")] + list(PLACE_GROUPS)):
+            b = QPushButton(label)
+            b.setObjectName("typeTab")
+            b.setCheckable(True)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.clicked.connect(lambda _c, k=key: self._set_aplace(k))
+            self._aplace_btns[key] = b
+            tabs.addWidget(b)
+        tabs.addStretch(1)
+        self._aplace_btns[None].setChecked(True)
+        lay.addLayout(tabs)
+
+        # Kartochkalar to'ri (umumiy scroll ichida)
+        scroll = QScrollArea()
+        scroll.setObjectName("plainScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.ads_flow = CardFlow(AD_CARD_W)
+        scroll.setWidget(self.ads_flow)
+        lay.addWidget(scroll, 1)
 
         self.ads_empty = QLabel(
             "Hozircha reklama yo'q — «Qo'shish» orqali rasm yoki video "
@@ -69,9 +102,32 @@ class AdsPageMixin:
         self.refresh_ads()
         return w
 
+    def _set_aplace(self, key):
+        """Joylashuv tabini almashtiradi (None = Barchasi)."""
+        self._aplace = key
+        for k, b in self._aplace_btns.items():
+            b.setChecked(k == key)
+        self.refresh_ads()
+
+    @staticmethod
+    def _ad_place(ad):
+        """Reklamaning joylashuvi (eski yozuvlarda NULL = popup)."""
+        key = ad.get("placement") or "popup"
+        return key if key in ("popup", "banner", "both") else "popup"
+
     def refresh_ads(self):
         items = self._ads_rows()
-        self.ads_grid.set_cards(
+        # Tab yorliqlarida sonlar ko'rinadi
+        counts = {}
+        for ad in items:
+            k = self._ad_place(ad)
+            counts[k] = counts.get(k, 0) + 1
+        self._aplace_btns[None].setText(f"Barchasi ({len(items)})")
+        for key, label in PLACE_GROUPS:
+            self._aplace_btns[key].setText(f"{label} ({counts.get(key, 0)})")
+        if self._aplace:
+            items = [ad for ad in items if self._ad_place(ad) == self._aplace]
+        self.ads_flow.set_cards(
             AdCard(ad, self.edit_ad, self.delete_ad) for ad in items)
         self.ads_empty.setVisible(not items)
         self.ads_count.setText(f"Jami: {len(items)} ta")
@@ -83,6 +139,7 @@ class AdsPageMixin:
             new_id = db.add_ad(vals)
             db.log_action("ads_added", f"#{new_id} {vals.get('title')!r}")
             self.refresh_ads()
+            self._broadcast_sync("ads")
             self.statusBar().showMessage("Reklama qo'shildi.", 3000)
 
     def edit_ad(self, ad):
@@ -96,6 +153,7 @@ class AdsPageMixin:
             db.update_ad(aid, dlg.values())
             db.log_action("ads_updated", f"#{aid}")
             self.refresh_ads()
+            self._broadcast_sync("ads")
             self.statusBar().showMessage("Reklama yangilandi.", 3000)
 
     def delete_ad(self, ad):
@@ -106,4 +164,5 @@ class AdsPageMixin:
             db.delete_ad(ad["id"])
             db.log_action("ads_deleted", f"#{ad['id']}")
             self.refresh_ads()
+            self._broadcast_sync("ads")
             self.statusBar().showMessage("Reklama o'chirildi.", 3000)

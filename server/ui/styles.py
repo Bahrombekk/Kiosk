@@ -51,6 +51,13 @@ QLabel#pageSub {{ color: {C_MUTED}; font-size: 13px; }}
 QLabel#cardTitle {{ font-weight: 700; font-size: 15px; }}
 QLabel#muted {{ color: {C_MUTED}; }}
 QLabel#hint {{ color: #94A3B8; font-size: 12px; }}
+QLabel#fieldLbl {{ color: #334155; font-size: 13px; font-weight: 600; }}
+QLabel#secTitle {{ font-size: 15px; font-weight: 800; }}
+QLabel#secSub {{ color: #94A3B8; font-size: 12px; }}
+
+/* Shaffof scroll-konteyner (sahifa tarkibi uchun — fon sahifaniki qoladi) */
+QScrollArea#plainScroll {{ background: transparent; border: none; }}
+QScrollArea#plainScroll > QWidget > QWidget {{ background: transparent; }}
 QLabel#bigNum {{ font-size: 30px; font-weight: 800; color: {C_TEXT}; }}
 
 /* --- Tugmalar --- */
@@ -69,14 +76,18 @@ QPushButton#danger:hover {{ background: #FEF2F2; border-color: #FCA5A5; }}
 QPushButton#danger:pressed {{ background: #FEE2E2; }}
 
 /* --- Kiritish maydonlari --- */
-QLineEdit, QComboBox, QTextEdit, QSpinBox, QDoubleSpinBox {{
-    background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 10px;
+/* MUHIM: QPlainTextEdit QTextEdit'dan meros olmaydi — selektorda alohida
+   yozilmasa tizimning qora rejim ranglarida qoladi. */
+QLineEdit, QComboBox, QTextEdit, QPlainTextEdit, QSpinBox, QDoubleSpinBox {{
+    background: #FFFFFF; color: {C_TEXT};
+    border: 1px solid #E2E8F0; border-radius: 10px;
     padding: 9px 12px; selection-background-color: {C_ACCENT};
     selection-color: #FFFFFF;
 }}
-QLineEdit:hover, QComboBox:hover, QTextEdit:hover {{ border-color: #CBD5E1; }}
-QLineEdit:focus, QComboBox:focus, QTextEdit:focus, QSpinBox:focus,
-QDoubleSpinBox:focus {{ border: 1px solid {C_ACCENT}; }}
+QLineEdit:hover, QComboBox:hover, QTextEdit:hover,
+QPlainTextEdit:hover {{ border-color: #CBD5E1; }}
+QLineEdit:focus, QComboBox:focus, QTextEdit:focus, QPlainTextEdit:focus,
+QSpinBox:focus, QDoubleSpinBox:focus {{ border: 1px solid {C_ACCENT}; }}
 
 /* ComboBox — zamonaviy chevron strelka va ochiladigan ro'yxat */
 QComboBox {{ padding-right: 30px; }}
@@ -90,6 +101,28 @@ QComboBox QAbstractItemView {{
     selection-background-color: #EFF6FF; selection-color: {C_TEXT};
 }}
 
+/* SpinBox — eski tizim strelkalari o'rniga chevron tugmalar */
+QSpinBox::up-button, QDoubleSpinBox::up-button {{
+    subcontrol-origin: border; subcontrol-position: top right;
+    width: 28px; border: none; border-left: 1px solid #E2E8F0;
+    border-top-right-radius: 10px; background: #F8FAFC;
+}}
+QSpinBox::down-button, QDoubleSpinBox::down-button {{
+    subcontrol-origin: border; subcontrol-position: bottom right;
+    width: 28px; border: none; border-left: 1px solid #E2E8F0;
+    border-bottom-right-radius: 10px; background: #F8FAFC;
+}}
+QSpinBox::up-button:hover, QSpinBox::down-button:hover,
+QDoubleSpinBox::up-button:hover, QDoubleSpinBox::down-button:hover {{
+    background: #EFF6FF;
+}}
+QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {{
+    image: url({_ICONS}/chevron-up.svg); width: 12px; height: 12px;
+}}
+QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {{
+    image: url({_ICONS}/chevron-down.svg); width: 12px; height: 12px;
+}}
+
 /* Checkbox — yumaloq burchakli indikator, belgilanganda accent + check */
 QCheckBox {{ spacing: 8px; }}
 QCheckBox::indicator {{
@@ -100,6 +133,16 @@ QCheckBox::indicator:hover {{ border-color: #94A3B8; }}
 QCheckBox::indicator:checked {{
     background: {C_ACCENT}; border-color: {C_ACCENT};
     image: url({_ICONS}/check.svg);
+}}
+
+/* Tur tablari (Kontent sahifasi) — pill segmentlar, faoli accent */
+QPushButton#typeTab {{
+    background: #FFFFFF; color: #64748B; border: 1px solid #E2E8F0;
+    border-radius: 17px; padding: 7px 16px; font-weight: 600;
+}}
+QPushButton#typeTab:hover {{ border-color: #CBD5E1; color: #334155; }}
+QPushButton#typeTab:checked {{
+    background: {C_ACCENT}; color: #FFFFFF; border-color: {C_ACCENT};
 }}
 
 QFrame#card {{ background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 16px; }}
@@ -141,6 +184,14 @@ QTableWidget::item {{
 }}
 QTableWidget::item:selected {{ background: #EFF6FF; color: {C_TEXT}; }}
 QTableWidget:focus {{ outline: none; }}
+
+/* Disk indikatori (Boshqaruv -> Kiosklar jadvali) */
+QProgressBar {{
+    background: #F1F5F9; border: 1px solid #E2E8F0; border-radius: 9px;
+    text-align: center; font-size: 11px; font-weight: 600; color: #334155;
+    min-height: 18px; max-height: 18px;
+}}
+QProgressBar::chunk {{ border-radius: 8px; background: #86EFAC; }}
 
 QStatusBar {{ background: #FFFFFF; color: {C_MUTED}; border-top: 1px solid #E2E8F0; }}
 

@@ -32,6 +32,7 @@ def colored_icon(path, color_hex, size=48):
 class NavBar(QWidget):
     navigate = pyqtSignal(str)
     lang_changed = pyqtSignal(str)   # til almashtirgich bosilganda ("uz"/"ru"/"en")
+    sos_clicked = pyqtSignal()       # SOS (favqulodda ma'lumot) tugmasi
 
     def __init__(self):
         super().__init__()
@@ -62,6 +63,16 @@ class NavBar(QWidget):
 
         root.addWidget(self.pill, alignment=Qt.AlignmentFlag.AlignLeft)
         root.addStretch(1)
+
+        # SOS — favqulodda xizmat raqamlari modalini ochadi (qizil pill).
+        # Ommaviy kioskda doim ko'rinib turishi kerak (xavfsizlik talabi).
+        self.sos_btn = QPushButton(" " + i18n.tr("sos.btn"))
+        self.sos_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.sos_btn.setFixedHeight(T.s(56))
+        self.sos_btn.setIconSize(QSize(T.s(22), T.s(22)))
+        self.sos_btn.clicked.connect(self.sos_clicked.emit)
+        root.addWidget(self.sos_btn, alignment=Qt.AlignmentFlag.AlignRight)
+        root.addSpacing(T.s(14))
 
         # Til almashtirgich: UZ | RU | EN (segmentli pill, nav pill uslubida).
         # Maxfiy chiqish tap-zonasi (self.right) bilan aralashmasin — alohida
@@ -103,6 +114,10 @@ class NavBar(QWidget):
     def set_offline(self, offline):
         self.offline_lbl.setVisible(bool(offline))
 
+    def set_sos_visible(self, visible):
+        """Admin sozlamasiga ko'ra SOS tugmasini ko'rsatadi/yashiradi."""
+        self.sos_btn.setVisible(bool(visible))
+
     def set_clock(self, text):
         # Soat barcha sahifalarda ko'rinadi (alohida yorliqda)
         self.clock.setText(text)
@@ -136,6 +151,20 @@ class NavBar(QWidget):
         self.offline_lbl.setStyleSheet(
             f"#navOffline {{ color: #F59E0B; font-size: {T.FONT['nav']}px;"
             f" font-weight: 700; padding-right: {T.s(14)}px; }}")
+        # SOS: telefon ikonkali qizil gradient kapsula. MUHIM: radius aynan
+        # balandlikning yarmidan hisoblanadi — T.s() yaxlitlashida radius
+        # yarmidan 1px oshsa Qt burchaklarni umuman yumaloqlamaydi (kvadrat
+        # bo'lib qoladi).
+        sos_h = T.s(56)
+        self.sos_btn.setIcon(colored_icon(
+            os.path.join(ICON_DIR, "phone.svg"), "#FFFFFF", T.s(22)))
+        self.sos_btn.setStyleSheet(
+            f"QPushButton {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+            f" stop:0 #F87171, stop:1 #DC2626); color: #FFFFFF;"
+            f" border: none; border-radius: {sos_h // 2}px;"
+            f" padding: 0 {T.s(26)}px 0 {T.s(20)}px;"
+            f" font-size: {T.FONT['nav']}px; font-weight: 800; }}"
+            f"QPushButton:pressed {{ background: #B91C1C; }}")
         # Til almashtirgich pill: faol til — accent, qolganlari shaffof
         lang_r = (T.s(44) + 2 * T.s(6)) // 2
         self.lang_pill.setStyleSheet(

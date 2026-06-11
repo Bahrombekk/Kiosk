@@ -12,9 +12,37 @@ env/
 # Databases (seed_demo.py orqali qayta yaratiladi)
 *.db
 *.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
 
-# Demo / seeded media (seed_demo.py orqali to'ldiriladi)
+# Build / installer artefaktlari
+build/
+dist/
+release/
+Output/
+*.spec~
+*.log
+*.tmp
+
+# PyInstaller / Inno Setup natijalari
+server/build/
+server/dist/
+server/release/
+server/Output/
+user/build/
+user/dist/
+user/release/
+user/Output/
+
+# Demo / uploaded media (server ilovasi ichida qayta to'ldiriladi)
+server/content/ads/
+server/content/books/
+server/content/covers/
 server/content/media/
+content/ads/
+content/books/
+content/covers/
 content/media/
 
 # Secrets
@@ -30,10 +58,9 @@ crash.log.1
 # Runtime loglar va oflayn kesh (logsetup.py / cache.py yozadi)
 logs/
 cache/
-
-# SQLite WAL fayllari
-*.db-wal
-*.db-shm
+server/logs/
+user/logs/
+user/cache/
 
 # IDE / OS
 .vscode/

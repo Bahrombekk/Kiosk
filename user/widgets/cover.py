@@ -11,7 +11,7 @@ from collections import OrderedDict
 import requests
 from PyQt6.QtWidgets import QLabel, QSizePolicy, QGraphicsOpacityEffect
 from PyQt6.QtCore import (Qt, QThread, pyqtSignal, QByteArray, QRectF, QSize,
-                          QPropertyAnimation, QEasingCurve)
+                          QPropertyAnimation, QEasingCurve, QVariantAnimation)
 from PyQt6.QtGui import QPixmap, QPainter, QColor
 from PyQt6.QtSvg import QSvgRenderer
 from core import cache
@@ -82,6 +82,7 @@ class CoverLabel(QLabel):
         self._round_top_only = round_top_only   # faqat tepa burchaklar (modal header)
         self._orig = None          # yuklangan asl pixmap (qayta miqyoslash uchun)
         self._fetcher = None
+        self.fade_on_next = False  # keyingi load() mem-keshdan ham fade bilan
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         if aspect is None:
             self._w, self._h = width, height
@@ -99,6 +100,7 @@ class CoverLabel(QLabel):
 
     def load(self, url):
         # Avval xotira keshi — bor bo'lsa tarmoqsiz, oqimsiz darhol chizamiz
+        # (_render_scaled fade_on_next bo'lsa crossfade'ni o'zi bajaradi)
         pm = _mem_get(url)
         if pm is not None:
             self._orig = pm
@@ -157,8 +159,10 @@ class CoverLabel(QLabel):
                 self._orig = raw
             if getattr(self, "_url", None):
                 _mem_put(self._url, self._orig)
+            want_cross = self.fade_on_next   # crossfade _render_scaled ichida
             self._render_scaled()
-            self._fade_in()   # faqat tarmoq/diskdan kelganda (mem-hit instant)
+            if not want_cross:
+                self._fade_in()   # birinchi yuklanish — yumshoq paydo bo'lish
         except RuntimeError:
             pass
 
@@ -187,7 +191,49 @@ class CoverLabel(QLabel):
         scaled = self._orig.scaled(
             self._w, self._h, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
             Qt.TransformationMode.SmoothTransformation)
-        self.setPixmap(self._rounded(scaled))
+        out = self._rounded(scaled)
+        old = self.pixmap()
+        # fade_on_next: eski rasm yangisiga ERIYDI (crossfade) — opacity
+        # "blink"isiz, zamonaviy almashinish (aylanma tavsiya uchun).
+        if (self.fade_on_next and old is not None and not old.isNull()
+                and old.size() == out.size()):
+            self.fade_on_next = False
+            self._crossfade(old, out)
+        else:
+            self.fade_on_next = False
+            self.setPixmap(out)
+
+    def _crossfade(self, old, new, dur=420):
+        anim = QVariantAnimation(self)
+        anim.setDuration(dur)
+        anim.setStartValue(0.0)
+        anim.setEndValue(1.0)
+        anim.setEasingCurve(QEasingCurve.Type.InOutCubic)
+
+        def _step(v):
+            pm = QPixmap(new.size())
+            pm.fill(Qt.GlobalColor.transparent)
+            p = QPainter(pm)
+            p.setOpacity(1.0 - v)
+            p.drawPixmap(0, 0, old)
+            p.setOpacity(v)
+            p.drawPixmap(0, 0, new)
+            p.end()
+            try:
+                self.setPixmap(pm)
+            except RuntimeError:
+                anim.stop()   # widget o'chirilgan bo'lishi mumkin
+
+        anim.valueChanged.connect(_step)
+        anim.finished.connect(lambda: self._safe_set(new))
+        anim.start()
+        self._cross = anim
+
+    def _safe_set(self, pm):
+        try:
+            self.setPixmap(pm)
+        except RuntimeError:
+            pass
 
     def _rounded(self, pm):
         """Rasmni markazlab, burchaklarni yumaloqlab kesadi."""

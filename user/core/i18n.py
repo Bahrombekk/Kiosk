@@ -28,6 +28,16 @@ def get_lang():
     return _lang
 
 
+def content_visible(item):
+    """Kontent joriy interfeys tilida ko'rinsinmi? (qat'iy til filtri)
+
+    Admin har kontentga til belgilaydi: 'uz'/'ru'/'en' — faqat shu til
+    tanlanganda ko'rinadi; bo'sh (None) — "barcha tillarda" (instrumental
+    musiqa kabi) har tilda chiqadi."""
+    lang = (item.get("lang") or "").strip()
+    return not lang or lang == _lang
+
+
 def tr(key, **kw):
     """Joriy tildagi matn. Format argumentlari: tr("pin.wrong", n=3)."""
     txt = STRINGS[key][LANGS.index(_lang)]
@@ -77,6 +87,7 @@ STRINGS = {
     "common.listen":        (" Tinglash",            " Слушать",              " Listen"),
     "common.read":          (" O'qish",              " Читать",               " Read"),
     "common.tab_all":       ("Barchasi",             "Все",                   "All"),
+    "common.other":         ("Boshqa",               "Другое",                "Other"),
 
     # --- Videolar ---
     "videos.tab.movies":   ("Kinolar",     "Фильмы",      "Movies"),
@@ -115,6 +126,15 @@ STRINGS = {
     "map.depart":   ("Jo'nash: {t}",      "Отправление: {t}", "Departure: {t}"),
     "map.date_fmt": ("{day}-{month}, {year}", "{day} {month}, {year}",
                      "{month} {day}, {year}"),
+    "map.qr_title": ("Manzilni telefoningizga oling",
+                     "Возьмите адрес с собой на телефоне",
+                     "Take the location on your phone"),
+    "map.qr_hint": ("Telefon kamerasini QR kodga yo'llang — bekat xarita "
+                    "ilovasida ochiladi",
+                    "Наведите камеру телефона на QR-код — станция откроется "
+                    "в приложении карт",
+                    "Point your phone camera at the QR code — the station "
+                    "opens in your maps app"),
 
     # --- Saytlar ---
     "sites.empty":    ("Saytlar yo'q", "Сайтов нет", "No websites"),
@@ -140,6 +160,20 @@ STRINGS = {
     # --- Kitob o'quvchi ---
     "reader.text_failed": ("Matnni yuklab bo'lmadi", "Не удалось загрузить текст",
                            "Failed to load text"),
+
+    # --- Favqulodda ma'lumot (SOS) ---
+    "sos.btn":   ("SOS", "SOS", "SOS"),
+    "sos.title": ("Favqulodda holatlar", "Экстренные службы", "Emergency"),
+    "sos.unified":   ("Yagona qutqaruv xizmati", "Единая служба спасения",
+                      "Unified emergency service"),
+    "sos.fire":      ("Yong'in xizmati", "Пожарная служба", "Fire service"),
+    "sos.police":    ("Politsiya", "Полиция", "Police"),
+    "sos.ambulance": ("Tez tibbiy yordam", "Скорая помощь", "Ambulance"),
+    "sos.location":  ("Siz shu yerdasiz: {loc}", "Вы находитесь здесь: {loc}",
+                      "You are here: {loc}"),
+    "sos.hint": ("Qo'ng'iroq qilganda joylashuvingizni ayting",
+                 "При звонке назовите ваше местоположение",
+                 "Tell the operator your location when calling"),
 
     # --- PIN klaviatura ---
     "pin.title":  ("Texnik chiqish", "Технический выход", "Technical exit"),

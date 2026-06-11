@@ -2,11 +2,19 @@
 health.py — Server bilan aloqani fonda tekshiruvchi oqimlar (main.py dan
 ajratilgan). UI oqimini bloklamaslik uchun QThread ishlatiladi.
 """
+import platform as _platform
+import shutil
+import socket
+
 from PyQt6.QtCore import QThread, pyqtSignal
+
+from core import config
 
 
 class HealthChecker(QThread):
-    """Serverga ulanishni alohida oqimda tekshiradi (UI qotib qolmasligi uchun)."""
+    """Serverga ulanishni alohida oqimda tekshiradi (UI qotib qolmasligi uchun).
+    Server tirik bo'lsa heartbeat ham yuboriladi — admin "Kiosklar" jadvali
+    shu orqali to'ladi (kiosk raqami/xonasi server.txt'dan)."""
     result = pyqtSignal(bool)
 
     def __init__(self, api):
@@ -14,7 +22,25 @@ class HealthChecker(QThread):
         self.api = api
 
     def run(self):
-        self.result.emit(self.api.health())
+        ok = self.api.health()
+        if ok:
+            try:
+                from services import media_cache
+                du = shutil.disk_usage(config.APP_DIR)
+                self.api.heartbeat({
+                    "device_id": socket.gethostname(),
+                    "kiosk_no": config.KIOSK_NO,
+                    "room": config.ROOM_NO,
+                    "platform": f"{_platform.system()} "
+                                f"{_platform.release()}".strip(),
+                    "cached": media_cache.count(),
+                    "cached_ids": media_cache.cached_ids(),
+                    "disk_total": du.total,
+                    "disk_free": du.free,
+                })
+            except Exception:                       # noqa: BLE001
+                pass   # heartbeat yetmasa ham health natijasi muhimroq
+        self.result.emit(ok)
 
 
 class _SettingsPrefetch(QThread):

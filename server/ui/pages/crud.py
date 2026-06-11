@@ -1,7 +1,7 @@
 """ui/pages/crud.py — Generik CRUD sahifalar mixin'i (Saytlar/Bekatlar)."""
 from PyQt6.QtWidgets import (
     QHBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QHeaderView,
-    QMessageBox
+    QMessageBox, QWidget
 )
 from PyQt6.QtGui import QColor
 
@@ -22,18 +22,29 @@ class CrudPagesMixin:
         (masalan reklama uchun AdDialog)."""
         w, lay = self._page(page_title, page_sub)
 
-        bar = QHBoxLayout()
+        toolbar = QWidget(w)
+        bar = QHBoxLayout(toolbar)
+        bar.setContentsMargins(0, 0, 0, 0)
         bar.setSpacing(8)
-        bar.addWidget(self._btn("Qo'shish", "plus",
-                                lambda: self._crud_add(name)))
-        bar.addWidget(self._btn("Tahrirlash", "pencil",
-                                lambda: self._crud_edit(name), "ghost"))
-        bar.addWidget(self._btn("O'chirish", "trash-2",
-                                lambda: self._crud_delete(name), "danger"))
-        bar.addWidget(self._btn("Yangilash", "refresh-cw",
-                                lambda: self._crud_refresh(name), "ghost"))
+        refs = getattr(self, "_layout_refs", None)
+        if refs is None:
+            self._layout_refs = refs = []
+        refs.extend((toolbar, bar))
+        buttons = [
+            self._btn("Qo'shish", "plus", lambda: self._crud_add(name)),
+            self._btn("Tahrirlash", "pencil",
+                      lambda: self._crud_edit(name), "ghost"),
+            self._btn("O'chirish", "trash-2",
+                      lambda: self._crud_delete(name), "danger"),
+            self._btn("Yangilash", "refresh-cw",
+                      lambda: self._crud_refresh(name), "ghost"),
+        ]
+        refs.extend(buttons)
+        for btn in buttons:
+            btn.setParent(toolbar)
+            bar.addWidget(btn)
         bar.addStretch(1)
-        lay.addLayout(bar)
+        lay.addWidget(toolbar)
 
         table = QTableWidget(0, len(columns))
         table.setHorizontalHeaderLabels([h for h, _ in columns])
@@ -98,6 +109,7 @@ class CrudPagesMixin:
             cfg["add"](dlg.values())
             db.log_action(f"{name}_added")
             self._crud_refresh(name)
+            self._broadcast_sync(name)
             self.statusBar().showMessage("Yozuv qo'shildi.", 3000)
 
     def _crud_edit(self, name):
@@ -115,6 +127,7 @@ class CrudPagesMixin:
             cfg["update"](item["id"], dlg.values())
             db.log_action(f"{name}_updated", f"#{item['id']}")
             self._crud_refresh(name)
+            self._broadcast_sync(name)
             self.statusBar().showMessage("Yozuv yangilandi.", 3000)
 
     def _crud_delete(self, name):
@@ -129,6 +142,7 @@ class CrudPagesMixin:
             cfg["delete"](item["id"])
             db.log_action(f"{name}_deleted", f"#{item['id']}")
             self._crud_refresh(name)
+            self._broadcast_sync(name)
             self.statusBar().showMessage("Yozuv o'chirildi.", 3000)
 
     # --- Saytlar sahifasi ---

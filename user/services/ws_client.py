@@ -22,6 +22,7 @@ log = logging.getLogger(__name__)
 class WSClient(QThread):
     status = pyqtSignal(dict)         # status_update keldi
     announcement = pyqtSignal(str)    # announcement keldi
+    sync = pyqtSignal(dict)           # katalog/sozlama yangilandi
     link = pyqtSignal(bool)           # ulanish bor/yo'q
 
     def __init__(self, url=None):
@@ -77,6 +78,8 @@ class WSClient(QThread):
             self.status.emit(data)
         elif mtype == "announcement":
             self.announcement.emit(data.get("text", ""))
+        elif mtype in ("catalog_update", "settings_update", "reload"):
+            self.sync.emit(data)
 
     def stop(self):
         self._stop = True

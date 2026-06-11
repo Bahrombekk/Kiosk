@@ -116,6 +116,17 @@ class ApiClient:
         """Video/audio striming manzili (LibVLC pleyerga beriladi)."""
         return f"{self.base_url}/api/stream/{content_id}{self._url_key}"
 
+    def play_url(self, content_id):
+        """Ijro manzili: lokal keshda tayyor nusxa bo'lsa — fayl yo'li
+        (tarmoqsiz, serverga yuk tushmaydi), aks holda striming URL."""
+        from services import media_cache
+        return media_cache.local_path(content_id) or self.stream_url(content_id)
+
+    def heartbeat(self, info):
+        """Kiosk o'zini serverga tanitadi (admin "Kiosklar" jadvali uchun)."""
+        requests.post(f"{self.base_url}/api/heartbeat", json=info,
+                      headers=self._headers, timeout=self.timeout)
+
     def get_book_text(self, content_id):
         """Kitob matni (boblar bilan) — o'qilgan kitoblar oflaynda ham ochiladi."""
         return self._cached(

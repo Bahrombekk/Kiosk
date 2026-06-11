@@ -11,10 +11,12 @@ Kontent va holat serverdan yuklanadi (dinamik).
 """
 import logging
 import os
+from datetime import datetime
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel,
-                             QPushButton, QSizePolicy, QGraphicsView, QGraphicsScene)
+                             QPushButton, QSizePolicy, QGraphicsView,
+                             QGraphicsScene)
 from PyQt6.QtCore import (Qt, QThread, pyqtSignal, QTimer, QByteArray, QRectF,
-                          QSize)
+                          QSize, QVariantAnimation, QEasingCurve)
 from PyQt6.QtGui import QPixmap, QPainter, QPainterPath
 from PyQt6.QtSvg import QSvgRenderer
 
@@ -25,6 +27,7 @@ BASE_W, BASE_H = 1500, 980
 from core import theme as T
 from core.i18n import tr
 from core.threads import track
+from services import stats
 from widgets.cover import CoverLabel, _Fetcher
 from widgets.card import fmt_duration
 from widgets.icons import svg_icon
@@ -50,8 +53,8 @@ for _p in (AD_IMAGE, IC_SPEED, IC_TEMP, IC_TRAIN):
 
 
 class _Loader(QThread):
-    """Status + katalogni bir martada oladi."""
-    done = pyqtSignal(dict, list)
+    """Status + katalog + reklamalarni (banner uchun) bir martada oladi."""
+    done = pyqtSignal(dict, list, list)
     fail = pyqtSignal()
 
     def __init__(self, api):
@@ -60,7 +63,12 @@ class _Loader(QThread):
 
     def run(self):
         try:
-            self.done.emit(self.api.get_status(), self.api.get_content())
+            status, content = self.api.get_status(), self.api.get_content()
+            try:
+                ads = self.api.get_ads()   # banner reklamalar (keshli)
+            except Exception:              # noqa: BLE001
+                ads = []                   # reklamasiz ham sahifa ishlasin
+            self.done.emit(status, content, ads)
         except Exception:
             log.warning("Home: status/katalog yuklanmadi", exc_info=True)
             self.fail.emit()
@@ -102,6 +110,8 @@ class BannerImage(QLabel):
         self._mode = mode      # fill | fit | box
         self._maxh = maxh
         self._fetcher = None
+        self._fade_anim = None
+        self.fade_on_next = False   # keyingi rasm crossfade bilan chiqsin
         if mode == "fill":
             self.setFixedHeight(height)
         self.setMinimumWidth(10)
@@ -173,12 +183,68 @@ class BannerImage(QLabel):
         y = (h - scaled.height()) // 2
         p.drawPixmap(x, y, scaled)
         p.end()
-        self.setPixmap(out)
+        # Crossfade: faqat yangi rasm ataylab so'ralganda (fade_on_next) va
+        # o'lcham mos kelsa — resizeEvent'dagi oddiy rescale'da animatsiya yo'q.
+        old = self.pixmap()
+        if (self.fade_on_next and old is not None and not old.isNull()
+                and old.size() == out.size()):
+            self.fade_on_next = False
+            self._start_fade(old, out)
+        else:
+            self.fade_on_next = False
+            self.setPixmap(out)
+
+    def _start_fade(self, old, new):
+        """Eski rasmdan yangisiga yumshoq o'tish (~420ms crossfade)."""
+        if self._fade_anim is not None:
+            self._fade_anim.stop()
+        anim = QVariantAnimation(self)
+        anim.setDuration(420)
+        anim.setStartValue(0.0)
+        anim.setEndValue(1.0)
+        anim.setEasingCurve(QEasingCurve.Type.InOutCubic)
+
+        def _step(v):
+            pm = QPixmap(new.size())
+            pm.fill(Qt.GlobalColor.transparent)
+            p = QPainter(pm)
+            p.setOpacity(1.0 - v)
+            p.drawPixmap(0, 0, old)
+            p.setOpacity(v)
+            p.drawPixmap(0, 0, new)
+            p.end()
+            self.setPixmap(pm)
+
+        anim.valueChanged.connect(_step)
+        anim.finished.connect(lambda: self.setPixmap(new))
+        anim.start()
+        self._fade_anim = anim
+
+
+class _TitlePill(QFrame):
+    """Afisha ostidagi nom pill'i. MUHIM: bosishni o'zi QABUL QILADI (accept) —
+    QGraphicsProxyWidget ichida e'tiborsiz (ignore) qilingan bosishning
+    release'i qaytib kelmasligi mumkin, shunda bosish "ishlamaydi"."""
+    clicked = pyqtSignal()
+
+    def mousePressEvent(self, e):
+        if e.button() == Qt.MouseButton.LeftButton:
+            e.accept()
+
+    def mouseReleaseEvent(self, e):
+        if (e.button() == Qt.MouseButton.LeftButton
+                and self.rect().contains(e.position().toPoint())):
+            self.clicked.emit()
+            e.accept()
 
 
 class Poster(QFrame):
-    """Tavsiya afishasi: muqova (kesib to'ldiriladi) + pastida ‹ nom · meta › pill."""
+    """Tavsiya afishasi: muqova (kesib to'ldiriladi) + pastida ‹ nom · meta › pill.
+
+    clicked — afisha (rasm) bosildi: detal modal ochiladi.
+    title_clicked — nom yozilgan pill bosildi: namoyish DARHOL boshlanadi."""
     clicked = pyqtSignal()
+    title_clicked = pyqtSignal()
     prev = pyqtSignal()
     next = pyqtSignal()
 
@@ -194,8 +260,9 @@ class Poster(QFrame):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.addWidget(self.cover)
 
-        # Pastdagi pill (afisha ustida suzadi)
-        self.pill = QFrame(self)
+        # Pastdagi pill (afisha ustida suzadi) — bosilsa namoyish boshlanadi
+        self.pill = _TitlePill(self)
+        self.pill.clicked.connect(self.title_clicked.emit)
         self.pill.setObjectName("posterPill")
         ph = QHBoxLayout(self.pill)
         ph.setContentsMargins(22, 14, 22, 14)
@@ -217,6 +284,12 @@ class Poster(QFrame):
         ph.addLayout(mid, 1)
         ph.addWidget(self.next_btn)
 
+        # Yozuvlar va muqova sichqonchaga "shaffof" — bosish to'g'ridan-to'g'ri
+        # pill'ga (yoki Poster'ning o'ziga) tushadi, QLabel ichida "yo'qolib"
+        # qolmaydi. Strelkalar QPushButton — o'zlari ushlaydi.
+        for w in (self.cover, self.name, self.meta):
+            w.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+
     def _arrow(self, ch):
         b = QPushButton(ch)
         b.setObjectName("pArr")
@@ -232,8 +305,14 @@ class Poster(QFrame):
         self.pill.raise_()
         super().resizeEvent(e)
 
+    def mousePressEvent(self, e):
+        # Bosishni qabul qilamiz — proxy ichida release bizga qaytishi uchun
+        if e.button() == Qt.MouseButton.LeftButton:
+            e.accept()
+
     def mouseReleaseEvent(self, e):
-        # Pill tashqarisiga (afishaga) bosilsa — ochiladi
+        # Afisha (rasm) bosilsa — detal modal; pill o'zi title_clicked
+        # chiqaradi (namoyish darhol boshlanadi).
         if e.button() == Qt.MouseButton.LeftButton \
                 and not self.pill.geometry().contains(e.pos()):
             self.clicked.emit()
@@ -250,12 +329,19 @@ class _HomeCanvas(QWidget):
         self.theme_name = "light"
         self.rec_movies = []
         self.movie_idx = 0
+        self.rec_books = []
+        self.book_idx = 0
         self.rec_book = None
         self._loader = None
         self._sloader = None
         self._modal = None
         self._reader = None
         self._audio = None
+        # Banner reklamalar (admin: Joylashuv = banner/both) — aylanma
+        self.banner_ads = []
+        self._banner_idx = -1
+        self._banner_cur_id = None
+        self._banner_fetch = None
         self.setObjectName("homeCanvas")
         self.setFixedSize(BASE_W, BASE_H)
         self._build()
@@ -263,6 +349,16 @@ class _HomeCanvas(QWidget):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._refresh_status)
         self.timer.setInterval(3000)
+
+        # Banner rotatsiyasi: har reklama o'z `duration` soniyasicha turadi
+        self.banner_timer = QTimer(self)
+        self.banner_timer.setSingleShot(True)
+        self.banner_timer.timeout.connect(self._rotate_banner)
+
+        # Tavsiyalar avto-almashinishi (film va kitob — bir nechta bo'lsa)
+        self.rec_timer = QTimer(self)
+        self.rec_timer.setInterval(8000)
+        self.rec_timer.timeout.connect(self._auto_cycle)
 
     def _tile(self, icon_path, icon_px=80):
         tile = QLabel()
@@ -314,8 +410,9 @@ class _HomeCanvas(QWidget):
         left.addWidget(self.loc_card)
 
         # Reklama banner — chap ustunning qolgan balandligini to'ldiradi
-        # (Figma object-fit: cover). Reklamalarning o'zi endi qalqib chiquvchi
-        # oynada chiqadi (ads.AdManager) — bu yer statik bezak rasmi.
+        # (Figma object-fit: cover). Admin «Joylashuv = banner» qilgan
+        # reklamalar shu yerda aylanib turadi (_rotate_banner); banner
+        # reklama yo'q yoki oflayn bo'lsa — statik bezak rasmi (ad.png).
         self.ad = BannerImage(mode="box", radius=T.RADIUS["card"])
         if not self.ad.set_file(AD_IMAGE):
             self.ad.hide()
@@ -333,6 +430,7 @@ class _HomeCanvas(QWidget):
 
         self.poster = Poster(min_height=300)
         self.poster.clicked.connect(self._open_movie)
+        self.poster.title_clicked.connect(self._play_current)
         self.poster.prev.connect(lambda: self._cycle_movie(-1))
         self.poster.next.connect(lambda: self._cycle_movie(+1))
         rl.addWidget(self.poster, 5)
@@ -405,27 +503,116 @@ class _HomeCanvas(QWidget):
 
     def hideEvent(self, e):
         self.timer.stop()
+        self.banner_timer.stop()   # sahifa yopiq — banner aylanmasin
+        self.rec_timer.stop()      # tavsiya ham
         super().hideEvent(e)
 
-    def _on_data(self, status, content):
+    def _on_data(self, status, content, ads):
         self._apply_status(status)
+        self._set_banner_ads(ads)
+        # Tavsiyalar ham joriy interfeys tiliga mos bo'lsin (qat'iy filtr)
+        from core.i18n import content_visible
+        content = [c for c in content if content_visible(c)]
         recs = [c for c in content if c.get("is_recommended")
                 and c.get("type") in VIDEO_TYPES]
         others = [c for c in content if c.get("type") in VIDEO_TYPES
                   and not c.get("is_recommended")]
         self.rec_movies = recs if len(recs) >= 2 else recs + others
         self.movie_idx = 0
-        self.rec_book = next((c for c in content if c.get("is_recommended")
-                              and c.get("type") in BOOK_TYPES), None)
-        if not self.rec_book:
-            self.rec_book = next((c for c in content
-                                  if c.get("type") in BOOK_TYPES), None)
+        brecs = [c for c in content if c.get("is_recommended")
+                 and c.get("type") in BOOK_TYPES]
+        bothers = [c for c in content if c.get("type") in BOOK_TYPES
+                   and not c.get("is_recommended")]
+        self.rec_books = brecs if len(brecs) >= 2 else brecs + bothers
+        self.book_idx = 0
+        self.rec_book = self.rec_books[0] if self.rec_books else None
+        self._render_rec()
+        # Bir nechta tavsiya bo'lsa — film ham, kitob ham o'zi aylanib turadi
+        if len(self.rec_movies) > 1 or len(self.rec_books) > 1:
+            self.rec_timer.start()
+        else:
+            self.rec_timer.stop()
+
+    def _auto_cycle(self):
+        """Avto-aylanish (har 8 s): film va kitob tavsiyalari crossfade bilan."""
+        if len(self.rec_movies) > 1:
+            self.movie_idx = (self.movie_idx + 1) % len(self.rec_movies)
+        if len(self.rec_books) > 1:
+            self.book_idx = (self.book_idx + 1) % len(self.rec_books)
+            self.rec_book = self.rec_books[self.book_idx]
         self._render_rec()
 
     def _refresh_status(self):
         self._sloader = track(_StatusLoader(self.api))
         self._sloader.done.connect(self._apply_status)
         self._sloader.start()
+
+    # ---- Banner reklama aylanmasi ----
+    def _set_banner_ads(self, ads):
+        """Admin «banner»/«both» qilgan RASM reklamalarni oladi va aylanmani
+        (qayta) boshlaydi. Banner reklama yo'q bo'lsa statik rasm qoladi."""
+        self.banner_ads = [
+            a for a in ads if a.get("media_path")
+            and a.get("media_type") != "video"   # banner faqat rasm
+            and (a.get("placement") or "popup") in ("banner", "both")]
+        self.banner_timer.stop()
+        if self.banner_ads:
+            self._rotate_banner()
+        elif self._banner_cur_id is not None:
+            # Reklamalar olib tashlandi — statik bezakka qaytamiz
+            self._banner_cur_id = None
+            self._banner_idx = -1
+            if self.ad.set_file(AD_IMAGE):
+                self.ad.show()
+
+    def _banner_eligible(self):
+        """Kunlik vaqt oralig'i (start/end_time) ichidagi banner reklamalar."""
+        from services.ads import AdManager
+        now = datetime.now()
+        nm = now.hour * 60 + now.minute
+        return [a for a in self.banner_ads if AdManager._in_window(a, nm)]
+
+    def _rotate_banner(self):
+        elig = self._banner_eligible()
+        if not elig:
+            # Hozir birortasining vaqti emas — statik rasm; keyinroq qaytamiz
+            if self._banner_cur_id is not None:
+                self._banner_cur_id = None
+                if self.ad.set_file(AD_IMAGE):
+                    self.ad.show()
+            if self.banner_ads:
+                self.banner_timer.start(60_000)
+            return
+        self._banner_idx = (self._banner_idx + 1) % len(elig)
+        ad = elig[self._banner_idx]
+        if ad.get("id") == self._banner_cur_id and len(elig) == 1:
+            # Yagona reklama allaqachon ekranda — qayta yuklamaymiz, faqat
+            # vaqt oralig'i tugashini kuzatib turamiz
+            self.banner_timer.start(60_000)
+            return
+        f = track(_Fetcher(self.api.ad_media_url(ad["id"])))
+        self._banner_fetch = f
+        f.done.connect(lambda data, _c, ad=ad: self._on_banner_media(ad, data))
+        f.fail.connect(lambda: self.banner_timer.start(30_000))  # oflayn/xato
+        f.start()
+
+    def _on_banner_media(self, ad, data):
+        pm = QPixmap()
+        pm.loadFromData(data)
+        if pm.isNull():
+            self.banner_timer.start(30_000)
+            return
+        self.ad._orig = pm
+        self.ad._rescale()
+        self.ad.show()
+        changed = ad.get("id") != self._banner_cur_id
+        self._banner_cur_id = ad.get("id")
+        if changed:
+            # Proof-of-play: banner namoyishi ham statistikaga yoziladi
+            stats.event("ad_play", ad_id=ad.get("id"), title=ad.get("title"),
+                        media_type="image", placement="banner")
+        dur = ad.get("duration") or 0
+        self.banner_timer.start(max(5, int(dur) if dur else 10) * 1000)
 
     def _apply_status(self, s):
         self.speed_val.setText(f"{s.get('speed', '—')} km/h")
@@ -441,11 +628,15 @@ class _HomeCanvas(QWidget):
             return
         self.movie_idx = (self.movie_idx + delta) % len(self.rec_movies)
         self._render_rec()
+        # Qo'lda yoki avto almashinishdan keyin hisob qaytadan boshlanadi
+        if self.rec_timer.isActive():
+            self.rec_timer.start()
 
     def _render_rec(self):
         if self.rec_movies:
             self.poster.show()
             movie = self.rec_movies[self.movie_idx]
+            self.poster.cover.fade_on_next = True   # yumshoq crossfade
             self.poster.cover.load_url(self.api.cover_url(movie["id"]))
             self.poster.name.setText(movie.get("title", ""))
             parts = [p for p in (movie.get("genre"),
@@ -457,7 +648,14 @@ class _HomeCanvas(QWidget):
         else:
             self.poster.hide()
         if self.rec_book:
+            changed = (self.rec_book.get("id")
+                       != getattr(self, "_last_book_id", None))
+            self._last_book_id = self.rec_book.get("id")
             self.book_card.show()
+            if changed:
+                # Faqat muqova crossfade (pixmap asosida) — QGraphicsOpacity
+                # effekti QGraphicsView proxy ichida kartani buzib chizadi!
+                self.book_cover.fade_on_next = True
             self.book_cover.load(self.api.cover_url(self.rec_book["id"]))
             self.book_title.setText(self.rec_book.get("title", ""))
             self.book_author.setText(self.rec_book.get("author") or "")
@@ -476,6 +674,11 @@ class _HomeCanvas(QWidget):
         self._modal.play.connect(self._play_movie)
         self._modal.show_over(self.theme_name)
 
+    def _play_current(self):
+        """Pill (nom) bosildi — joriy tavsiya filmini darhol qo'yib beradi."""
+        if self.rec_movies:
+            self._play_movie(self.rec_movies[self.movie_idx])
+
     def _play_movie(self, item):
         if self._modal:
             self._modal.close_modal()
@@ -483,12 +686,22 @@ class _HomeCanvas(QWidget):
         old = getattr(self, "_player", None)
         if old is not None:
             old.stop_and_close()
-        self._player = VideoPlayer(self.api.stream_url(item["id"]), item.get("title", ""))
+        stats.event("content_open", id=item.get("id"),
+                    title=item.get("title"), type=item.get("type"))
+        self._player = VideoPlayer(self.api.play_url(item["id"]), item.get("title", ""))
+        # "Media" reklama algoritmida kino boshida/o'rtasida/oxirida reklama
+        # chiqadi (boshqa rejimlarda hook hech narsa qilmaydi).
+        mgr = getattr(self.window(), "ad_manager", None)
+        if mgr is not None:
+            self._player.ad_hook = mgr.media_ad
         self._player.closed.connect(lambda: setattr(self, "_player", None))
         self._player.start()
 
     def _read_book(self):
         if self.rec_book:
+            stats.event("content_open", id=self.rec_book.get("id"),
+                        title=self.rec_book.get("title"),
+                        type=self.rec_book.get("type"))
             self._reader = Reader(self.api, self.rec_book, self.theme_name)
             self._reader.start()
 
@@ -583,7 +796,10 @@ class HomeScreen(QWidget):
         self._fit()
 
     def hideEvent(self, e):
-        self.canvas.timer.stop()    # sahifadan chiqilganda status so'rovini to'xtatamiz
+        # Sahifadan chiqilganda status so'rovi va aylanmalar to'xtaydi
+        self.canvas.timer.stop()
+        self.canvas.banner_timer.stop()
+        self.canvas.rec_timer.stop()
         super().hideEvent(e)
 
     def _apply_status(self, data):

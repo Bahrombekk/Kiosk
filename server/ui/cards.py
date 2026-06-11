@@ -82,6 +82,62 @@ class CardGrid(QScrollArea):
         super().showEvent(e)
         QTimer.singleShot(0, self._recheck)
 
+
+# ----------------------------------------------------------------------------
+#  CardFlow — CardGrid'ning SKROLLSIZ varianti: tashqi umumiy scroll ichida
+#  bo'lim (masalan, Reklama sahifasida Popup/Banner guruhlari) sifatida
+#  ishlatiladi. Kenglik o'zgarsa ustun soni qayta hisoblanadi.
+# ----------------------------------------------------------------------------
+class CardFlow(QWidget):
+    def __init__(self, card_w, spacing=14):
+        super().__init__()
+        self._card_w = card_w
+        self._cards = []
+        self._cols_now = 0
+        self.setStyleSheet("background: transparent;")
+        self._grid = QGridLayout(self)
+        self._grid.setContentsMargins(0, 4, 0, 12)
+        self._grid.setHorizontalSpacing(spacing)
+        self._grid.setVerticalSpacing(spacing)
+        self._grid.setAlignment(
+            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+
+    def set_cards(self, cards):
+        while self._grid.count():
+            old = self._grid.takeAt(0).widget()
+            if old:
+                old.deleteLater()
+        self._cards = list(cards)
+        self._regrid()
+        QTimer.singleShot(0, self._recheck)
+
+    def _cols(self):
+        avail = self.width()
+        if avail <= 0:
+            avail = self._card_w
+        sp = self._grid.horizontalSpacing()
+        return max(1, (avail + sp) // (self._card_w + sp))
+
+    def _regrid(self):
+        g = self._grid
+        cols = self._cols()
+        self._cols_now = cols
+        for i, card in enumerate(self._cards):
+            g.addWidget(card, i // cols, i % cols,
+                        Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        for c in range(g.columnCount() + 1):
+            g.setColumnStretch(c, 0)
+        g.setColumnStretch(cols, 1)
+
+    def _recheck(self):
+        if self._cards and self._cols() != self._cols_now:
+            self._regrid()
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        QTimer.singleShot(0, self._recheck)
+
+
 # ----------------------------------------------------------------------------
 #  Kontent kartochkasi — user ilovadagi videolar ko'rinishi uslubida
 # ----------------------------------------------------------------------------
@@ -155,6 +211,16 @@ class AdminContentCard(QFrame):
         badge.adjustSize()
         badge.move(8, 8)
 
+        # Til badge — tur yonida (UZ/RU/EN; bo'sh = barcha tillarda, 🌐)
+        lang = (item.get("lang") or "").strip()
+        lb = QLabel(lang.upper() if lang else "🌐", cover)
+        lb.setStyleSheet(
+            "background: rgba(15,23,42,0.78); color: #FFFFFF;"
+            "border-radius: 9px; padding: 3px 8px;"
+            "font-weight: 700; font-size: 11px;")
+        lb.adjustSize()
+        lb.move(8 + badge.width() + 6, 8)
+
         # Tavsiya — o'ng-tepa yulduzcha
         if item.get("is_recommended"):
             star = QLabel("★", cover)
@@ -176,6 +242,17 @@ class AdminContentCard(QFrame):
             sub.setObjectName("ccSub")
             sub.setWordWrap(True)
             lay.addWidget(sub)
+
+        # Lokal kesh belgisi qo'yilmagan media — kiosklarga yuklanmaydi
+        # (faqat striming); admin buni kartadan ko'rib tursin.
+        if (item.get("type") in ("movie", "cartoon", "music", "audiobook")
+                and item.get("cache_enabled") is not None
+                and not item.get("cache_enabled")):
+            nc = QLabel("⛔ Kiosklarga yuklanmaydi (faqat striming)")
+            nc.setObjectName("ccSub")
+            nc.setStyleSheet("color: #B45309; font-size: 11px;"
+                             " font-weight: 600;")
+            lay.addWidget(nc)
 
         # Majburiy fayl yetishmasa — ogohlantirish (kioskda ochilmaydi)
         t = item.get("type")
@@ -355,9 +432,12 @@ class AdCard(QFrame):
         title.setWordWrap(True)
         lay.addWidget(title)
 
-        # Ma'lumot qatori: namoyish · takrorlanish · kunlik vaqt oralig'i
+        # Ma'lumot qatori: joylashuv · namoyish · takrorlanish · vaqt oralig'i
+        place_disp = {"banner": "Banner", "both": "Popup+Banner"}.get(
+            ad.get("placement") or "popup", "Popup")
         info = QLabel(" · ".join(x for x in (
-            ad.get("dur_disp"), ad.get("int_disp"), ad.get("time_disp")) if x))
+            place_disp, ad.get("dur_disp"), ad.get("int_disp"),
+            ad.get("time_disp")) if x))
         info.setObjectName("ccSub")
         info.setWordWrap(True)
         lay.addWidget(info)

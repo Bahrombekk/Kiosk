@@ -214,7 +214,8 @@ class AudioPlayer(QWidget):
     def start(self):
         self._restyle()
         self.showFullScreen()
-        self._media = self._instance.media_new(self.api.stream_url(self.item["id"]))
+        # Lokal keshda bo'lsa — fayldan (oflaynda ham ishlaydi)
+        self._media = self._instance.media_new(self.api.play_url(self.item["id"]))
         self._mp.set_media(self._media)
         self._mp.play()
 

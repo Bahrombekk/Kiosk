@@ -331,6 +331,52 @@ def sites():
     return db.get_sites()
 
 
+# --- Foydalanish statistikasi (kiosk batch yuboradi — services/stats.py) ---
+@app.post("/api/stats")
+def stats_in(payload: dict):
+    """Kioskdan event to'plami: {"device_id": ..., "events": [...]}.
+    Validatsiya db.insert_stats ichida (noma'lum eventlar jim tashlanadi)."""
+    events = payload.get("events")
+    if not isinstance(events, list):
+        raise HTTPException(400, "events ro'yxati kerak")
+    saved = db.insert_stats(payload.get("device_id"), events[:1000])
+    return {"saved": saved}
+
+
+# --- Kiosk heartbeat: qurilma o'zini tanitadi (admin "Kiosklar" jadvali) ---
+@app.post("/api/heartbeat")
+def heartbeat(payload: dict, request: Request):
+    """Kiosk har 5 soniyada yuboradi: device_id, kiosk raqami/xonasi
+    (server.txt'dan), platforma va lokal keshlangan media soni. Ro'yxat
+    doimiy — oflayn bo'lib qolgan kiosk ham jadvalda ko'rinadi."""
+    device_id = str(payload.get("device_id") or "").strip()[:128]
+    if not device_id:
+        raise HTTPException(400, "device_id kerak")
+    def _i(v):
+        try:
+            return max(0, int(v))
+        except (TypeError, ValueError):
+            return 0
+
+    ids = payload.get("cached_ids")
+    if not isinstance(ids, list):
+        ids = []
+    ids = [i for i in ids[:1000] if isinstance(i, int)]
+    db.upsert_kiosk(
+        device_id,
+        kiosk_no=str(payload.get("kiosk_no") or "").strip()[:32],
+        room=str(payload.get("room") or "").strip()[:64],
+        platform=str(payload.get("platform") or "").strip()[:64],
+        cached_n=_i(payload.get("cached")),
+        cached_ids=json.dumps(ids),
+        disk_total=_i(payload.get("disk_total")),
+        disk_free=_i(payload.get("disk_free")),
+        ip=(request.client.host if request.client else ""),
+        last_seen=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    )
+    return {"ok": True}
+
+
 @app.get("/api/route")
 def route():
     return db.get_route()

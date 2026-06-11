@@ -2,8 +2,37 @@
 import os
 import socket
 
-from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel
-from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QApplication, QWidget, QHBoxLayout, QLabel
+from PyQt6.QtCore import Qt, QObject, QEvent
+
+
+class _WheelGuard(QObject):
+    """Spinbox/combo ustida sahifa aylantirilganda qiymat ADASHIB o'zgarib
+    ketmasin: fokus bo'lmasa g'ildirak hodisasi widgetga yetmaydi, ota-
+    widgetga (scroll'ga) uzatiladi — sahifa odatdagidek aylanaveradi.
+    Qiymatni ataylab o'zgartirish: avval bosib (fokus), keyin g'ildirak."""
+
+    def eventFilter(self, obj, ev):
+        if ev.type() == QEvent.Type.Wheel and not obj.hasFocus():
+            parent = obj.parentWidget()
+            if parent is not None:
+                QApplication.sendEvent(parent, ev)
+            return True
+        return False
+
+
+_wheel_guard = None
+
+
+def no_wheel(*widgets):
+    """Berilgan spinbox/combo'larda tasodifiy g'ildirak o'zgarishini o'chiradi."""
+    global _wheel_guard
+    if _wheel_guard is None:
+        _wheel_guard = _WheelGuard()
+    for w in widgets:
+        # WheelFocus emas — g'ildirakning o'zi fokus bermasin
+        w.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        w.installEventFilter(_wheel_guard)
 
 
 def _media_duration(path):

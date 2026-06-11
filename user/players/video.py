@@ -43,6 +43,15 @@ class VideoPlayer(QWidget):
         self.stream_url = stream_url
         self.title = title
         self._dragging = False
+        # Kino atrofidagi reklama (ixtiyoriy): ochuvchi ekran AdManager.media_ad
+        # ni o'rnatadi — callable(host, stage, on_done). "media" algoritmida
+        # kino boshida (pre), o'rtasida (mid) va oxirida (end) bitta reklama
+        # chiqadi; boshqa rejimlarda on_done darhol qaytadi va hech narsa
+        # o'zgarmaydi.
+        self.ad_hook = None
+        self._ad_open = False       # reklama paytida boshqaruv chiqmasin
+        self._ad_mid_done = False   # mid-roll faqat bir marta
+        self._ad_end_done = False   # end-roll faqat bir marta
 
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
@@ -241,9 +250,46 @@ class VideoPlayer(QWidget):
         self._mp.video_set_mouse_input(False)
         self._mp.video_set_key_input(False)
         self._mp.audio_set_volume(self.vol.value())
+        if self.ad_hook:
+            # Pre-roll: kino reklamadan KEYIN boshlanadi (qora pleyer ustida
+            # reklama qatlami). Mos reklama bo'lmasa yoki media ochilmasa
+            # on_done darhol chaqiriladi — kino kechikmaydi.
+            self._begin_ad("pre", self._begin_play)
+        else:
+            self._begin_play()
+
+    def _begin_play(self):
+        if getattr(self, "_closing", False):
+            return
         self._mp.play()
         self.setFocus()
         self._show_controls()
+
+    # ---------- Kino atrofidagi reklama ----------
+    def _begin_ad(self, stage, after):
+        """Reklamani so'raydi; tugagach (yoki chiqmasa) `after` davom etadi.
+        Hook xato bersa ham kino to'xtab qolmaydi."""
+        self._ad_open = True
+        self.controls.hide()   # reklama ustiga boshqaruv chiqmasin
+
+        def done():
+            self._ad_open = False
+            after()
+
+        try:
+            self.ad_hook(self, stage, done)
+        except Exception:                            # noqa: BLE001
+            done()
+
+    def _resume_after_ad(self):
+        """Mid-roll yopildi — kino pauzadan davom etadi."""
+        if not getattr(self, "_closing", False):
+            self._mp.set_pause(0)
+            self._show_controls()
+
+    def _after_end_ad(self):
+        if not getattr(self, "_closing", False):
+            self._show_controls()   # tugagan ekran (qayta/chiqish) qaytadi
 
     def keyPressEvent(self, e):
         # Klaviatura bilan ham chiqish/boshqaruv (kiosk uchun zaxira yo'l).
@@ -309,8 +355,23 @@ class VideoPlayer(QWidget):
             pos = 1000 if state == vlc.State.Ended else int(1000 * cur / length)
             self.progress.setValue(pos)
 
+        # Mid-roll / end-roll (faqat ad_hook o'rnatilganda, har biri 1 marta):
+        # o'rtaga yetganda kino PAUZA qilinadi, reklama yopilgach davom etadi;
+        # tugaganda esa yakuniy reklama chiqadi.
+        if self.ad_hook and not self._ad_open:
+            if (not self._ad_mid_done and length > 0
+                    and state == vlc.State.Playing and cur >= length // 2):
+                self._ad_mid_done = True
+                self._mp.set_pause(1)
+                self._begin_ad("mid", self._resume_after_ad)
+            elif not self._ad_end_done and state == vlc.State.Ended:
+                self._ad_end_done = True
+                self._begin_ad("end", self._after_end_ad)
+
     # ---------- Boshqaruvni ko'rsatish/yashirish ----------
     def _show_controls(self):
+        if self._ad_open:
+            return   # reklama qatlami ustida boshqaruv ko'rinmasin
         # Boshqaruv oynasi videoni aniq qoplashi uchun geometriyani moslaymiz.
         self.controls.setGeometry(self.geometry())
         self.controls.show()

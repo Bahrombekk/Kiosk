@@ -18,6 +18,27 @@ from ui.styles import (
 )
 from ui.helpers import _media_duration, _title_from_filename
 
+# Janr/Tab combo'lari uchun turga mos standart takliflar (bazadagi mavjud
+# qiymatlar bilan birlashtiriladi; admin yangisini yozsa ham bo'ladi).
+DEFAULT_GENRES = {
+    "movie":     ("Badiiy", "Komediya", "Drama", "Sarguzasht", "Tarixiy",
+                  "Hujjatli", "Detektiv"),
+    "cartoon":   ("Multfilm", "Sarguzasht", "Ertak", "O'quv"),
+    "music":     ("Estrada", "Xalq musiqasi", "Klassik", "Zamonaviy",
+                  "Instrumental"),
+    "book":      ("Badiiy", "She'riyat", "Tarixiy", "Ilmiy", "Bolalar adabiyoti",
+                  "Sarguzasht"),
+    "audiobook": ("Badiiy", "She'riyat", "Tarixiy", "Ilmiy", "Bolalar adabiyoti",
+                  "Sarguzasht"),
+}
+DEFAULT_TABS = {
+    "movie":     ("Kinolar", "Hujjatli", "Bolalarga"),
+    "cartoon":   ("Multfilmlar", "Bolalarga"),
+    "music":     ("Musiqa", "Konsert"),
+    "book":      ("Badiiy", "She'riyat", "Bolalarga", "Tarixiy"),
+    "audiobook": ("Badiiy", "She'riyat", "Bolalarga", "Tarixiy"),
+}
+
 
 # ----------------------------------------------------------------------------
 #  Kontent qo'shish/tahrirlash dialogi
@@ -56,9 +77,28 @@ class ContentDialog(QDialog):
 
         self.title = QLineEdit(self.item.get("title", ""))
         self.author = QLineEdit(self.item.get("author") or "")
-        self.genre = QLineEdit(self.item.get("genre") or "")
-        self.tab = QLineEdit(self.item.get("category_tab") or "")
-        self.tab.setPlaceholderText("Masalan: Kinolar, Badiiy, Bolalarga...")
+        # Til — kioskda tanlangan interfeys tiliga mos kontentgina ko'rinadi.
+        # "Barcha tillarda" — til ahamiyatsiz kontent (instrumental musiqa,
+        # tabiat videosi) har tilda chiqaveradi.
+        self.lang = QComboBox()
+        self.lang.addItem("O'zbekcha", "uz")
+        self.lang.addItem("Ruscha", "ru")
+        self.lang.addItem("Inglizcha", "en")
+        self.lang.addItem("Barcha tillarda (til ahamiyatsiz)", None)
+        li = self.lang.findData(self.item.get("lang", "uz"))
+        self.lang.setCurrentIndex(li if li >= 0 else 3)
+
+        # Janr/Tab — tanlanadigan (lekin yozish ham mumkin) combo'lar:
+        # takliflar = turga mos standartlar + bazada allaqachon ishlatilganlar
+        self.genre = QComboBox()
+        self.genre.setEditable(True)
+        self.genre.lineEdit().setPlaceholderText("Tanlang yoki yozing...")
+        self.genre.setCurrentText(self.item.get("genre") or "")
+        self.tab = QComboBox()
+        self.tab.setEditable(True)
+        self.tab.lineEdit().setPlaceholderText(
+            "Masalan: Kinolar, Badiiy, Bolalarga...")
+        self.tab.setCurrentText(self.item.get("category_tab") or "")
         self.desc = QTextEdit(self.item.get("description") or "")
         self.desc.setFixedHeight(80)
 
@@ -75,8 +115,16 @@ class ContentDialog(QDialog):
         self.recommended = QCheckBox("Tavsiya blokida ko'rsatilsin")
         self.recommended.setChecked(bool(self.item.get("is_recommended")))
 
+        # Belgilansa — kiosklar bu faylni o'z diskiga fonda yuklab oladi
+        # (oflayn ijro); belgilanmasa — faqat serverdan striming.
+        self.cacheable = QCheckBox(
+            "Kiosklarga yuklab qo'yilsin (lokal kesh)")
+        self.cacheable.setChecked(
+            bool(self.item.get("cache_enabled", 1)))
+
         form.addRow("Turi:", self.type)
         form.addRow("Nomi:", self.title)
+        form.addRow("Tili:", self.lang)
         form.addRow("Muallif:", self.author)
         form.addRow("Janr:", self.genre)
         form.addRow("Tab (kategoriya):", self.tab)
@@ -101,6 +149,7 @@ class ContentDialog(QDialog):
         form.addRow("Muqova rasmi:", self.cover_widget)
         form.addRow("Kitob matni:", self.text_widget)
         form.addRow("", self.recommended)
+        form.addRow("", self.cacheable)
         top.addLayout(form, 1)
 
         # Muqova preview (o'ngda)
@@ -128,7 +177,8 @@ class ContentDialog(QDialog):
         lay.addWidget(btns)
 
     def _on_type_changed(self):
-        """Turga qarab faqat mos maydonlarni ko'rsatadi (ortiqcha ish bo'lmasin)."""
+        """Turga qarab faqat mos maydonlarni ko'rsatadi (ortiqcha ish bo'lmasin)
+        va Janr/Tab takliflarini shu turga moslab yangilaydi."""
         t = self.type.currentData()
         has_dur = t in ("movie", "cartoon", "music", "audiobook")
         has_media = t in ("movie", "cartoon", "music", "audiobook")
@@ -138,6 +188,27 @@ class ContentDialog(QDialog):
         self.form.setRowVisible(self.pages, has_pages)
         self.form.setRowVisible(self.media_widget, has_media)
         self.form.setRowVisible(self.text_widget, has_text)
+        # Lokal kesh faqat media fayli bor turlarga tegishli
+        self.form.setRowVisible(self.cacheable, has_media)
+        self._fill_suggestions(self.genre, DEFAULT_GENRES.get(t, ()),
+                               "genre", t)
+        self._fill_suggestions(self.tab, DEFAULT_TABS.get(t, ()),
+                               "category_tab", t)
+
+    @staticmethod
+    def _fill_suggestions(combo, defaults, field, ctype):
+        """Editable combo ro'yxatini yangilaydi: standart takliflar + shu tur
+        bo'yicha bazada mavjud qiymatlar. Yozilgan joriy matn saqlanadi."""
+        cur = combo.currentText().strip()
+        vals = list(defaults)
+        for v in db.content_field_values(field, ctype):
+            if v not in vals:
+                vals.append(v)
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItems(vals)
+        combo.setCurrentText(cur)   # tanlov/yozilgan matn yo'qolmasin
+        combo.blockSignals(False)
 
     def _pick_row(self, current, icon_name, file_filter, kind):
         """'Fayl nomi + Tanlash...' qatorini yasaydi; (label, widget) qaytaradi."""
@@ -247,11 +318,14 @@ class ContentDialog(QDialog):
             "type": self.type.currentData(),
             "title": self.title.text().strip(),
             "author": self.author.text().strip() or None,
-            "genre": self.genre.text().strip() or None,
-            "category_tab": self.tab.text().strip() or None,
+            "genre": self.genre.currentText().strip() or None,
+            "category_tab": self.tab.currentText().strip() or None,
             "description": self.desc.toPlainText().strip() or None,
             "duration": self.duration.value() or None,
             "pages": self.pages.value() or None,
+            "lang": self.lang.currentData(),
+            "lang_group": self.item.get("lang_group"),   # bog'lanish saqlansin
+            "cache_enabled": 1 if self.cacheable.isChecked() else 0,
             "is_recommended": 1 if self.recommended.isChecked() else 0,
         }
         # Tanlangan fayllarni content/ ostidagi papkalarga ko'chiramiz
@@ -326,6 +400,18 @@ class AdDialog(QDialog):
         self.dur_note.setWordWrap(True)
         self._video_dur = None   # yangi tanlangan videoning davomiyligi
 
+        # Joylashuv: popup (qalqib chiquvchi), asosiy sahifa banneri yoki ikkalasi.
+        # Banner — bosh sahifa chap ustunidagi katta rasm: bir nechta banner
+        # reklama bo'lsa «Namoyish vaqti» soniyasida aylanib turadi.
+        self.placement = QComboBox()
+        self.placement.addItem("Qalqib chiquvchi oyna (popup)", "popup")
+        self.placement.addItem("Asosiy sahifa banneri", "banner")
+        self.placement.addItem("Ikkalasi — popup ham, banner ham", "both")
+        idx = self.placement.findData(self.item.get("placement") or "popup")
+        self.placement.setCurrentIndex(max(0, idx))
+        self.placement.currentIndexChanged.connect(
+            lambda _i: self._sync_dur_row())
+
         # Har necha daqiqada chiqishi (takrorlanish oralig'i)
         self.interval = QSpinBox()
         self.interval.setRange(1, 720)
@@ -349,6 +435,7 @@ class AdDialog(QDialog):
         self.form = form
         form.addRow("Sarlavha:", self.title)
         form.addRow("Media (rasm/video):", cont)
+        form.addRow("Joylashuv:", self.placement)
         form.addRow("Namoyish vaqti:", self.duration)
         form.addRow("", self.dur_note)
         form.addRow("Har necha daqiqada:", self.interval)
@@ -408,10 +495,27 @@ class AdDialog(QDialog):
         self._update_preview(path)
 
     def _sync_dur_row(self):
-        """Rasm — «Namoyish vaqti» ko'rinadi; video — izoh ko'rinadi."""
+        """Rasm — «Namoyish vaqti» ko'rinadi; video — izoh ko'rinadi.
+        «Har necha daqiqada» faqat popup uchun ma'noli (banner aylanmasini
+        «Namoyish vaqti» boshqaradi)."""
         is_video = self._is_video(self.media_src or self.item.get("media_path"))
+        place = self.placement.currentData()
+        self.form.setRowVisible(self.interval, place != "banner")
         self.form.setRowVisible(self.duration, not is_video)
-        self.form.setRowVisible(self.dur_note, is_video)
+        self.form.setRowVisible(self.dur_note,
+                                is_video or place in ("banner", "both"))
+        if is_video and place in ("banner", "both"):
+            self.dur_note.setText(
+                "DIQQAT: video bannerda ko'rsatilmaydi (faqat popup'da). "
+                "Banner uchun rasm tanlang.")
+        elif is_video:
+            self.dur_note.setText(
+                "Video davomiyligi fayldan avtomatik olinadi — reklama video "
+                "tugaguncha ko'rinadi.")
+        else:
+            self.dur_note.setText(
+                "Banner — bosh sahifadagi katta rasm joyi: bir nechta banner "
+                "reklama «Namoyish vaqti» soniyasida almashinib turadi.")
 
     @staticmethod
     def _is_video(name):
@@ -462,6 +566,13 @@ class AdDialog(QDialog):
         # Sarlavha bo'sh bo'lsa fayl nomidan to'ldiramiz (admin yozmasa ham bo'ladi)
         if not self.title.text().strip():
             self.title.setText(_title_from_filename(media_name))
+        # Banner faqat rasm ko'rsatadi — video bilan banner-only saqlanmasin
+        if (self.placement.currentData() == "banner"
+                and self._is_video(media_name)):
+            QMessageBox.warning(self, "Xato",
+                                "Video bannerda ko'rsatilmaydi — banner uchun "
+                                "rasm tanlang yoki joylashuvni popup qiling.")
+            return
         st, en = self.start_t.text().strip(), self.end_t.text().strip()
         if bool(st) != bool(en):
             QMessageBox.warning(self, "Xato",
@@ -490,6 +601,7 @@ class AdDialog(QDialog):
             "interval_min": self.interval.value(),
             "start_time": self.start_t.text().strip() or None,
             "end_time": self.end_t.text().strip() or None,
+            "placement": self.placement.currentData(),
             "is_active": 1 if self.active.isChecked() else 0,
         }
         if self.media_src:

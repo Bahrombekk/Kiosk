@@ -25,31 +25,39 @@ APP_DIR = _base_dir()
 
 
 def _read_server_txt():
-    """server.txt'ni o'qiydi: (url, api_key) qaytaradi.
+    """server.txt'ni o'qiydi: (url, api_key, qo'shimcha) qaytaradi.
 
     Fayl formati (installer yozadi, admin bloknotda tahrirlashi mumkin):
         # izoh
         http://192.168.1.10:8765
         key=AbCdEf...
-    Birinchi oddiy qator — URL (eski format bilan mos), `key=` qatori —
-    API kalit."""
-    url, key = None, None
+        kiosk=6          # kiosk raqami (admin jadvalida ko'rinadi)
+        xona=12          # xona/vagon raqami
+        cache=0          # lokal media keshni o'chirish (standart: yoqiq)
+    Birinchi oddiy qator — URL (eski format bilan mos), qolgan `k=v`
+    qatorlari qo'shimcha sozlamalar lug'atiga tushadi."""
+    url, key, extra = None, None, {}
     try:
         with open(os.path.join(_base_dir(), "server.txt"), encoding="utf-8") as f:
             for line in f:
-                line = line.strip()
-                if not line or line.startswith("#"):
+                line = line.split("#", 1)[0].strip()   # qator oxiri izohlari
+                if not line:
                     continue
-                if line.lower().startswith("key="):
-                    key = line[4:].strip()
+                if "=" in line:
+                    k, _, v = line.partition("=")
+                    k, v = k.strip().lower(), v.strip()
+                    if k == "key":
+                        key = v
+                    else:
+                        extra[k] = v
                 elif url is None:
                     url = line
     except OSError:
         pass
-    return url, key
+    return url, key, extra
 
 
-_TXT_URL, _TXT_KEY = _read_server_txt()
+_TXT_URL, _TXT_KEY, _TXT_EXTRA = _read_server_txt()
 
 # Server manzili. Statik IP tavsiya etiladi (TZ 11.3). Ustuvorlik:
 #   1) KIOSK_SERVER muhit o'zgaruvchisi  2) server.txt  3) default
@@ -60,6 +68,18 @@ SERVER_URL = (os.environ.get("KIOSK_SERVER")
 # API kalit — server admin oynasida ko'rinadi, o'rnatishda kiritiladi.
 # Ustuvorlik: 1) KIOSK_API_KEY env  2) server.txt'dagi key= qatori
 API_KEY = os.environ.get("KIOSK_API_KEY") or _TXT_KEY or ""
+
+# Kiosk raqami va xona/vagon raqami — o'rnatuvchi server.txt'ga yozadi
+# (kiosk= / xona= qatorlari); admin "Kiosklar" jadvalida ko'rinadi.
+KIOSK_NO = (os.environ.get("KIOSK_NO")
+            or _TXT_EXTRA.get("kiosk") or _TXT_EXTRA.get("kiosk_no") or "")
+ROOM_NO = (os.environ.get("KIOSK_ROOM")
+           or _TXT_EXTRA.get("xona") or _TXT_EXTRA.get("room") or "")
+
+# Lokal media kesh: kontent fayllari fonda kiosk diskiga yuklab qo'yiladi
+# (oflaynda ham ijro etiladi). server.txt'da `cache=0` — o'chiradi.
+MEDIA_CACHE_DISABLED = (_TXT_EXTRA.get("cache", "").strip() == "0"
+                        or os.environ.get("KIOSK_MEDIA_CACHE") == "0")
 
 # WebSocket manzili (SERVER_URL'dan avtomatik hosil qilinadi: http->ws).
 # Kalit query param sifatida ketadi — server tomonda REST bilan bir xil

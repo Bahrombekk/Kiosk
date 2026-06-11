@@ -1,14 +1,13 @@
-"""ui/pages/content.py — Kontent sahifasi mixin'i (kartochkalar to'ri)."""
+"""ui/pages/content.py — Kontent sahifasi mixin'i (tur tablari + to'r)."""
 from PyQt6.QtWidgets import (
-    QWidget, QHBoxLayout, QLabel, QLineEdit, QComboBox, QMessageBox,
-    QFrame, QScrollArea, QGridLayout
+    QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QScrollArea
 )
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt
 
 import db
 from icons import svg_icon
 from ui.styles import CONTENT_TYPES, TYPE_LABELS, C_MUTED
-from ui.cards import CARD_W, AdminContentCard
+from ui.cards import CARD_W, AdminContentCard, CardFlow
 from ui.dialogs import ContentDialog
 
 
@@ -27,12 +26,7 @@ class ContentPageMixin:
                                 self.refresh_content, "ghost"))
         bar.addStretch(1)
 
-        # Tur filtri + qidiruv (yozish bilanoq ro'yxat filtlanadi)
-        self.type_filter = QComboBox()
-        self.type_filter.addItem("Barcha turlar", None)
-        for t in CONTENT_TYPES:
-            self.type_filter.addItem(TYPE_LABELS[t], t)
-        self.type_filter.currentIndexChanged.connect(self.refresh_content)
+        # Qidiruv (yozish bilanoq ro'yxat filtlanadi)
         self.search = QLineEdit()
         self.search.setPlaceholderText("Qidirish: nomi, muallif, janr...")
         self.search.setClearButtonEnabled(True)
@@ -40,28 +34,36 @@ class ContentPageMixin:
                               QLineEdit.ActionPosition.LeadingPosition)
         self.search.setFixedWidth(280)
         self.search.textChanged.connect(self.refresh_content)
-        bar.addWidget(self.type_filter)
         bar.addWidget(self.search)
         lay.addLayout(bar)
 
-        # Kartochkalar to'ri (scroll ichida) — user ilovadagi videolar kabi
+        # Tur tablari: Barchasi / Kino / Multfilm / Musiqa / Kitob / Audiokitob
+        # (kioskdagi Videolar tablari kabi — bo'limlardan qulayroq)
+        tabs = QHBoxLayout()
+        tabs.setSpacing(8)
+        self._ctype = None
+        self._ctype_btns = {}
+        for key, label in ([(None, "Barchasi")]
+                           + [(t, TYPE_LABELS[t]) for t in CONTENT_TYPES]):
+            b = QPushButton(label)
+            b.setObjectName("typeTab")
+            b.setCheckable(True)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.clicked.connect(lambda _c, k=key: self._set_ctype(k))
+            self._ctype_btns[key] = b
+            tabs.addWidget(b)
+        tabs.addStretch(1)
+        self._ctype_btns[None].setChecked(True)
+        lay.addLayout(tabs)
+
+        # Kartochkalar to'ri (umumiy scroll ichida)
         self.cards_scroll = QScrollArea()
+        self.cards_scroll.setObjectName("plainScroll")
         self.cards_scroll.setWidgetResizable(True)
-        self.cards_scroll.setFrameShape(QFrame.Shape.NoFrame)
         self.cards_scroll.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.cards_scroll.setStyleSheet(
-            "QScrollArea { background: transparent; border: none; }")
-        host = QWidget()
-        host.setStyleSheet("background: transparent;")
-        self.cards_grid = QGridLayout(host)
-        self.cards_grid.setContentsMargins(0, 4, 0, 12)
-        self.cards_grid.setHorizontalSpacing(14)
-        self.cards_grid.setVerticalSpacing(14)
-        self.cards_grid.setAlignment(
-            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        self.cards_scroll.setWidget(host)
-        self.cards_scroll.viewport().setStyleSheet("background: transparent;")
+        self.cards_flow = CardFlow(CARD_W)
+        self.cards_scroll.setWidget(self.cards_flow)
         lay.addWidget(self.cards_scroll, 1)
 
         self.content_empty = QLabel(
@@ -76,65 +78,43 @@ class ContentPageMixin:
         lay.addWidget(self.content_count)
         return w
 
-    def _content_cols(self):
-        """Oyna kengligiga qarab kartochka ustunlari soni."""
-        avail = self.cards_scroll.viewport().width()
-        if avail <= 0:
-            avail = self.width() - 232 - 60   # sidebar + page padding taxmini
-        sp = self.cards_grid.horizontalSpacing()
-        return max(1, (avail + sp) // (CARD_W + sp))
-
-    def _regrid_cards(self):
-        """Mavjud kartalarni joriy ustun soniga teradi (qayta yaratmasdan).
-
-        Har katak AlignTop|AlignLeft bilan qo'yiladi — grid bo'sh balandlikni
-        kartalarga taqsimlab ularni cho'zib yubormasin. Oxirgi ustun/qatordan
-        keyin stretch qo'yiladi — kartalar chap-tepada zich tursin."""
-        g = self.cards_grid
-        cols = self._content_cols()
-        self._cards_cols = cols
-        for i, card in enumerate(self._cards):
-            g.addWidget(card, i // cols, i % cols,
-                        Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        # Avvalgi (boshqa ustun sonidagi) stretchlarni nollab, yangisini qo'yamiz
-        rows = (len(self._cards) + cols - 1) // cols
-        for c in range(g.columnCount() + 1):
-            g.setColumnStretch(c, 0)
-        for r in range(g.rowCount() + 1):
-            g.setRowStretch(r, 0)
-        g.setColumnStretch(cols, 1)
-        g.setRowStretch(rows, 1)
+    def _set_ctype(self, key):
+        """Tur tabini almashtiradi (None = Barchasi)."""
+        self._ctype = key
+        for k, b in self._ctype_btns.items():
+            b.setChecked(k == key)
+        self.refresh_content()
 
     def _recheck_cols(self):
-        """Layout o'rnashgandan keyin ustun sonini qayta tekshiradi.
-        (resize/birinchi ochilish paytida viewport kengligi hali yakuniy emas.)"""
-        if getattr(self, "_cards", None) and \
-                self._content_cols() != getattr(self, "_cards_cols", 0):
-            self._regrid_cards()
+        """Oyna kengligi o'zgarganda to'rni qayta teradi
+        (window.resizeEvent va sahifaga o'tishda chaqiriladi)."""
+        if hasattr(self, "cards_flow"):
+            self.cards_flow._recheck()
 
     def refresh_content(self):
         query = (self.search.text() if hasattr(self, "search") else "").lower().strip()
-        tfilter = self.type_filter.currentData() if hasattr(self, "type_filter") else None
         items = db.get_content()
-        if tfilter:
-            items = [it for it in items if it["type"] == tfilter]
         if query:
             items = [it for it in items
                      if query in " ".join(str(it.get(k) or "").lower()
                                           for k in ("title", "author", "genre"))]
-        # Eski kartochkalarni tozalab, yangilarini teramiz
-        while self.cards_grid.count():
-            old = self.cards_grid.takeAt(0).widget()
-            if old:
-                old.deleteLater()
-        self._cards = []
+        # Tab yorliqlarida joriy (qidiruvga mos) sonlar ko'rinadi
+        counts = {}
         for it in items:
-            self._cards.append(
-                AdminContentCard(it, self.edit_content, self.delete_content))
-        self._regrid_cards()
-        QTimer.singleShot(0, self._recheck_cols)
+            counts[it.get("type")] = counts.get(it.get("type"), 0) + 1
+        self._ctype_btns[None].setText(f"Barchasi ({len(items)})")
+        for t in CONTENT_TYPES:
+            self._ctype_btns[t].setText(
+                f"{TYPE_LABELS[t]} ({counts.get(t, 0)})")
+        if self._ctype:
+            items = [it for it in items if it["type"] == self._ctype]
+        self.cards_flow.set_cards(
+            AdminContentCard(it, self.edit_content, self.delete_content)
+            for it in items)
         self.content_empty.setVisible(not items)
         self.content_count.setText(f"Jami: {len(items)} ta")
+
+    LANG_NAMES = {"uz": "o'zbekcha", "ru": "ruscha", "en": "inglizcha"}
 
     def add_content(self):
         dlg = ContentDialog(self)
@@ -143,7 +123,45 @@ class ContentPageMixin:
             new_id = db.add_content(vals)
             db.log_action("content_added", f"#{new_id} {vals.get('title')!r}")
             self.refresh_content()
+            self._broadcast_sync("content")
             self.statusBar().showMessage("Kontent qo'shildi.", 3000)
+            self._offer_translations(new_id, vals)
+
+    def _offer_translations(self, base_id, vals):
+        """Tilli kontent saqlangach, qolgan tillardagi versiyalarini ham
+        yuklashni taklif qiladi. Versiyalar bitta lang_group'ga bog'lanadi —
+        kioskda joriy tilga mosi ko'rinadi."""
+        if vals.get("lang") not in ("uz", "ru", "en"):
+            return   # "Barcha tillarda" — versiyalar shart emas
+        db.update_content(base_id, {"lang_group": base_id})
+        for code in ("uz", "ru", "en"):
+            if code == vals["lang"]:
+                continue
+            if QMessageBox.question(
+                    self, "Til versiyasi",
+                    f"«{vals.get('title')}» kontentining "
+                    f"{self.LANG_NAMES[code]} versiyasini ham yuklaysizmi?") \
+                    != QMessageBox.StandardButton.Yes:
+                continue
+            # Dialog umumiy maydonlar oldindan to'ldirilgan holda ochiladi —
+            # admin faqat fayl (va kerak bo'lsa tarjima nomi) kiritadi.
+            tmpl = {k: vals.get(k) for k in
+                    ("type", "title", "author", "genre", "category_tab",
+                     "description", "cover_path")}
+            tmpl["lang"] = code
+            tmpl["lang_group"] = base_id
+            vdlg = ContentDialog(self, tmpl)
+            if not vdlg.exec():
+                continue
+            vvals = vdlg.values()
+            vvals["lang_group"] = base_id
+            # Yangi muqova tanlanmagan bo'lsa asl muqova ulashiladi
+            vvals.setdefault("cover_path", vals.get("cover_path"))
+            nid = db.add_content(vvals)
+            db.log_action("content_added",
+                          f"#{nid} {vvals.get('title')!r} ({code})")
+        self.refresh_content()
+        self._broadcast_sync("content")
 
     def edit_content(self, item):
         cid = item["id"]
@@ -156,6 +174,7 @@ class ContentPageMixin:
             db.update_content(cid, dlg.values())
             db.log_action("content_updated", f"#{cid}")
             self.refresh_content()
+            self._broadcast_sync("content")
             self.statusBar().showMessage("Kontent yangilandi.", 3000)
 
     def delete_content(self, item):
@@ -166,4 +185,5 @@ class ContentPageMixin:
             db.delete_content(item["id"])
             db.log_action("content_deleted", f"#{item['id']}")
             self.refresh_content()
+            self._broadcast_sync("content")
             self.statusBar().showMessage("Kontent o'chirildi.", 3000)

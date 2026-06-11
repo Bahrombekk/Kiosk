@@ -2,8 +2,17 @@
 config.py — Server sozlamalari (bir joyda).
 """
 import os
+import sys
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+def _base_dir():
+    """Source rejimida server/ papkasi, exe rejimida exe yonidagi papka."""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+BASE_DIR = _base_dir()
 
 # Ma'lumotlar bazasi fayli (SQLite)
 DB_PATH = os.path.join(BASE_DIR, "data.db")

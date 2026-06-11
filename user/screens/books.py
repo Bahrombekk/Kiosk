@@ -15,6 +15,7 @@ from PyQt6.QtGui import QIcon
 from core import theme as T
 from core.i18n import tr
 from core.threads import track
+from services import stats
 from widgets.card import BookCard, can_read, can_listen, _svg_pixmap
 from widgets.empty import EmptyState
 from widgets.icons import svg_icon
@@ -165,10 +166,13 @@ class BooksScreen(QWidget):
         self._render()
 
     def _filtered(self):
+        from core.i18n import content_visible
         out = []
         tab = TABS[self.active_tab][0]   # DB category_tab kaliti (None=Barchasi)
         for it in self.all_items:
             if it.get("type") not in BOOK_TYPES:
+                continue
+            if not content_visible(it):   # faqat joriy tildagi kontent
                 continue
             if tab is not None and (it.get("category_tab") != tab):
                 continue
@@ -240,6 +244,8 @@ class BooksScreen(QWidget):
     def _read(self, item):
         if self._modal:
             self._modal.close_modal()
+        stats.event("content_open", id=item.get("id"),
+                    title=item.get("title"), type=item.get("type"))
         self._reader = Reader(self.api, item, self.theme_name)
         self._reader.start()
 
@@ -253,6 +259,8 @@ class BooksScreen(QWidget):
         old = getattr(self, "_audio", None)
         if old is not None:
             old.stop_and_close()
+        stats.event("content_open", id=item.get("id"),
+                    title=item.get("title"), type=item.get("type"))
         self._audio = AudioPlayer(self.api, item, self.theme_name)
         self._audio.closed.connect(lambda: setattr(self, "_audio", None))
         self._audio.start()
