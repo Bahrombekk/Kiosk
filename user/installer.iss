@@ -113,6 +113,8 @@ Filename: "{app}\{#WatchdogExe}"; Description: "Kioskni hozir ishga tushirish"; 
 [UninstallDelete]
 ; Runtime'da yozilgan fayllar (uninstaller ularni avtomatik kuzatmaydi)
 Type: files; Name: "{app}\server.txt"
+Type: files; Name: "{app}\trust.json"
+Type: files; Name: "{app}\server_cert.crt"
 Type: files; Name: "{app}\crash.log"
 Type: files; Name: "{app}\crash.log.1"
 Type: filesandordirs; Name: "{app}\logs"
@@ -127,24 +129,41 @@ Filename: "{cmd}"; Parameters: "/C taskkill /IM {#WatchdogExe} /F"; Flags: runhi
 Filename: "{cmd}"; Parameters: "/C taskkill /IM {#AppExe} /F"; Flags: runhidden; RunOnceId: "StopKiosk"
 
 ; ----------------------------------------------------------------------------
-;  Server IP kiritish sahifasi + server.txt yozish
+;  Xavfsiz ulanish: trust.json (tavsiya) yoki qo'lda URL+kalit (eski usul)
+;
+;  trust.json — server admin oynasidan eksport qilinadi. Tanlansa:
+;    * {app}\trust.json ga nusxalanadi (kiosk serverni IMZO bilan topadi),
+;    * ichidagi TLS sertifikat Windows "Trusted Root"ga qo'shiladi
+;      (HTTPS/WSS va VLC striming self-signed sertifikatga ishonadi).
+;  Berilmasa — eski usul: server.txt ga URL+kalit yoziladi (HTTP).
 ; ----------------------------------------------------------------------------
 [Code]
 var
+  TrustPage: TInputFileWizardPage;
   ServerPage: TInputQueryWizardPage;
 
 procedure InitializeWizard();
 begin
-  ServerPage := CreateInputQueryPage(wpSelectDir,
-    'Server manzili',
-    'Kiosk qaysi serverga ulanadi?',
-    'Server kompyuterining IP manzili va portini kiriting.' + #13#10 +
-    'Masalan: http://192.168.136.69:8765' + #13#10 + #13#10 +
-    'API kalitni server admin oynasining Boshqaruv sahifasidan' + #13#10 +
-    '"Nusxalash" tugmasi bilan oling.');
+  TrustPage := CreateInputFilePage(wpSelectDir,
+    'Kiosk ishonch fayli (tavsiya etiladi)',
+    'Server bilan xavfsiz, shifrlangan ulanish uchun trust.json',
+    'Server admin oynasi -> Boshqaruv -> "Kiosk ishonch faylini eksport" ' +
+    'tugmasi bilan olingan trust.json faylini tanlang.' + #13#10 + #13#10 +
+    'Bu fayl bo''lsa server IP va kalitni qo''lda yozish SHART EMAS: kiosk ' +
+    'serverni imzolangan signal orqali topadi va ulanishni sertifikatga ' +
+    'pin qiladi (eng xavfsiz). Faylingiz bo''lmasa — keyingi sahifada IP ' +
+    'kiriting.');
+  TrustPage.Add('Ishonch fayli:', 'JSON fayllar|*.json|Barcha fayllar|*.*', '.json');
+
+  ServerPage := CreateInputQueryPage(TrustPage.ID,
+    'Server manzili (ixtiyoriy)',
+    'trust.json tanlamagan bo''lsangiz to''ldiring',
+    'Yuqorida trust.json tanlagan bo''lsangiz, bu sahifani BO''SH qoldiring.' +
+    #13#10 + #13#10 +
+    'Aks holda server IP/port va API kalitni kiriting (eski usul, HTTP).' +
+    #13#10 + 'Masalan: http://192.168.136.69:8765');
   ServerPage.Add('Server manzili (URL):', False);
   ServerPage.Add('API kalit:', False);
-  ServerPage.Values[0] := 'http://192.168.136.69:8765';
 end;
 
 function NormalizeUrl(S: string): string;
@@ -155,38 +174,64 @@ begin
   Result := S;
 end;
 
-// Server manzili va API kalitni bo'sh qoldirmaslik
+// trust.json YOKI (URL+kalit) bo'lishi shart — ikkalasi ham bo'sh bo'lmasin
 function NextButtonClick(CurPageID: Integer): Boolean;
 begin
   Result := True;
   if CurPageID = ServerPage.ID then
   begin
-    if Trim(ServerPage.Values[0]) = '' then
+    if (Trim(TrustPage.Values[0]) = '') and (Trim(ServerPage.Values[0]) = '') then
     begin
-      MsgBox('Iltimos, server manzilini kiriting.', mbError, MB_OK);
+      MsgBox('Avvalgi sahifada trust.json tanlang YOKI bu yerda server ' +
+             'manzilini kiriting.', mbError, MB_OK);
       Result := False;
     end
-    else if Trim(ServerPage.Values[1]) = '' then
+    else if (Trim(TrustPage.Values[0]) = '') and (Trim(ServerPage.Values[1]) = '') then
     begin
-      MsgBox('Iltimos, API kalitni kiriting.' + #13#10 +
-             'U server admin oynasining Boshqaruv sahifasida ko''rinadi.',
-             mbError, MB_OK);
+      MsgBox('API kalitni kiriting (yoki trust.json tanlang).', mbError, MB_OK);
       Result := False;
     end;
   end;
 end;
 
-// O'rnatish tugagach server.txt ni Kiosk.exe yoniga yozamiz
+// O'rnatish tugagach: trust.json nusxalash + sertifikatni Root'ga qo'shish,
+// va/yoki server.txt yozish.
 procedure CurStepChanged(CurStep: TSetupStep);
 var
-  Path: string;
+  AppDir, TrustSrc, CertPath, PS: string;
+  RC: Integer;
 begin
   if CurStep = ssPostInstall then
   begin
-    Path := ExpandConstant('{app}\server.txt');
-    SaveStringToFile(Path,
-      '# Kiosk server manzili. Tahrirlab qayta ishga tushiring (qayta o''rnatish shart emas).' + #13#10 +
-      NormalizeUrl(ServerPage.Values[0]) + #13#10 +
-      'key=' + Trim(ServerPage.Values[1]) + #13#10, False);
+    AppDir := ExpandConstant('{app}');
+    TrustSrc := Trim(TrustPage.Values[0]);
+
+    if TrustSrc <> '' then
+    begin
+      // 1) trust.json -> {app}\trust.json
+      FileCopy(TrustSrc, AppDir + '\trust.json', False);
+      // 2) Sertifikatni ajratib (PowerShell JSON o'qiydi) Trusted Root'ga
+      //    qo'shamiz — VLC striming ham, requests/ws ham ishonsin.
+      CertPath := AppDir + '\server_cert.crt';
+      PS := '$ErrorActionPreference=''Stop'';' +
+            '$j=Get-Content -Raw -LiteralPath ''' + AppDir + '\trust.json'' | ConvertFrom-Json;' +
+            'if($j.cert_pem){[IO.File]::WriteAllText(''' + CertPath + ''',$j.cert_pem);' +
+            'certutil -addstore -f Root ''' + CertPath + '''}';
+      if (not Exec('powershell.exe',
+            '-NoProfile -ExecutionPolicy Bypass -Command "' + PS + '"',
+            '', SW_HIDE, ewWaitUntilTerminated, RC)) or (RC <> 0) then
+        MsgBox('Diqqat: server sertifikatini Trusted Root''ga qo''shib ' +
+               'bo''lmadi. Kiosk ishlaydi, lekin video striming self-signed ' +
+               'sertifikatda muammo berishi mumkin (lokal kesh baribir ' +
+               'ishlaydi).', mbInformation, MB_OK);
+    end;
+
+    // URL kiritilgan bo'lsa server.txt (override / eski HTTP usul). trust.json
+    // berilgan bo'lsa va URL bo'sh bo'lsa — yozmaymiz (discovery topadi).
+    if Trim(ServerPage.Values[0]) <> '' then
+      SaveStringToFile(AppDir + '\server.txt',
+        '# Kiosk server manzili. Tahrirlab qayta ishga tushiring (qayta o''rnatish shart emas).' + #13#10 +
+        NormalizeUrl(ServerPage.Values[0]) + #13#10 +
+        'key=' + Trim(ServerPage.Values[1]) + #13#10, False);
   end;
 end;

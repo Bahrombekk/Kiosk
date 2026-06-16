@@ -31,7 +31,14 @@ a = Analysis(
     pathex=[],
     binaries=binaries,
     datas=datas,
-    hiddenimports=[],
+    hiddenimports=[
+        # Beacon imzosini tekshirish (trust.py) — lazy import.
+        "cryptography",
+        "cryptography.hazmat.bindings._rust",
+        "cryptography.hazmat.primitives.asymmetric.ed25519",
+        # Real-time kanal
+        "websockets",
+    ],
     hookspath=[],
     runtime_hooks=[],
     excludes=["tkinter"],

@@ -16,6 +16,7 @@ import requests
 
 from core import cache
 from core import config
+from core import netpin
 
 log = logging.getLogger(__name__)
 
@@ -61,14 +62,16 @@ class ApiClient:
         Faqat ulanish/timeout xatolarida qayta urinadi — HTTP 404/500 kabi
         javoblar retry qilinmaydi (raise_for_status keyin tashlaydi).
         MUHIM: requests.Session ishlatilmaydi — bitta ApiClient bir nechta
-        worker-QThread'dan chaqiriladi, Session esa thread-safe emas.
+        worker-QThread'dan chaqiriladi, Session esa thread-safe emas. netpin
+        har chaqiruvда yangi (qisqa umrli) Session yaratadi — pin bilan ham
+        thread-safe qoladi.
         """
         url = f"{self.base_url}{path}"
         delay = 0.4
         for attempt in range(retries + 1):
             try:
-                r = requests.get(url, timeout=self.timeout,
-                                 headers=self._headers, **kwargs)
+                r = netpin.get(url, timeout=self.timeout,
+                               headers=self._headers, **kwargs)
                 if r.status_code == 401:
                     # Aniq sabab logga — operator darhol tushunsin
                     log.error(
@@ -117,15 +120,28 @@ class ApiClient:
         return f"{self.base_url}/api/stream/{content_id}{self._url_key}"
 
     def play_url(self, content_id):
-        """Ijro manzili: lokal keshda tayyor nusxa bo'lsa — fayl yo'li
-        (tarmoqsiz, serverga yuk tushmaydi), aks holda striming URL."""
+        """Pleyer (LibVLC/Qt) uchun ijro manzili:
+          1) lokal keshda tayyor fayl bo'lsa — fayl yo'li (tarmoqsiz);
+          2) TLS (https) bo'lsa — LOKAL PROXY URL: LibVLC self-signed
+             sertifikatni rad etadi, shuning uchun pleyerga 127.0.0.1 dagi
+             oddiy http beriladi (proxy serverdan pinned HTTPS bilan oladi);
+          3) aks holda (http) — to'g'ridan-to'g'ri striming."""
         from services import media_cache
-        return media_cache.local_path(content_id) or self.stream_url(content_id)
+        local = media_cache.local_path(content_id)
+        if local:
+            return local
+        from core import config
+        if config.is_tls():
+            from services import stream_proxy
+            url = stream_proxy.play_proxy_url(content_id)
+            if url:
+                return url
+        return self.stream_url(content_id)
 
     def heartbeat(self, info):
         """Kiosk o'zini serverga tanitadi (admin "Kiosklar" jadvali uchun)."""
-        requests.post(f"{self.base_url}/api/heartbeat", json=info,
-                      headers=self._headers, timeout=self.timeout)
+        netpin.post(f"{self.base_url}/api/heartbeat", json=info,
+                    headers=self._headers, timeout=self.timeout)
 
     def get_book_text(self, content_id):
         """Kitob matni (boblar bilan) — o'qilgan kitoblar oflaynda ham ochiladi."""
@@ -138,8 +154,20 @@ class ApiClient:
         return self._cached("ads", lambda: self._get("/api/ads").json())
 
     def ad_media_url(self, ad_id):
-        """Reklama media manzili (rasm yoki video striming)."""
+        """Reklama media manzili (rasm uchun — _Fetcher netpin bilan oladi)."""
         return f"{self.base_url}/api/ads/{ad_id}/media{self._url_key}"
+
+    def ad_media_play_url(self, ad_id):
+        """Video reklama pleyeri (Qt Multimedia) uchun — TLS'da lokal proxy
+        (self-signed sertifikatni pleyer rad etadi; play_url bilan bir xil
+        sabab)."""
+        from core import config
+        if config.is_tls():
+            from services import stream_proxy
+            url = stream_proxy.ad_proxy_url(ad_id)
+            if url:
+                return url
+        return self.ad_media_url(ad_id)
 
     def get_sites(self):
         """Saytlar ro'yxati."""

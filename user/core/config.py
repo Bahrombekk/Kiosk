@@ -57,17 +57,44 @@ def _read_server_txt():
     return url, key, extra
 
 
-_TXT_URL, _TXT_KEY, _TXT_EXTRA = _read_server_txt()
+def _read_trust_json():
+    """trust.json'dagi url/api_key'ni qaytaradi (server.txt'ga muqobil/zaxira
+    manba — o'rnatuvchi qo'ygan ishonch lavhasi). Kriptografik material
+    (public_key, cert) core/trust.py orqali o'qiladi; bu yerda faqat ulanish
+    uchun url va kalit kerak. Cycle bo'lmasin uchun JSON to'g'ridan o'qiladi."""
+    import json
+    try:
+        with open(os.path.join(_base_dir(), "trust.json"), encoding="utf-8") as f:
+            t = json.load(f)
+        return (t.get("url") or "").strip() or None, t.get("api_key") or None
+    except (OSError, ValueError):
+        return None, None
 
-# Server manzili. Statik IP tavsiya etiladi (TZ 11.3). Ustuvorlik:
-#   1) KIOSK_SERVER muhit o'zgaruvchisi  2) server.txt  3) default
+
+_TXT_URL, _TXT_KEY, _TXT_EXTRA = _read_server_txt()
+_TRUST_URL, _TRUST_KEY = _read_trust_json()
+
+# Server manzili. Statik IP tavsiya etiladi (TZ 11.3), lekin endi qo'lda
+# yozish SHART EMAS — yozilmasa discovery (imzolangan UDP beacon) topadi.
+# Ustuvorlik:
+#   1) KIOSK_SERVER env  2) server.txt  3) trust.json  4) discovery (runtime)
+# Hech biri bo'lmasa — vaqtincha standart (discovery resolve qilmaguncha).
 SERVER_URL = (os.environ.get("KIOSK_SERVER")
               or _TXT_URL
-              or "http://192.168.136.69:8765")
+              or _TRUST_URL
+              or "https://192.168.136.69:8765")
+
+# Discovery topgan manzilmi? (qo'lda berilmagan bo'lsa True) — main shu holatda
+# resolve_server() ni chaqiradi.
+SERVER_CONFIGURED = bool(os.environ.get("KIOSK_SERVER")
+                         or _TXT_URL or _TRUST_URL)
 
 # API kalit — server admin oynasida ko'rinadi, o'rnatishda kiritiladi.
-# Ustuvorlik: 1) KIOSK_API_KEY env  2) server.txt'dagi key= qatori
-API_KEY = os.environ.get("KIOSK_API_KEY") or _TXT_KEY or ""
+# Ustuvorlik: 1) KIOSK_API_KEY env  2) server.txt  3) trust.json
+API_KEY = (os.environ.get("KIOSK_API_KEY") or _TXT_KEY or _TRUST_KEY or "")
+
+# Discovery UDP porti (server config.DISCOVERY_PORT bilan bir xil bo'lishi shart)
+DISCOVERY_PORT = int(os.environ.get("KIOSK_DISCOVERY_PORT", "8766"))
 
 # Kiosk raqami va xona/vagon raqami — o'rnatuvchi server.txt'ga yozadi
 # (kiosk= / xona= qatorlari); admin "Kiosklar" jadvalida ko'rinadi.
@@ -81,11 +108,33 @@ ROOM_NO = (os.environ.get("KIOSK_ROOM")
 MEDIA_CACHE_DISABLED = (_TXT_EXTRA.get("cache", "").strip() == "0"
                         or os.environ.get("KIOSK_MEDIA_CACHE") == "0")
 
-# WebSocket manzili (SERVER_URL'dan avtomatik hosil qilinadi: http->ws).
-# Kalit query param sifatida ketadi — server tomonda REST bilan bir xil
-# tekshiriladi, websockets kutubxonasiga header berish shart emas.
-WS_URL = (SERVER_URL.replace("http://", "ws://").replace("https://", "wss://")
-          + "/ws" + (f"?k={API_KEY}" if API_KEY else ""))
+# WebSocket manzili (SERVER_URL'dan avtomatik hosil qilinadi: http->ws,
+# https->wss). Kalit query param sifatida ketadi — server tomonda REST bilan
+# bir xil tekshiriladi, websockets kutubxonasiga header berish shart emas.
+def _build_ws_url():
+    return (SERVER_URL.replace("http://", "ws://").replace("https://", "wss://")
+            + "/ws" + (f"?k={API_KEY}" if API_KEY else ""))
+
+
+WS_URL = _build_ws_url()
+
+
+def is_tls():
+    """Joriy server manzili shifrlangan (https/wss) kanalmi?"""
+    return SERVER_URL.lower().startswith("https://")
+
+
+def set_server(url, api_key=None):
+    """Serverni runtime'da o'rnatadi (discovery topgan/tanlangan manzil).
+
+    SERVER_URL, API_KEY va WS_URL'ni yangilaydi. ApiClient/WSClient bu
+    qiymatlarni o'z konstruktorida o'qiganlari uchun — shu chaqiruv ULARDAN
+    OLDIN (main'da, MainWindow yaratilishidan oldin) bajarilishi kerak."""
+    global SERVER_URL, API_KEY, WS_URL
+    SERVER_URL = url.rstrip("/")
+    if api_key:
+        API_KEY = api_key
+    WS_URL = _build_ws_url()
 
 # HTTP so'rovlar uchun timeout (soniya)
 REQUEST_TIMEOUT = 5
@@ -95,6 +144,13 @@ RECONNECT_INTERVAL_MS = 5000
 
 # Boshlang'ich mavzu: "light" yoki "dark"
 DEFAULT_THEME = "light"
+
+# --- VAQTINCHALIK: kiosk rejimni o'chirish (oddiy ramkali oyna) ---
+# WINDOWED=True bo'lsa: oyna ramkali (minimize/maximize/close tugmalari),
+# fullscreen emas, OS klaviatura qulfi (Win/Alt+Tab) o'rnatilmaydi — ishlab
+# chiqish/sozlash payti chiqib-kirishni osonlashtiradi.
+# Kiosk rejimga qaytarish: KIOSK_WINDOWED=0 env yoki bu qiymatni False qiling.
+WINDOWED = os.environ.get("KIOSK_WINDOWED", "1") != "0"
 
 # --- Maxfiy texnik chiqish (kiosk qulflangan bo'lsa ham ishlaydi) ---
 # Navbar'dagi SOAT ustiga EXIT_TAPS marta tez-tez tegilsa PIN klaviatura

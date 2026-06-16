@@ -176,20 +176,48 @@ class ContentDialog(QDialog):
         btns.rejected.connect(self.reject)
         lay.addWidget(btns)
 
+    # Turga mos yorliqlar (nomi / muallif / muqova) — har turda mazmunan to'g'ri
+    # so'z chiqsin (musiqada "Ijrochi", kinoda "Rejissor", kitobda "Muallif").
+    _FIELD_LABELS = {
+        "movie":     ("Kino nomi", "Rejissor", "Afisha (poster)"),
+        "cartoon":   ("Multfilm nomi", "Studiya", "Afisha (poster)"),
+        "music":     ("Qo'shiq nomi", "Ijrochi", "Albom muqovasi"),
+        "book":      ("Kitob nomi", "Muallif", "Muqova"),
+        "audiobook": ("Audiokitob nomi", "Muallif", "Muqova"),
+    }
+
+    def _set_row_label(self, widget, text):
+        lbl = self.form.labelForField(widget)
+        if lbl is not None:
+            lbl.setText(text)
+
     def _on_type_changed(self):
-        """Turga qarab faqat mos maydonlarni ko'rsatadi (ortiqcha ish bo'lmasin)
-        va Janr/Tab takliflarini shu turga moslab yangilaydi."""
+        """Turga qarab faqat mos maydonlarni ko'rsatadi (ortiqcha ish bo'lmasin),
+        yorliqlarni turga moslaydi va Janr/Tab takliflarini yangilaydi."""
         t = self.type.currentData()
+        is_book = t == "book"
+        # Kitob endi AUDIO ham qabul qiladi (matn + audio bitta yozuvda).
+        # Sahifalar va Tab kitobda yashirin (ortiqcha).
         has_dur = t in ("movie", "cartoon", "music", "audiobook")
-        has_media = t in ("movie", "cartoon", "music", "audiobook")
-        has_pages = t == "book"
+        has_media = t in ("movie", "cartoon", "music", "audiobook") or is_book
         has_text = t in ("book", "audiobook")
         self.form.setRowVisible(self.duration, has_dur)
-        self.form.setRowVisible(self.pages, has_pages)
+        self.form.setRowVisible(self.pages, False)        # Sahifalar olib tashlandi
         self.form.setRowVisible(self.media_widget, has_media)
         self.form.setRowVisible(self.text_widget, has_text)
+        self.form.setRowVisible(self.tab, not is_book)    # Tab kitobda yashirin
         # Lokal kesh faqat media fayli bor turlarga tegishli
         self.form.setRowVisible(self.cacheable, has_media)
+        # Turga mos yorliqlar
+        tl, al, cl = self._FIELD_LABELS.get(t, ("Nomi", "Muallif", "Muqova rasmi"))
+        self._set_row_label(self.title, tl + ":")
+        self._set_row_label(self.author, al + ":")
+        self._set_row_label(self.cover_widget, cl + ":")
+        # Kitobda media — bu AUDIO; boshqalarda umumiy media
+        self._set_row_label(self.media_widget,
+                            "Audio fayl (ixtiyoriy):" if is_book else "Media fayl:")
+        # Musiqa uchun "Ijrochi" placeholder ham mos bo'lsin
+        self.author.setPlaceholderText(al)
         self._fill_suggestions(self.genre, DEFAULT_GENRES.get(t, ()),
                                "genre", t)
         self._fill_suggestions(self.tab, DEFAULT_TABS.get(t, ()),
@@ -232,8 +260,29 @@ class ContentDialog(QDialog):
         if path:
             self._set_file(kind, path)
 
+    @staticmethod
+    def _looks_like_webpage(path):
+        """Fayl aslida HTML sahifa (saytdan xato yuklangan) bo'lsa True —
+        media/rasm o'rniga .mp3/.mp4 deb saqlangan veb-sahifani ushlaydi."""
+        try:
+            with open(path, "rb") as f:
+                head = f.read(64).lstrip().lower()
+        except OSError:
+            return False
+        return (head.startswith(b"<!doctype") or head.startswith(b"<html")
+                or head.startswith(b"<?xml") or head.startswith(b"<head"))
+
     def _set_file(self, kind, path):
         """Tanlangan/tashlangan faylni biriktiradi va aqlli to'ldirishni bajaradi."""
+        # Media/rasm o'rniga HTML sahifa tanlangan bo'lsa (saytdan xato yuklash)
+        # — kioskda ochilmaydi. Darrov ogohlantiramiz va biriktirmaymiz.
+        if kind in ("media", "cover") and self._looks_like_webpage(path):
+            QMessageBox.warning(
+                self, "Noto'g'ri fayl",
+                "Bu media/rasm fayl emas — HTML sahifa (saytdan xato yuklangan "
+                "bo'lishi mumkin).\n\nHaqiqiy .mp3/.mp4/.jpg faylni tanlang "
+                "(saytda fayl ustida o'ng tugma → 'Faylni saqlash').")
+            return
         setattr(self, kind + "_src", path)
         label = {"media": self.file_label, "cover": self.cover_label,
                  "text": self.text_label}[kind]
@@ -305,10 +354,13 @@ class ContentDialog(QDialog):
                     "faylsiz kioskda ochilmaydi.")
                 return
         elif t == "book":
-            if not (self.text_src or self.item.get("text_path")):
+            has_text = self.text_src or self.item.get("text_path")
+            has_audio = self.media_src or self.item.get("file_path")
+            if not (has_text or has_audio):
                 QMessageBox.warning(
                     self, "Xato",
-                    "Kitob matn fayli tanlanmagan (.txt yoki .json).")
+                    "Kitob uchun kamida bittasini tanlang: matn fayli "
+                    "(.txt/.json) yoki audio fayl.")
                 return
         self.accept()
 

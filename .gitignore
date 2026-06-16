@@ -50,6 +50,19 @@ content/media/
 *.env
 # server.txt'da API kalit bor — git'ga tushmasin (installer/dev yozadi)
 user/server.txt
+# Server kriptografik shaxsi — security.py birinchi ishga tushishda yaratadi.
+# Maxfiy imzo kaliti va TLS kaliti HECH QACHON git'ga tushmasin.
+signing_key.pem
+server_key.pem
+server_cert.pem
+server/signing_key.pem
+server/server_key.pem
+server/server_cert.pem
+# Kiosk ishonch fayli (installer joylaydi — ichida API kalit bor)
+trust.json
+server_cert.crt
+user/trust.json
+user/server_cert.crt
 
 # Runtime crash log (main.py yozadi)
 crash.log
@@ -61,6 +74,18 @@ cache/
 server/logs/
 user/logs/
 user/cache/
+
+# Bekat xaritasi — yuklab olinadigan (katta) assetlar (fetch_map_assets.py)
+server/assets/map/vendor/
+server/assets/map/fonts/
+server/assets/map/data/
+# go-pmtiles binari (xaritani yangilab olish uchun, ~50MB)
+server/.tools/
+
+# Vaqtinchalik / ishchi skrinshot fayllari (repo ildizida)
+/image.png
+/image*.png
+/screenshot*.png
 
 # IDE / OS
 .vscode/

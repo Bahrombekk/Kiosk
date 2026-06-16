@@ -513,9 +513,10 @@ class _HomeCanvas(QWidget):
         # Tavsiyalar ham joriy interfeys tiliga mos bo'lsin (qat'iy filtr)
         from core.i18n import content_visible
         content = [c for c in content if content_visible(c)]
+        # "Tavsiya etamiz" karuselida FAQAT kino (musiqa/multfilm chiqmaydi)
         recs = [c for c in content if c.get("is_recommended")
-                and c.get("type") in VIDEO_TYPES]
-        others = [c for c in content if c.get("type") in VIDEO_TYPES
+                and c.get("type") == "movie"]
+        others = [c for c in content if c.get("type") == "movie"
                   and not c.get("is_recommended")]
         self.rec_movies = recs if len(recs) >= 2 else recs + others
         self.movie_idx = 0
@@ -682,13 +683,29 @@ class _HomeCanvas(QWidget):
     def _play_movie(self, item):
         if self._modal:
             self._modal.close_modal()
+        # Audio musiqa — qora video emas, AudioPlayer (muqova + to'lqin)
+        from screens.videos import _is_audio_music
+        if _is_audio_music(item):
+            old = getattr(self, "_audio", None)
+            if old is not None:
+                old.stop_and_close()
+            old_v = getattr(self, "_player", None)
+            if old_v is not None:
+                old_v.stop_and_close()
+            stats.event("content_open", id=item.get("id"),
+                        title=item.get("title"), type=item.get("type"))
+            self._audio = AudioPlayer(self.api, item, self.theme_name, host=self.window())
+            self._audio.closed.connect(lambda: setattr(self, "_audio", None))
+            self._audio.start()
+            return
         from players.video import VideoPlayer
         old = getattr(self, "_player", None)
         if old is not None:
             old.stop_and_close()
         stats.event("content_open", id=item.get("id"),
                     title=item.get("title"), type=item.get("type"))
-        self._player = VideoPlayer(self.api.play_url(item["id"]), item.get("title", ""))
+        self._player = VideoPlayer(self.api.play_url(item["id"]),
+                                   item.get("title", ""), host=self.window())
         # "Media" reklama algoritmida kino boshida/o'rtasida/oxirida reklama
         # chiqadi (boshqa rejimlarda hook hech narsa qilmaydi).
         mgr = getattr(self.window(), "ad_manager", None)
@@ -702,7 +719,8 @@ class _HomeCanvas(QWidget):
             stats.event("content_open", id=self.rec_book.get("id"),
                         title=self.rec_book.get("title"),
                         type=self.rec_book.get("type"))
-            self._reader = Reader(self.api, self.rec_book, self.theme_name)
+            self._reader = Reader(self.api, self.rec_book, self.theme_name,
+                                  host=self.window())
             self._reader.start()
 
     def _listen_book(self):
@@ -710,7 +728,8 @@ class _HomeCanvas(QWidget):
             old = getattr(self, "_audio", None)
             if old is not None:
                 old.stop_and_close()
-            self._audio = AudioPlayer(self.api, self.rec_book, self.theme_name)
+            self._audio = AudioPlayer(self.api, self.rec_book, self.theme_name,
+                                      host=self.window())
             self._audio.closed.connect(lambda: setattr(self, "_audio", None))
             self._audio.start()
 

@@ -25,6 +25,17 @@ from widgets.modal import Modal
 from widgets.cover import CoverLabel
 from widgets.spinner import StatusLabel
 from players.video import VideoPlayer
+from players.audio import AudioPlayer
+
+# Audio fayl kengaytmalari — "music" turi audio bo'lsa AudioPlayer (muqova +
+# playlist), video klip (mp4...) bo'lsa VideoPlayer ishlatiladi.
+AUDIO_EXT = (".mp3", ".m4a", ".aac", ".wav", ".ogg", ".flac", ".opus", ".wma")
+
+
+def _is_audio_music(item):
+    if item.get("type") != "music":
+        return False
+    return (item.get("file_path") or "").lower().endswith(AUDIO_EXT)
 
 # Tab nomi -> qaysi turlar ko'rsatiladi (+ dizayndagi inline SVG ikonka)
 # Ikonkalar Videolar.html dizaynidan aynan ko'chirilgan.
@@ -50,7 +61,8 @@ _SEARCH_SVG = ("<svg viewBox='0 0 24 24' fill='none'>"
 
 # (yorliq tr-kaliti, content turlari, ikonka) — yorliq i18n orqali tarjima qilinadi
 TABS = [
-    ("common.tab_all",      ("movie", "cartoon", "music"), _GRID_SVG),
+    # "Barchasi" — faqat video (kino+multfilm); musiqa o'zining tabida
+    ("common.tab_all",      ("movie", "cartoon"),          _GRID_SVG),
     ("videos.tab.movies",   ("movie",),                    _FILM_SVG),
     ("videos.tab.cartoons", ("cartoon",),                  _WAND_SVG),
     ("videos.tab.music",    ("music",),                    _MUSIC_SVG),
@@ -100,6 +112,7 @@ class VideosScreen(QWidget):
         self._cols = 0
         self._loader = None
         self._player = None
+        self._audio = None
         self._modal = None
         self._build()
 
@@ -353,6 +366,10 @@ class VideosScreen(QWidget):
     def _play(self, item):
         if self._modal:
             self._modal.close_modal()
+        # Audio musiqa — alohida (muqova + to'lqin + playlist) pleyer
+        if _is_audio_music(item):
+            self._play_music(item)
+            return
         url = self.api.play_url(item["id"])   # lokal kesh bo'lsa — fayl
         # Oflaynda striming ishlamaydi — lekin lokal nusxa bo'lsa ijro etamiz
         if self.api.offline and url.startswith("http"):
@@ -360,11 +377,10 @@ class VideosScreen(QWidget):
             return
         # Avvalgi pleyer hali ochiq bo'lsa — yopamiz (VLC resurslari bo'shasin va
         # ishlab turgan obyekt referenssiz qolib GC tomonidan abort qilinmasin).
-        if self._player is not None:
-            self._player.stop_and_close()
+        self._close_players()
         stats.event("content_open", id=item.get("id"),
                     title=item.get("title"), type=item.get("type"))
-        self._player = VideoPlayer(url, item.get("title", ""))
+        self._player = VideoPlayer(url, item.get("title", ""), host=self.window())
         # "Media" reklama algoritmida kino boshida/o'rtasida/oxirida reklama
         # chiqadi (boshqa rejimlarda hook hech narsa qilmaydi).
         mgr = getattr(self.window(), "ad_manager", None)
@@ -375,6 +391,31 @@ class VideosScreen(QWidget):
 
     def _on_player_closed(self):
         self._player = None
+
+    def _close_players(self):
+        """Ochiq video/audio pleyerni yopadi (VLC resurslari bo'shasin)."""
+        if self._player is not None:
+            self._player.stop_and_close()
+        if self._audio is not None:
+            self._audio.stop_and_close()
+
+    def _play_music(self, item):
+        """Audio musiqani AudioPlayer'da playlist bilan ochadi: playlist =
+        joriy ko'rinishdagi barcha audio-musiqa qo'shiqlari (shu tartibda)."""
+        url = self.api.play_url(item["id"])
+        if self.api.offline and str(url).startswith("http"):
+            self.status.text(tr("videos.offline"))
+            return
+        tracks = [it for it in self._filtered() if _is_audio_music(it)] or [item]
+        idx = next((i for i, t in enumerate(tracks)
+                    if t.get("id") == item.get("id")), 0)
+        self._close_players()
+        stats.event("content_open", id=item.get("id"),
+                    title=item.get("title"), type=item.get("type"))
+        self._audio = AudioPlayer(self.api, item, self.theme_name,
+                                  playlist=tracks, index=idx, host=self.window())
+        self._audio.closed.connect(lambda: setattr(self, "_audio", None))
+        self._audio.start()
 
     # ---------- Mavzu ----------
     def apply_theme(self, name):
@@ -460,7 +501,11 @@ class _VideoDetail(Modal):
         # --- Header afisha: to'liq kenglik, tepa burchaklari yumaloq ---
         self.cover = CoverLabel(self._pw, self._img_h,
                                 radius=T.RADIUS["card"], round_top_only=True)
-        self.cover.load(api.cover_url(item["id"]))
+        # Muqovasiz musiqa — gradient + nota (kartochkalar bilan bir xil)
+        if item.get("type") == "music" and not item.get("cover_path"):
+            self.cover.music_placeholder()
+        else:
+            self.cover.load(api.cover_url(item["id"]))
         self.body.addWidget(self.cover)
 
         # --- Tarkib (padding bilan) ---

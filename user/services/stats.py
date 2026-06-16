@@ -128,7 +128,8 @@ class _Flusher(QThread):
                 # fayl faqat buzilgan qatorlardan iborat — tozalaymiz
                 self._drop(len(batch))
                 return
-            r = requests.post(
+            from core import netpin
+            r = netpin.post(
                 f"{self.api.base_url}/api/stats",
                 json={"device_id": DEVICE_ID, "events": events},
                 headers=self.api._headers, timeout=self.api.timeout)

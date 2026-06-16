@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8" />
+  <title>Bekat xaritasi</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Uslub: lokal vendor (oflayn), bo'lmasa CDN (online). Ikkalasi ham
+       qo'shilsa zarari yo'q — qaysi yuklansa shu ishlaydi. -->
+  <link rel="stylesheet" href="vendor/maplibre-gl.css" />
+  <link rel="stylesheet"
+        href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+  <style>
+    html, body, #map { height: 100%; margin: 0; }
+    #map { background: #e6eef5; }
+    .hint {
+      position: absolute; left: 10px; bottom: 10px; z-index: 5;
+      background: rgba(15,23,42,0.72); color: #fff; font: 13px Segoe UI, Arial;
+      padding: 6px 10px; border-radius: 8px; max-width: 70%;
+    }
+    .err {
+      position: absolute; inset: 0; display: flex; align-items: center;
+      justify-content: center; text-align: center; padding: 24px;
+      font: 15px Segoe UI, Arial; color: #334155;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div class="hint">Xaritaga bosib bekat joyini belgilang (yoki bekatni ro'yxatdan tanlang).</div>
+
+  <script>
+    // Skriptni lokal vendor'dan, bo'lmasa CDN'dan yuklaydi.
+    function loadScript(local, cdn) {
+      return new Promise(function (resolve, reject) {
+        var s = document.createElement('script');
+        s.src = local;
+        s.onload = function () { resolve(); };
+        s.onerror = function () {
+          var c = document.createElement('script');
+          c.src = cdn;
+          c.onload = function () { resolve(); };
+          c.onerror = function () { reject(new Error('yuklanmadi: ' + cdn)); };
+          document.head.appendChild(c);
+        };
+        document.head.appendChild(s);
+      });
+    }
+
+    function fileExists(url) {
+      return fetch(url, { method: 'HEAD' })
+        .then(function (r) { return r.ok; })
+        .catch(function () { return false; });
+    }
+
+    var ML = 'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js';
+    var PM = 'https://unpkg.com/pmtiles@3.2.1/dist/pmtiles.js';
+    var TH = 'https://unpkg.com/protomaps-themes-base@4.0.1/dist/protomaps-themes-base.js';
+
+    var map = null, marker = null, ready = false, queue = [];
+    var ORIGIN = location.origin;   // http://127.0.0.1:<port>
+
+    // Qt chaqiruvlari xarita yuklanishidan oldin kelsa — navbatga qo'yamiz
+    function whenReady(fn) { if (ready) fn(); else queue.push(fn); }
+
+    function showError(msg) {
+      var d = document.createElement('div');
+      d.className = 'err';
+      d.textContent = msg;
+      document.body.appendChild(d);
+    }
+
+    function pick(lat, lng) {
+      // Qt tomoni document.title ni "pick:lat,lng" ko'rinishida o'qiydi.
+      document.title = 'pick:' + lat.toFixed(6) + ',' + lng.toFixed(6);
+    }
+
+    // Qt -> sahifa: markerni qo'yish/ko'chirish
+    window.setMarker = function (lat, lng, fly) {
+      whenReady(function () {
+        if (!marker) {
+          marker = new maplibregl.Marker({ color: '#2563EB', draggable: true })
+            .setLngLat([lng, lat]).addTo(map);
+          marker.on('dragend', function () {
+            var p = marker.getLngLat(); pick(p.lat, p.lng);
+          });
+        } else {
+          marker.setLngLat([lng, lat]);
+        }
+        if (fly) map.flyTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 9) });
+      });
+    };
+
+    // Qt -> sahifa: barcha bekatlarni kichik nuqta sifatida ko'rsatadi
+    window.setStations = function (arr) {
+      whenReady(function () {
+        if (!arr) return;
+        arr.forEach(function (s) {
+          var el = document.createElement('div');
+          el.style.cssText = 'width:9px;height:9px;border-radius:50%;'
+            + 'background:#10b981;border:2px solid #fff;cursor:pointer;'
+            + 'box-shadow:0 0 2px rgba(0,0,0,.4)';
+          el.title = s.name;
+          new maplibregl.Marker({ element: el })
+            .setLngLat([s.lng, s.lat]).addTo(map);
+          el.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            window.setMarker(s.lat, s.lng, false);
+            pick(s.lat, s.lng);
+          });
+        });
+      });
+    };
+
+    // Qt -> sahifa: butun yo'nalishni chiziq + raqamli markerlar bilan
+    window.setRoute = function (stops) {
+      whenReady(function () {
+        if (!stops || !stops.length) return;
+        var coords = stops.map(function (s) { return [s.lng, s.lat]; });
+        var line = {
+          type: 'Feature', geometry: { type: 'LineString', coordinates: coords }
+        };
+        if (map.getSource('route')) {
+          map.getSource('route').setData(line);
+        } else {
+          map.addSource('route', { type: 'geojson', data: line });
+          map.addLayer({
+            id: 'route-line', type: 'line', source: 'route',
+            paint: { 'line-color': '#2563EB', 'line-width': 4, 'line-opacity': 0.85 }
+          });
+        }
+        stops.forEach(function (s, i) {
+          var el = document.createElement('div');
+          el.style.cssText = 'width:20px;height:20px;border-radius:50%;'
+            + 'background:#2563EB;border:2px solid #fff;color:#fff;'
+            + 'font:11px/20px Segoe UI,Arial;text-align:center;'
+            + 'box-shadow:0 1px 3px rgba(0,0,0,.4)';
+          el.textContent = (i + 1);
+          new maplibregl.Marker({ element: el })
+            .setLngLat([s.lng, s.lat])
+            .setPopup(new maplibregl.Popup({ offset: 14 })
+              .setText(s.name || ('Bekat ' + (i + 1))))
+            .addTo(map);
+        });
+        var b = coords.reduce(function (acc, c) { return acc.extend(c); },
+          new maplibregl.LngLatBounds(coords[0], coords[0]));
+        map.fitBounds(b, { padding: 60, duration: 0 });
+      });
+    };
+
+    function buildStyle(useVector) {
+      if (useVector) {
+        var protocol = new pmtiles.Protocol();
+        maplibregl.addProtocol('pmtiles', protocol.tile);
+        var themeFn = (window.protomaps_themes_base
+          && (window.protomaps_themes_base.default || window.protomaps_themes_base));
+        var layers = themeFn ? themeFn('protomaps', 'light') : [];
+        return {
+          version: 8,
+          glyphs: ORIGIN + '/fonts/{fontstack}/{range}.pbf',
+          sources: {
+            protomaps: {
+              type: 'vector',
+              url: 'pmtiles://' + ORIGIN + '/data/uzbekistan.pmtiles',
+              attribution: '© OpenStreetMap (Protomaps)'
+            }
+          },
+          layers: layers
+        };
+      }
+      // Online raster (zaxira) — internet bo'lsa ishlaydi
+      return {
+        version: 8,
+        sources: {
+          osm: {
+            type: 'raster',
+            tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+            tileSize: 256, attribution: '© OpenStreetMap'
+          }
+        },
+        layers: [{ id: 'osm', type: 'raster', source: 'osm' }]
+      };
+    }
+
+    function initMap(useVector) {
+      map = new maplibregl.Map({
+        container: 'map',
+        style: buildStyle(useVector),
+        center: [64.5, 41.2], zoom: 5, attributionControl: true
+      });
+      map.addControl(new maplibregl.NavigationControl(), 'top-right');
+      map.on('click', function (e) { pick(e.lngLat.lat, e.lngLat.lng); });
+      map.on('load', function () {
+        ready = true;
+        queue.forEach(function (fn) { fn(); });
+        queue = [];
+      });
+    }
+
+    function boot() {
+      loadScript('vendor/maplibre-gl.js', ML)
+        .then(function () { return loadScript('vendor/pmtiles.js', PM); })
+        .then(function () {
+          // Tema kutubxonasi faqat vektor uchun kerak — xato bo'lsa o'tamiz
+          return loadScript('vendor/protomaps-themes-base.js', TH)
+            .catch(function () { });
+        })
+        .then(function () { return fileExists('data/uzbekistan.pmtiles'); })
+        .then(function (hasPm) {
+          var useVector = hasPm && !!(window.pmtiles && window.protomaps_themes_base);
+          initMap(useVector);
+        })
+        .catch(function (e) {
+          showError('Xarita kutubxonalari yuklanmadi. Oflayn ishlash uchun '
+            + 'tools/fetch_map_assets.py ni ishga tushiring yoki internetga '
+            + 'ulaning. (' + e.message + ')');
+        });
+    }
+    boot();
+  </script>
+</body>
+</html>

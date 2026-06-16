@@ -9,20 +9,46 @@ import asyncio
 import json
 import logging
 import socket
+import ssl
 import platform
 
 import websockets
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from core import config
+from core import trust
 
 log = logging.getLogger(__name__)
+
+
+def _ssl_context():
+    """WSS uchun pinned SSL context (yoki ws:// bo'lsa None).
+
+    Server sertifikati trust.json'dagi cert_pem bilan CA sifatida tekshiriladi
+    (self-signed = o'ziga o'zi CA). Hostname tekshiruvi o'chiq — IP bilan
+    ulanamiz, ishonch sertifikatga pin orqali."""
+    if not config.is_tls():
+        return None
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    pem = trust.cert_pem()
+    if pem:
+        try:
+            ctx.load_verify_locations(cadata=pem)
+            return ctx
+        except ssl.SSLError:
+            log.warning("trust.json cert_pem o'qilmadi", exc_info=True)
+    # Pin materiali yo'q — oxirgi chora (xavfsizroq emas; trust.json bo'lishi shart)
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
 
 
 class WSClient(QThread):
     status = pyqtSignal(dict)         # status_update keldi
     announcement = pyqtSignal(str)    # announcement keldi
     sync = pyqtSignal(dict)           # katalog/sozlama yangilandi
+    cache_clear = pyqtSignal()        # admin: lokal keshni tozalash buyrug'i
     link = pyqtSignal(bool)           # ulanish bor/yo'q
 
     def __init__(self, url=None):
@@ -45,7 +71,8 @@ class WSClient(QThread):
                 # uzilib qayta urinadi. ping_*: o'lik ulanishni faol aniqlaydi.
                 async with websockets.connect(
                         self.url, open_timeout=10,
-                        ping_interval=20, ping_timeout=20) as wsconn:
+                        ping_interval=20, ping_timeout=20,
+                        ssl=_ssl_context()) as wsconn:
                     self.link.emit(True)
                     await wsconn.send(json.dumps(
                         {"type": "register", "device_id": self.device_id,
@@ -80,6 +107,8 @@ class WSClient(QThread):
             self.announcement.emit(data.get("text", ""))
         elif mtype in ("catalog_update", "settings_update", "reload"):
             self.sync.emit(data)
+        elif mtype == "cache_clear":
+            self.cache_clear.emit()
 
     def stop(self):
         self._stop = True

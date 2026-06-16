@@ -3,5 +3,5 @@ PyQt6>=6.6
 requests>=2.31
 python-vlc>=3.0     # video/audio o'ynatish (LibVLC kerak — VLC o'rnatilgan bo'lsin)
 qrcode>=7.4         # Saytlar bo'limi uchun QR kod (Pillowsiz, matritsa chiziladi)
-# WebSocket real-time (8-bosqich):
-# websockets>=12
+cryptography>=42.0  # Beacon imzosini tekshirish (Ed25519) — trust.py
+websockets>=12      # real-time kanal (ws_client.py)

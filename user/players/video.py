@@ -38,10 +38,11 @@ class VideoPlayer(QWidget):
     # Bufer: 3 soniyalik tarmoq uzilishiga chidaydi (TZ 6.2 / 12.2)
     NETWORK_CACHING_MS = 3000
 
-    def __init__(self, stream_url, title=""):
+    def __init__(self, stream_url, title="", host=None):
         super().__init__()
         self.stream_url = stream_url
         self.title = title
+        self._host = host
         self._dragging = False
         # Kino atrofidagi reklama (ixtiyoriy): ochuvchi ekran AdManager.media_ad
         # ni o'rnatadi — callable(host, stage, on_done). "media" algoritmida
@@ -233,7 +234,8 @@ class VideoPlayer(QWidget):
 
     # ---------- O'ynatish ----------
     def start(self):
-        self.showFullScreen()
+        from core.overlay import show_over_host
+        show_over_host(self, self._host)
         self._media = self._instance.media_new(self.stream_url)
         self._mp.set_media(self._media)
         # Video chiqarish oynasini ulash (platformaga bog'liq)

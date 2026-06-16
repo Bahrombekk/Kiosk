@@ -75,7 +75,11 @@ class ContentCard(QFrame):
 
         # Thumbnail — 16:9 moslashuvchan (karta kengligini to'ldiradi), yumaloq burchak
         self.cover = CoverLabel(cover_w, cover_h, radius=T.s(16), aspect=16 / 9)
-        self.cover.load(api.cover_url(item["id"]))
+        # Muqovasiz musiqa — server placeholder o'rniga gradient + nota (♪)
+        if item.get("type") == "music" and not item.get("cover_path"):
+            self.cover.music_placeholder()
+        else:
+            self.cover.load(api.cover_url(item["id"]))
         lay.addWidget(self.cover)
 
         self.title = QLabel(item.get("title", ""))
@@ -130,9 +134,9 @@ def can_read(item):
 
 
 def can_listen(item):
-    """Kitobni tinglash (audio) mumkinmi?"""
-    return item.get("type") == "audiobook" or bool(
-        item.get("file_path") and item.get("type") in ("audiobook",))
+    """Kitobni tinglash (audio) mumkinmi? Audio fayli bo'lsa — ha (kitob ham
+    audiokitob ham: bitta kitob yozuvida matn VA audio bo'lishi mumkin)."""
+    return bool(item.get("file_path"))
 
 
 class BookCard(QFrame):

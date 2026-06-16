@@ -75,15 +75,18 @@ def seed(reverse=False):
     stops = XIVA_TASHKENT if reverse else TASHKENT_XIVA
     meta = XIVA_TASHKENT_META if reverse else TASHKENT_XIVA_META
 
+    # 0 = borish, 1 = qaytish. Faqat shu yo'nalish tozalanadi — boshqasi qoladi
+    # (ikkala yo'nalishni ham seed qilsa bo'ladi: normal + --reverse).
+    direction = 1 if reverse else 0
     conn = db.connect()
     try:
-        conn.execute("DELETE FROM route_stops")
+        conn.execute("DELETE FROM route_stops WHERE direction=?", (direction,))
         conn.executemany(
             """INSERT INTO route_stops
                (name, arrival_time, departure_time, latitude, longitude,
-                distance_km, sort_order)
-               VALUES (?,?,?,?,?,?,?)""",
-            [(n, arr, dep, lat, lng, km, i)
+                distance_km, sort_order, direction)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            [(n, arr, dep, lat, lng, km, i, direction)
              for i, (n, arr, dep, lat, lng, km) in enumerate(stops)])
         conn.commit()
     finally:
@@ -91,6 +94,8 @@ def seed(reverse=False):
 
     for k, v in meta.items():
         db.set_setting(k, v)
+    # Seed qilingan yo'nalish kioskda faol bo'lsin
+    db.set_setting("active_route_direction", str(direction))
     db.log_action("route_seeded", meta["route"])
 
     # Windows konsoli (cp1251) → kabi belgilarni chiqara olmaydi — ASCII print

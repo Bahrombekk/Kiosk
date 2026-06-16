@@ -23,6 +23,15 @@ a = Analysis(
         "uvicorn.protocols.http.auto",
         "uvicorn.protocols.websockets.auto",
         "uvicorn.lifespan.on",
+        # Discovery imzosi + TLS sertifikat (security.py / discovery.py).
+        # Lazy importlar PyInstaller tahliliga ko'rinmasligi mumkin — aniq beramiz.
+        "cryptography",
+        "cryptography.hazmat.bindings._rust",
+        "cryptography.hazmat.primitives.asymmetric.ed25519",
+        "cryptography.x509",
+        # Bekat dialogidagi oflayn xarita (ixtiyoriy). O'rnatilmagan bo'lsa
+        # PyInstaller ogohlantirib o'tib ketadi — ilova xaritasiz ishlayveradi.
+        "PyQt6.QtWebEngineWidgets",
     ],
     hookspath=[],
     runtime_hooks=[],

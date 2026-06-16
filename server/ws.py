@@ -95,6 +95,21 @@ class ConnectionManager:
         if self.loop and self.loop.is_running():
             asyncio.run_coroutine_threadsafe(self.broadcast(message), self.loop)
 
+    async def _send_to_device(self, device_id, message: dict):
+        async with self._send_lock:
+            for ws, info in list(self.active.items()):
+                if info.get("device_id") == device_id:
+                    try:
+                        await ws.send_json(message)
+                    except Exception:
+                        pass
+
+    def send_to_device_threadsafe(self, device_id, message: dict):
+        """Admin oqimidan — buyruqni faqat shu device_id'li kiosk(lar)ga yuboradi."""
+        if self.loop and self.loop.is_running():
+            asyncio.run_coroutine_threadsafe(
+                self._send_to_device(device_id, message), self.loop)
+
 
 # Yagona umumiy manager (main.py va admin.py shundan foydalanadi)
 manager = ConnectionManager()

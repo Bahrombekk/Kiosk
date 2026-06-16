@@ -54,11 +54,12 @@ def paginate(chapters):
 class Reader(QWidget):
     closed = pyqtSignal()
 
-    def __init__(self, api, item, theme_name="light"):
+    def __init__(self, api, item, theme_name="light", host=None):
         super().__init__()
         self.api = api
         self.item = item
         self.theme_name = theme_name
+        self._host = host
         self.pages = []
         self.idx = 0
 
@@ -150,7 +151,8 @@ class Reader(QWidget):
 
     def start(self):
         self._restyle()
-        self.showFullScreen()
+        from core.overlay import show_over_host
+        show_over_host(self, self._host)
         self._loader = track(_TextLoader(self.api, self.item["id"]))
         self._loader.done.connect(self._on_text)
         self._loader.fail.connect(

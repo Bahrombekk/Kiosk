@@ -24,16 +24,32 @@ COVERS_DIR = os.path.join(CACHE_DIR, "covers")
 
 
 def save_json(name, data):
-    """data'ni cache/<name>.json ga atomik yozadi (xato jim loglanadi)."""
+    """data'ni cache/<name>.json ga atomik yozadi (xato jim loglanadi).
+
+    Windows'da os.replace nishon fayl BAND bo'lsa (boshqa kiosk nusxasi,
+    antivirus yoki muharrir uni ochib turgan bo'lsa) vaqtincha PermissionError
+    beradi — shuning uchun noyob tmp (nusxalararo to'qnashmasin) + bir necha
+    marta qayta urinish. Yiqilsa ham ilova ishlayveradi (faqat kesh eskiroq qoladi)."""
+    path = os.path.join(CACHE_DIR, name + ".json")
+    tmp = f"{path}.{os.getpid()}.tmp"     # har jarayon o'z tmp'siga yozadi
     try:
         os.makedirs(CACHE_DIR, exist_ok=True)
-        path = os.path.join(CACHE_DIR, name + ".json")
-        tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False)
-        os.replace(tmp, path)
-    except OSError:
-        log.warning("Keshga yozib bo'lmadi: %s", name, exc_info=True)
+        for i in range(5):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:
+                if i == 4:
+                    raise
+                time.sleep(0.15)        # band — qisqa kutib qayta urinamiz
+    except OSError as e:
+        log.debug("Keshga yozib bo'lmadi (%s): %s", name, e)
+        try:
+            os.remove(tmp)              # qoldiq tmp'ni tozalaymiz
+        except OSError:
+            pass
 
 
 def load_json(name):

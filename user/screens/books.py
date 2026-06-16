@@ -87,6 +87,9 @@ class BooksScreen(QWidget):
         self.theme_name = "light"
         self.all_items = []
         self.active_tab = 0
+        # Tablar DINAMIK: kitoblardagi mavjud JANRLARdan quriladi
+        # (None=Barchasi). Har element: (janr|None, yorliq, svg).
+        self._tabs = [(None, "common.tab_all", _GRID_SVG)]
         self.cards = []
         self._cols = 0
         self._loader = None
@@ -103,19 +106,11 @@ class BooksScreen(QWidget):
         # Tablar umumiy pastki chiziq ustida (videos bilan bir xil uslub)
         self.tabs_frame = QFrame()
         self.tabs_frame.setObjectName("tabsFrame")
-        tl = QHBoxLayout(self.tabs_frame)
-        tl.setContentsMargins(0, 0, 0, 0)
-        tl.setSpacing(T.s(44))
+        self._tabs_layout = QHBoxLayout(self.tabs_frame)
+        self._tabs_layout.setContentsMargins(0, 0, 0, 0)
+        self._tabs_layout.setSpacing(T.s(44))
         self.tab_btns = []
-        for i, (_match, label_key, _svg) in enumerate(TABS):
-            b = QPushButton(" " + tr(label_key))
-            b.setCursor(Qt.CursorShape.PointingHandCursor)
-            b.setCheckable(True)
-            b.setIconSize(QSize(T.s(28), T.s(28)))
-            b.clicked.connect(lambda _c, idx=i: self._set_tab(idx))
-            self.tab_btns.append(b)
-            tl.addWidget(b)
-        tl.addStretch(1)
+        self._rebuild_tabs()
         root.addWidget(self.tabs_frame)
 
         self.status = StatusLabel(self.theme_name)
@@ -137,7 +132,39 @@ class BooksScreen(QWidget):
         self.scroll.setWidget(self.grid_host)
         root.addWidget(self.scroll, 1)
 
-        self.tab_btns[0].setChecked(True)
+    @staticmethod
+    def _genre_icon(genre):
+        """Janr nomiga mos ikonka (taxminiy moslash; default — globus)."""
+        g = (genre or "").lower()
+        if "bolalar" in g or "ertak" in g:
+            return _SPARK_SVG
+        if "tarix" in g:
+            return _BANK_SVG
+        if "biznes" in g:
+            return _CASE_SVG
+        return _GLOBE_SVG
+
+    def _rebuild_tabs(self):
+        """Tab tugmalarini self._tabs bo'yicha qayta yaratadi (dinamik janrlar)."""
+        while self._tabs_layout.count():
+            it = self._tabs_layout.takeAt(0)
+            w = it.widget()
+            if w:
+                w.deleteLater()
+        self.tab_btns = []
+        for i, (match, label, _svg) in enumerate(self._tabs):
+            text = tr(label) if match is None else label   # Barchasi tarjima qilinadi
+            b = QPushButton(" " + text)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.setCheckable(True)
+            b.setIconSize(QSize(T.s(28), T.s(28)))
+            b.clicked.connect(lambda _c, idx=i: self._set_tab(idx))
+            self.tab_btns.append(b)
+            self._tabs_layout.addWidget(b)
+        self._tabs_layout.addStretch(1)
+        self.active_tab = min(self.active_tab, len(self._tabs) - 1)
+        self.tab_btns[self.active_tab].setChecked(True)
+        self._restyle_tabs()
 
     # --- Yuklash ---
     def on_show(self):
@@ -154,7 +181,18 @@ class BooksScreen(QWidget):
         self._loader.start()
 
     def _on_loaded(self, items):
+        from core.i18n import content_visible
         self.all_items = items
+        # Mavjud (joriy tildagi) kitob JANRLARidan dinamik tablar
+        genres = []
+        for it in items:
+            if it.get("type") in BOOK_TYPES and content_visible(it):
+                g = (it.get("genre") or "").strip()
+                if g and g not in genres:
+                    genres.append(g)
+        self._tabs = [(None, "common.tab_all", _GRID_SVG)] + [
+            (g, g, self._genre_icon(g)) for g in genres]
+        self._rebuild_tabs()
         self._render()
 
     # --- Filtr ---
@@ -168,13 +206,13 @@ class BooksScreen(QWidget):
     def _filtered(self):
         from core.i18n import content_visible
         out = []
-        tab = TABS[self.active_tab][0]   # DB category_tab kaliti (None=Barchasi)
+        match = self._tabs[self.active_tab][0]   # janr (None=Barchasi)
         for it in self.all_items:
             if it.get("type") not in BOOK_TYPES:
                 continue
             if not content_visible(it):   # faqat joriy tildagi kontent
                 continue
-            if tab is not None and (it.get("category_tab") != tab):
+            if match is not None and (it.get("genre") != match):
                 continue
             out.append(it)
         return out
@@ -246,7 +284,7 @@ class BooksScreen(QWidget):
             self._modal.close_modal()
         stats.event("content_open", id=item.get("id"),
                     title=item.get("title"), type=item.get("type"))
-        self._reader = Reader(self.api, item, self.theme_name)
+        self._reader = Reader(self.api, item, self.theme_name, host=self.window())
         self._reader.start()
 
     def _listen(self, item):
@@ -261,7 +299,7 @@ class BooksScreen(QWidget):
             old.stop_and_close()
         stats.event("content_open", id=item.get("id"),
                     title=item.get("title"), type=item.get("type"))
-        self._audio = AudioPlayer(self.api, item, self.theme_name)
+        self._audio = AudioPlayer(self.api, item, self.theme_name, host=self.window())
         self._audio.closed.connect(lambda: setattr(self, "_audio", None))
         self._audio.start()
 
@@ -289,7 +327,7 @@ class BooksScreen(QWidget):
             active = (i == self.active_tab)
             color = c["accent"] if active else c["text_secondary"]
             border = c["accent"] if active else "transparent"
-            b.setIcon(QIcon(_svg_pixmap(TABS[i][2], color, T.s(30))))
+            b.setIcon(QIcon(_svg_pixmap(self._tabs[i][2], color, T.s(30))))
             b.setStyleSheet(
                 f"QPushButton {{ background: transparent; color: {color};"
                 f" border: none; border-bottom: {T.s(4)}px solid {border};"

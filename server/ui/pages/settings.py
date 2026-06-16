@@ -7,13 +7,14 @@ ustma-ust chiqmaydi, shunchaki aylantiriladi.
 """
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QComboBox, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
-    QPlainTextEdit, QScrollArea, QSpinBox, QVBoxLayout, QWidget
+    QCheckBox, QComboBox, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
+    QMessageBox, QPlainTextEdit, QScrollArea, QSpinBox, QVBoxLayout, QWidget
 )
 
 import db
 from icons import svg_pixmap
 from ui.helpers import no_wheel
+from ui.toggle import ToggleSwitch
 
 # SOS oynasining standart raqamlari (kiosk i18n bilan 3 tilda ko'rsatadi).
 # Admin maydoni bo'sh bo'lsa shu ro'yxat ko'rsatiladi; admin matnni aynan
@@ -133,68 +134,99 @@ class SettingsPageMixin:
         self.s_ad_int.setRange(1, 180)
         self.s_ad_int.setValue(5)
         self.s_ad_int.setSuffix(" daqiqa")
-        # Rejalashtirish algoritmi — kiosk har slotda qaysi reklamani
-        # tanlashini belgilaydi (qiymatlar user/services/ads.py bilan mos)
-        self.s_ad_algo = QComboBox()
-        self.s_ad_algo.addItem(
-            "Vaznli — har reklamaning o'z oralig'i hisobga olinadi", "weighted")
-        self.s_ad_algo.addItem(
-            "Navbat bilan — har oraliqda ro'yxatdagi keyingisi", "queue")
-        self.s_ad_algo.addItem(
-            "Tasodifiy — har safar aralash tartibda", "random")
-        self.s_ad_algo.addItem(
-            "Media — faqat kino boshida, o'rtasida va oxirida", "media")
         g = QGridLayout()
         g.setHorizontalSpacing(14)
         g.setVerticalSpacing(12)
         g.addLayout(self._field("Reklama oralig'i", self.s_ad_int), 0, 0)
-        g.addLayout(self._field("Reklama algoritmi", self.s_ad_algo), 0, 1)
+        g.setColumnStretch(1, 1)   # oraliq chap chetda ixcham tursin
         clay.addLayout(g)
-        # Sahifa scrollida g'ildirak bu qiymatlarni ADASHIB o'zgartirmasin
-        no_wheel(self.s_ad_int, self.s_ad_algo)
+        # Sahifa scrollida g'ildirak qiymatni ADASHIB o'zgartirmasin
+        no_wheel(self.s_ad_int)
+
+        # Rejalashtirish algoritmlari — bir nechtasini birga tanlash mumkin
+        # (qiymatlar user/services/ads.py bilan mos). Popup tanlash usullari
+        # (Vaznli/Navbat/Tasodifiy) bir-birini istisno qiladi — bir nechtasi
+        # belgilansa, kiosk prioritet bo'yicha birinchisini ishlatadi; «Media»
+        # esa alohida joylashuv (kino atrofida), ularning ustiga qo'shiladi.
+        self.s_ad_algos = {}
+        algo_holder = QWidget()
+        algo_box = QVBoxLayout(algo_holder)
+        algo_box.setContentsMargins(0, 0, 0, 0)
+        algo_box.setSpacing(8)
+        for key, text in (
+                ("weighted", "Vaznli — har reklamaning o'z oralig'i hisobga olinadi"),
+                ("queue", "Navbat bilan — har oraliqda ro'yxatdagi keyingisi"),
+                ("random", "Tasodifiy — har safar aralash tartibda"),
+                ("media", "Media — kino boshida, o'rtasida va oxirida")):
+            cb = QCheckBox(text)
+            self.s_ad_algos[key] = cb
+            algo_box.addWidget(cb)
+        clay.addLayout(self._field(
+            "Reklama algoritmlari (bir nechtasini tanlash mumkin)", algo_holder))
         ad_hint = QLabel(
             "Oraliq — popup chastotasi: har shu daqiqada BITTA reklama "
             "chiqadi. «Vaznli»da har reklamaning o'z oralig'i (Reklama "
             "bo'limida) vazn bo'lib xizmat qiladi; «Navbat bilan» va "
-            "«Tasodifiy»da reklamalar teng aylanadi. «Media»da popup umuman "
-            "chiqmaydi — reklama faqat kino boshida, o'rtasida va oxirida "
-            "ko'rsatiladi.")
+            "«Tasodifiy»da reklamalar teng aylanadi. Bu uchovidan bittasi "
+            "ishlatiladi (bir nechtasi belgilansa — yuqoridagisi). «Media» "
+            "alohida: reklama kino boshida, o'rtasida va oxirida ham "
+            "ko'rsatiladi. «Media»ni popup usuli bilan birga belgilash mumkin.")
         ad_hint.setObjectName("hint")
         ad_hint.setWordWrap(True)   # MUHIM: aks holda oyna kichraymay qoladi
         clay.addWidget(ad_hint)
         ilay.addWidget(card)
 
-        # === 3) Zastavka ===
-        card, clay = self._sec_card(
-            "monitor", "#F5F3FF", "#7C3AED", "Zastavka",
-            "Harakatsizlikda chiqadigan ekranda aylanadigan faktlar")
-        self.s_facts = QPlainTextEdit()
-        self.s_facts.setPlaceholderText(
-            "Har qatorda bitta fakt. Bo'sh qoldirilsa fakt ko'rsatilmaydi.")
-        self.s_facts.setFixedHeight(96)
-        clay.addLayout(self._field("Zastavka faktlari", self.s_facts))
-        ilay.addWidget(card)
-
-        # === 3.5) Kiosk lokal keshi ===
+        # === 3) Kiosk lokal keshi ===
         card, clay = self._sec_card(
             "server", "#EFF6FF", "#2563EB", "Kiosk lokal keshi",
             "Kontent fayllari kiosk diskiga fonda yuklab qo'yiladi — "
             "oflaynda ham ijro etiladi, serverga yuk kamayadi")
-        self.s_mcache = QComboBox()
-        self.s_mcache.addItem(
-            "Yoqilgan — xotirasi yetgan kiosk fonda yuklab oladi", "1")
-        self.s_mcache.addItem(
-            "O'chirilgan — faqat serverdan striming", "0")
-        no_wheel(self.s_mcache)
-        clay.addLayout(self._field("Lokal media kesh", self.s_mcache))
+        # Yoqish/o'chirish — switch + holat yozuvi (yozuv switch holatiga qarab
+        # yangilanadi). s_mcache.isChecked() -> "1"/"0" save'da.
+        self.s_mcache = ToggleSwitch()
+        self.s_mcache_lbl = QLabel()
+        self.s_mcache.toggled.connect(self._update_mcache_lbl)
+        sw_row = QHBoxLayout()
+        sw_row.setSpacing(12)
+        sw_row.addWidget(self.s_mcache)
+        sw_row.addWidget(self.s_mcache_lbl)
+        sw_row.addStretch(1)
+        sw_holder = QWidget()
+        sw_holder.setLayout(sw_row)
+        sw_row.setContentsMargins(0, 0, 0, 0)
+        clay.addLayout(self._field("Lokal media kesh", sw_holder))
+
+        # Kesh hajmi cheklovi — kiosk diskidan eng ko'pi shuncha GB band qiladi
+        # (0 = cheklov yo'q, faqat bo'sh joy bo'yicha). Kiosk media_cache.py
+        # shu chegaradan oshmaydi.
+        self.s_cache_limit = QSpinBox()
+        self.s_cache_limit.setRange(0, 2000)
+        self.s_cache_limit.setSuffix(" GB")
+        self.s_cache_limit.setSpecialValueText("Cheklov yo'q")
+        no_wheel(self.s_cache_limit)
+        g = QGridLayout()
+        g.setHorizontalSpacing(14)
+        g.addLayout(self._field("Kesh hajmi cheklovi", self.s_cache_limit), 0, 0)
+        g.setColumnStretch(1, 1)
+        clay.addLayout(g)
+
         mc_hint = QLabel(
             "O'chirilganda kioskdagi yuklab olingan fayllar o'chmaydi — "
-            "faqat yangi yuklash to'xtaydi. Har kioskda qancha yuklangani "
-            "Boshqaruv sahifasidagi jadvalda ko'rinadi (qatorga ikki marta "
-            "bosing).")
+            "faqat yangi yuklash to'xtaydi. Kesh hajmi cheklovi — kiosk "
+            "diskidan eng ko'pi shuncha GB band qilinadi (0 = faqat bo'sh joy "
+            "bo'yicha). Har kioskda qancha yuklangani Boshqaruv sahifasidagi "
+            "jadvalda ko'rinadi (qatorga ikki marta bosing).")
         mc_hint.setObjectName("hint")
         mc_hint.setWordWrap(True)
         clay.addWidget(mc_hint)
+
+        # Masofadan tozalash — barcha onlayn kiosklarga "keshni tozala" buyrug'i
+        clr_row = QHBoxLayout()
+        clr_row.addStretch(1)
+        clr_row.addWidget(self._btn("Barcha kiosklar keshini tozalash",
+                                    "trash-2", self.clear_all_cache,
+                                    kind="ghost"))
+        clay.addLayout(clr_row)
         ilay.addWidget(card)
 
         # === 4) SOS (favqulodda) ===
@@ -266,20 +298,26 @@ class SettingsPageMixin:
         self.s_route.setText(s.get("route", ""))
         self.s_depart.setText(s.get("depart_time", ""))
         self.s_location.setText(s.get("kiosk_location", ""))
-        self.s_facts.setPlainText(s.get("saver_facts", ""))
         # Bo'sh bo'lsa standart ro'yxat ko'rsatiladi — admin hozir nima
         # chiqayotganini ko'rib, shu yerda tahrirlaydi.
         self.s_sos.setPlainText(s.get("sos_numbers", "").strip() or DEFAULT_SOS)
         idx = self.s_sos_on.findData(s.get("sos_enabled") or "0")
         self.s_sos_on.setCurrentIndex(max(0, idx))
-        idx = self.s_mcache.findData(s.get("media_cache") or "1")
-        self.s_mcache.setCurrentIndex(max(0, idx))
+        self.s_mcache.setChecked(str(s.get("media_cache") or "1") != "0")
+        self._update_mcache_lbl(self.s_mcache.isChecked())
+        try:
+            self.s_cache_limit.setValue(int(float(s.get("cache_limit_gb") or 0)))
+        except (TypeError, ValueError):
+            self.s_cache_limit.setValue(0)
         try:
             self.s_ad_int.setValue(int(float(s.get("ad_interval_min") or 5)))
         except (TypeError, ValueError):
             self.s_ad_int.setValue(5)
-        idx = self.s_ad_algo.findData(s.get("ad_algorithm") or "weighted")
-        self.s_ad_algo.setCurrentIndex(max(0, idx))
+        # Algoritmlar vergul bilan saqlanadi; eski yagona qiymat ham mos keladi.
+        sel = {x.strip() for x in (s.get("ad_algorithm") or "").split(",")
+               if x.strip()} or {"weighted"}
+        for key, cb in self.s_ad_algos.items():
+            cb.setChecked(key in sel)
 
     def save_settings(self):
         import re
@@ -300,19 +338,44 @@ class SettingsPageMixin:
         db.set_setting("route", self.s_route.text())
         db.set_setting("depart_time", depart)
         db.set_setting("ad_interval_min", str(self.s_ad_int.value()))
-        db.set_setting("ad_algorithm", self.s_ad_algo.currentData())
+        algos = [k for k, cb in self.s_ad_algos.items() if cb.isChecked()]
+        db.set_setting("ad_algorithm", ",".join(algos) or "weighted")
         db.set_setting("kiosk_location", self.s_location.text().strip())
-        db.set_setting("saver_facts", self.s_facts.toPlainText().strip())
         # Standart ro'yxat o'zgartirilmagan bo'lsa bo'sh saqlanadi — kiosk
         # uni i18n orqali 3 tilda ko'rsatishda davom etadi.
         sos_txt = self.s_sos.toPlainText().strip()
         db.set_setting("sos_numbers", "" if sos_txt == DEFAULT_SOS else sos_txt)
         db.set_setting("sos_enabled", self.s_sos_on.currentData())
-        db.set_setting("media_cache", self.s_mcache.currentData())
+        db.set_setting("media_cache", "1" if self.s_mcache.isChecked() else "0")
+        db.set_setting("cache_limit_gb", str(self.s_cache_limit.value()))
         db.log_action("settings_saved",
                       f"train={self.s_train.text()!r} wagon={wagon!r}")
         self._broadcast_sync("settings")
         self.statusBar().showMessage("Sozlamalar saqlandi.", 3000)
+
+    @staticmethod
+    def _update_mcache_lbl_text(on):
+        return ("Yoqilgan — xotirasi yetgan kiosk fonda yuklab oladi" if on
+                else "O'chirilgan — faqat serverdan striming")
+
+    def _update_mcache_lbl(self, on):
+        self.s_mcache_lbl.setText(self._update_mcache_lbl_text(on))
+
+    def clear_all_cache(self):
+        """Barcha onlayn kiosklarga lokal keshini tozalash buyrug'ini yuboradi.
+        Kesh yoqiq qolsa kiosk keyingi sinxda fayllarni qaytadan yuklaydi."""
+        import ws
+        n = len(ws.manager.clients())
+        if QMessageBox.question(
+                self, "Keshni tozalash",
+                f"Barcha kiosklar ({n} ta onlayn) lokal media keshi "
+                "o'chirilsinmi?\n\nKesh yoqiq bo'lsa fayllar keyingi sinxda "
+                "qaytadan yuklanadi.") != QMessageBox.StandardButton.Yes:
+            return
+        ws.manager.broadcast_threadsafe({"type": "cache_clear"})
+        db.log_action("cache_clear_broadcast", f"online={n}")
+        self.statusBar().showMessage(
+            f"Keshni tozalash buyrug'i yuborildi ({n} ta kioskka).", 4000)
 
     def save_security(self):
         """Kiosk PIN va/yoki admin parolini yangilaydi (faqat xesh saqlanadi)."""

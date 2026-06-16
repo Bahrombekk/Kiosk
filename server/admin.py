@@ -56,6 +56,17 @@ def main():
     except OSError:
         pass
     db.init_db()
+    # Bekat dialogidagi oflayn xarita QtWebEngine'da ishlaydi. QtWebEngine
+    # AA_ShareOpenGLContexts'ni QApplication'dan OLDIN talab qiladi va
+    # QtWebEngineWidgets shu yerda (app'dan oldin) import qilinishi kerak.
+    # O'rnatilmagan bo'lsa jim o'tamiz — xarita bo'lmaydi, qolgani ishlaydi.
+    try:
+        from PyQt6.QtCore import Qt
+        QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
+        import PyQt6.QtWebEngineWidgets  # noqa: F401 — app'dan oldin yuklansin
+    except Exception:                                # noqa: BLE001
+        pass
+
     app = QApplication(sys.argv)
     app.setStyleSheet(STYLE)
 

@@ -33,6 +33,8 @@ from fastapi.responses import Response, StreamingResponse, FileResponse, JSONRes
 
 import config
 import db
+import security
+import discovery
 from ws import manager
 
 logging.basicConfig(
@@ -60,10 +62,14 @@ def _api_key():
 async def lifespan(app: FastAPI):
     db.init_db()   # baza yaratiladi va kerak bo'lsa seed qilinadi
     _api_key()     # kalit tayyor bo'lsin (birinchi so'rovda emas)
+    security.ensure_identity()   # imzo kaliti + TLS sertifikat (yo'q bo'lsa)
     manager.set_loop(asyncio.get_running_loop())
-    log.info("Server tayyor — http://%s:%s", config.HOST, config.PORT)
+    scheme = "https" if config.USE_TLS else "http"
+    log.info("Server tayyor — %s://%s:%s", scheme, config.HOST, config.PORT)
+    discovery.start()   # imzolangan beacon — kiosklar serverni topadi
     task = asyncio.create_task(_status_loop())   # holatni davriy tarqatish
     yield
+    discovery.stop()
     task.cancel()
     log.info("Server to'xtatilmoqda")
 
@@ -500,4 +506,8 @@ async def websocket_endpoint(ws: WebSocket):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host=config.HOST, port=config.PORT, reload=False)
+    security.ensure_identity()   # TLS sertifikat uvicorn'gacha tayyor bo'lsin
+    ssl_kw = ({"ssl_certfile": security.TLS_CERT_PATH,
+               "ssl_keyfile": security.TLS_KEY_PATH} if config.USE_TLS else {})
+    uvicorn.run("main:app", host=config.HOST, port=config.PORT,
+                reload=False, **ssl_kw)

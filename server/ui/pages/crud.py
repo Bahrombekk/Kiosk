@@ -1,7 +1,7 @@
 """ui/pages/crud.py — Generik CRUD sahifalar mixin'i (Saytlar/Bekatlar)."""
 from PyQt6.QtWidgets import (
-    QHBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QHeaderView,
-    QMessageBox, QWidget
+    QComboBox, QHBoxLayout, QLabel, QTableWidget, QTableWidgetItem,
+    QHeaderView, QMessageBox, QWidget
 )
 from PyQt6.QtGui import QColor
 
@@ -9,6 +9,7 @@ import db
 from ui.styles import C_MUTED
 from ui.helpers import _pill
 from ui.dialogs import RecordDialog
+from ui.stop_dialog import StopDialog
 
 
 class CrudPagesMixin:
@@ -16,10 +17,14 @@ class CrudPagesMixin:
     #  Generik CRUD sahifa (Reklama / Saytlar / Bekatlar uchun umumiy)
     # ------------------------------------------------------------------
     def _crud_page(self, name, page_title, page_sub, columns, fields, get_all,
-                   add_fn, update_fn, delete_fn, dialog_title, dialog_cls=None):
+                   add_fn, update_fn, delete_fn, dialog_title, dialog_cls=None,
+                   lead_widgets=None, extra_buttons=None):
         """columns: [(header, key), ...]; fields: RecordDialog uchun maydonlar.
         dialog_cls berilsa — RecordDialog o'rniga maxsus dialog ishlatiladi
-        (masalan reklama uchun AdDialog)."""
+        (masalan reklama uchun AdDialog).
+        lead_widgets — toolbar boshiga qo'shiladigan vidjetlar (masalan yo'nalish
+        tanlovi); extra_buttons — [(text, icon, slot, kind), ...] standart
+        tugmalardan keyin qo'shiladi (masalan 'Xaritada ko'rish')."""
         w, lay = self._page(page_title, page_sub)
 
         toolbar = QWidget(w)
@@ -30,6 +35,10 @@ class CrudPagesMixin:
         if refs is None:
             self._layout_refs = refs = []
         refs.extend((toolbar, bar))
+        for lw in (lead_widgets or []):
+            lw.setParent(toolbar)
+            bar.addWidget(lw)
+            refs.append(lw)
         buttons = [
             self._btn("Qo'shish", "plus", lambda: self._crud_add(name)),
             self._btn("Tahrirlash", "pencil",
@@ -39,6 +48,8 @@ class CrudPagesMixin:
             self._btn("Yangilash", "refresh-cw",
                       lambda: self._crud_refresh(name), "ghost"),
         ]
+        for (txt, icon, slot, kind) in (extra_buttons or []):
+            buttons.append(self._btn(txt, icon, slot, kind))
         refs.extend(buttons)
         for btn in buttons:
             btn.setParent(toolbar)
@@ -163,6 +174,27 @@ class CrudPagesMixin:
 
     # --- Bekatlar sahifasi ---
     def _route_page(self):
+        # Tahrirlanayotgan yo'nalish (0=borish, 1=qaytish) — jadval shu bo'yicha
+        self._route_dir = 0
+
+        edit_combo = QComboBox()
+        edit_combo.addItem("Borish (Toshkent → Xiva)", 0)
+        edit_combo.addItem("Qaytish (Xiva → Toshkent)", 1)
+        edit_combo.currentIndexChanged.connect(self._on_route_dir_changed)
+        self._route_edit_combo = edit_combo
+
+        active_combo = QComboBox()
+        active_combo.addItem("Faol: Borish", 0)
+        active_combo.addItem("Faol: Qaytish", 1)
+        try:
+            cur = int(db.get_settings().get("active_route_direction") or 0)
+        except (TypeError, ValueError):
+            cur = 0
+        active_combo.setCurrentIndex(1 if cur == 1 else 0)
+        active_combo.currentIndexChanged.connect(self._on_route_active_changed)
+        active_combo.setToolTip("Kiosklarda hozir qaysi yo'nalish ko'rsatilsin")
+        self._route_active_combo = active_combo
+
         return self._crud_page(
             "route", "Bekatlar", "Yo'nalish bekatlari — xarita va timeline uchun",
             columns=[("ID", "id"), ("Bekat", "name"), ("Kelish", "arrival_time"),
@@ -175,7 +207,40 @@ class CrudPagesMixin:
                     ("latitude", "Kenglik (lat)", "float"),
                     ("longitude", "Uzunlik (lng)", "float"),
                     ("sort_order", "Tartib raqami", "int")],
-            get_all=db.get_route,
+            get_all=lambda: db.get_route(direction=self._route_dir),
             add_fn=db.add_route_stop, update_fn=db.update_route_stop,
             delete_fn=db.delete_route_stop,
-            dialog_title="bekat")
+            dialog_title="bekat", dialog_cls=StopDialog,
+            lead_widgets=[edit_combo, active_combo],
+            extra_buttons=[("Xaritada ko'rish", "globe",
+                            self._show_route_map, "ghost")])
+
+    def _on_route_dir_changed(self):
+        self._route_dir = self._route_edit_combo.currentData()
+        self._crud_refresh("route")
+
+    def _on_route_active_changed(self):
+        d = self._route_active_combo.currentData()
+        db.set_setting("active_route_direction", str(d))
+        db.log_action("route_active_direction", str(d))
+        self._broadcast_sync("route")
+        self.statusBar().showMessage(
+            "Kioskda faol yo'nalish: "
+            + ("Qaytish" if d == 1 else "Borish"), 3000)
+
+    def _show_route_map(self):
+        """Tanlangan yo'nalishning barcha bekatlarini xaritada chiziq bilan."""
+        stops = db.get_route(direction=self._route_dir)
+        if not stops:
+            QMessageBox.information(self, "Bo'sh",
+                                   "Bu yo'nalishda bekat yo'q.")
+            return
+        from ui.route_map_dialog import RouteMapDialog, ROUTE_MAP_AVAILABLE
+        if not ROUTE_MAP_AVAILABLE:
+            QMessageBox.information(
+                self, "Xarita yo'q",
+                "Xarita ko'rinishi uchun QtWebEngine kerak "
+                "(pip install PyQt6-WebEngine).")
+            return
+        name = "Qaytish" if self._route_dir == 1 else "Borish"
+        RouteMapDialog(self, stops, f"Yo'nalish xaritasi — {name}").exec()

@@ -4,7 +4,8 @@ import os
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QPushButton, QFrame, QScrollArea, QGridLayout)
 from PyQt6.QtCore import Qt, QSize, QRectF, QPointF, QTimer
-from PyQt6.QtGui import QPixmap, QColor, QPainter, QPainterPath, QImage
+from PyQt6.QtGui import (QPixmap, QColor, QPainter, QPainterPath, QImage,
+                         QLinearGradient, QBrush, QFont)
 
 import config
 from icons import svg_icon, svg_pixmap
@@ -167,6 +168,17 @@ def _cover_pixmap(item, w, h, radius=12):
                             Qt.TransformationMode.SmoothTransformation)
         p.drawPixmap(0, 0, scaled,
                      (scaled.width() - w) // 2, (scaled.height() - h) // 2, w, h)
+    elif item.get("type") == "music":
+        # Muqovasiz musiqa — gradient + nota (kioskdagi bilan bir xil ko'rinish)
+        g = QLinearGradient(0, 0, w, h)
+        g.setColorAt(0.0, QColor("#6366F1"))
+        g.setColorAt(1.0, QColor("#8B5CF6"))
+        p.fillRect(0, 0, w, h, QBrush(g))
+        p.setPen(QColor(255, 255, 255, 235))
+        f = QFont()
+        f.setPixelSize(max(20, h // 2))
+        p.setFont(f)
+        p.drawText(pm.rect(), Qt.AlignmentFlag.AlignCenter, "♪")
     else:
         p.fillRect(0, 0, w, h, QColor("#EEF2F7"))
         icon_name = {"movie": "clapperboard", "cartoon": "clapperboard",

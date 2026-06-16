@@ -12,9 +12,11 @@ import requests
 from PyQt6.QtWidgets import QLabel, QSizePolicy, QGraphicsOpacityEffect
 from PyQt6.QtCore import (Qt, QThread, pyqtSignal, QByteArray, QRectF, QSize,
                           QPropertyAnimation, QEasingCurve, QVariantAnimation)
-from PyQt6.QtGui import QPixmap, QPainter, QColor
+from PyQt6.QtGui import (QPixmap, QPainter, QColor, QLinearGradient, QBrush,
+                         QFont, QPainterPath)
 from PyQt6.QtSvg import QSvgRenderer
 from core import cache
+from core import netpin
 from core import theme as T
 from core.threads import track
 
@@ -50,7 +52,7 @@ class _Fetcher(QThread):
 
     def run(self):
         try:
-            r = requests.get(self.url, timeout=8)
+            r = netpin.get(self.url, timeout=8)
             r.raise_for_status()
             cache.save_cover(self.url, r.content)   # oflayn uchun diskka
             self.done.emit(r.content, r.headers.get("content-type", ""))
@@ -82,6 +84,7 @@ class CoverLabel(QLabel):
         self._round_top_only = round_top_only   # faqat tepa burchaklar (modal header)
         self._orig = None          # yuklangan asl pixmap (qayta miqyoslash uchun)
         self._fetcher = None
+        self._music_ph = False     # muqovasiz musiqa: gradient + nota placeholder
         self.fade_on_next = False  # keyingi load() mem-keshdan ham fade bilan
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         if aspect is None:
@@ -98,7 +101,35 @@ class CoverLabel(QLabel):
     def sizeHint(self):
         return QSize(self._w, self._h)
 
+    def music_placeholder(self):
+        """Muqovasiz musiqa uchun chiroyli gradient + nota (♪). load() o'rniga
+        chaqiriladi; resize'da (aspect rejim) qayta chiziladi."""
+        self._music_ph = True
+        self._orig = None
+        self._draw_music()
+
+    def _draw_music(self):
+        if self._w < 2 or self._h < 2:
+            return
+        base = QPixmap(self._w, self._h)
+        base.fill(Qt.GlobalColor.transparent)
+        p = QPainter(base)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        g = QLinearGradient(0, 0, self._w, self._h)
+        g.setColorAt(0.0, QColor("#6366F1"))
+        g.setColorAt(1.0, QColor("#8B5CF6"))
+        p.fillRect(0, 0, self._w, self._h, QBrush(g))
+        p.setPen(QColor(255, 255, 255, 235))
+        f = QFont()
+        f.setPixelSize(max(24, min(self._w, self._h) // 2))
+        p.setFont(f)
+        p.drawText(base.rect(), Qt.AlignmentFlag.AlignCenter, "♪")
+        p.end()
+        # _rounded burchaklarni (round_top_only ham) hisobga olib kesadi
+        self.setPixmap(self._rounded(base))
+
     def load(self, url):
+        self._music_ph = False
         # Avval xotira keshi — bor bo'lsa tarmoqsiz, oqimsiz darhol chizamiz
         # (_render_scaled fade_on_next bo'lsa crossfade'ni o'zi bajaradi)
         pm = _mem_get(url)
@@ -132,7 +163,9 @@ class CoverLabel(QLabel):
             if h != self.height():
                 self.setFixedHeight(h)
             self._h = h
-            if self._orig is not None:
+            if self._music_ph:
+                self._draw_music()
+            elif self._orig is not None:
                 self._render_scaled()
             else:
                 self._show_placeholder("...")

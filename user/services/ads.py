@@ -202,7 +202,7 @@ class AdPopup(Modal):
             self._total = max(3, dur or IMAGE_DEFAULT_S)
         else:                                        # video
             self._total = dur if dur > 0 else None   # None — hisob ko'rsatilmaydi
-            self._play_video(api.ad_media_url(ad["id"]))
+            self._play_video(api.ad_media_play_url(ad["id"]))
             # Birinchi kadr kechiksa — bu reklamani o'tkazib yuboramiz
             QTimer.singleShot(VIDEO_START_TIMEOUT_MS, self._check_started)
 
@@ -473,8 +473,8 @@ class AdManager(QObject):
         popup pauzagacha (eng ko'pi MAX_DEFER_S) kechiktiriladi."""
         if self._popup is not None or self._pending is not None:
             return                       # allaqachon ochiq/tayyorlanmoqda
-        if self._algorithm() == "media":
-            return   # media rejimi: reklama faqat kino atrofida (media_ad)
+        if self._popup_algorithm() is None:
+            return   # faqat 'media' tanlangan — popup yo'q, reklama kino atrofida
         now = time.monotonic()
         if self._next_slot_ts is None or now < self._next_slot_ts:
             return                       # slot vaqti hali kelmadi
@@ -494,19 +494,40 @@ class AdManager(QObject):
             return                       # hammasi yaqinda ko'rsatilgan
         self._try_candidates(cands)
 
+    # Popup tanlash usullari prioriteti — bir nechtasi belgilangan bo'lsa
+    # birinchisi ishlatiladi (`media` alohida joylashuv, bunga kirmaydi).
+    _POPUP_ALGOS = ("weighted", "queue", "random")
+
     @staticmethod
-    def _algorithm():
-        """Admin tanlagan rejalashtirish algoritmi (`ad_algorithm` sozlamasi):
-        'queue', 'random' yoki 'weighted' (standart / noma'lum qiymat)."""
+    def _algorithms():
+        """Admin tanlagan algoritmlar to'plami (`ad_algorithm` sozlamasi —
+        vergul bilan saqlanadi; eski yagona qiymat ham mos keladi)."""
         hit = cache.load_json("settings")
-        algo = (hit[0].get("ad_algorithm") or "").strip() if hit else ""
-        return algo if algo in ("queue", "random", "media") else "weighted"
+        raw = (hit[0].get("ad_algorithm") or "") if hit else ""
+        sel = {x.strip() for x in raw.split(",") if x.strip()}
+        return sel & {"weighted", "queue", "random", "media"}
+
+    @classmethod
+    def _popup_algorithm(cls):
+        """Popup slotida qaysi tanlov usuli ishlaydi (prioritet bo'yicha
+        birinchi belgilangani). Faqat 'media' tanlangan bo'lsa None —
+        popup butunlay chiqmaydi. Hech narsa tanlanmagan bo'lsa 'weighted'."""
+        sel = cls._algorithms()
+        for a in cls._POPUP_ALGOS:
+            if a in sel:
+                return a
+        return None if sel else "weighted"
+
+    @classmethod
+    def _media_enabled(cls):
+        """Kino atrofida (pre/mid/end) reklama ko'rsatilsinmi."""
+        return "media" in cls._algorithms()
 
     def _pick_candidates(self, now):
         """Slot uchun nomzodlar ro'yxati: birinchisi ko'rsatiladi, qolganlari
         media xatosida zaxira. Tartibni admin tanlagan algoritm belgilaydi
         (qarang: modul sarlavhasi — queue / random / weighted)."""
-        algo = self._algorithm()
+        algo = self._popup_algorithm()
         elig = self._eligible()
         if algo == "queue":
             # Eng uzoq ko'rsatilmagani birinchi (hali ko'rsatilmaganlar — 0 —
@@ -545,9 +566,9 @@ class AdManager(QObject):
         yo'q, media xato, boshqa rejim) chaqiriladi — kino HECH QACHON
         reklamaga qarab qolib ketmaydi.
 
-        Tanlov — aylanma navbat (eng uzoq ko'rsatilmagani), algoritm
-        'media' bo'lgandagina ishlaydi."""
-        if (self._algorithm() != "media" or not self._active
+        Tanlov — aylanma navbat (eng uzoq ko'rsatilmagani), 'media' algoritmi
+        belgilangandagina ishlaydi."""
+        if (not self._media_enabled() or not self._active
                 or self._popup is not None or self._pending is not None):
             on_done()
             return

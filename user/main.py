@@ -111,11 +111,13 @@ class MainWindow(QWidget):
         # chiziladi, shunda har bir ekranda (xarita ham) bir xil fon ko'rinadi.
         self._bg = QPixmap(T.BG_IMAGE)
 
-        # Ramkasiz, doim ustda (TZ 13.1)
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
+        # Ramkasiz, doim ustda (TZ 13.1) — VAQTINCHALIK: WINDOWED rejimda oddiy
+        # ramkali oyna (min/max/close tugmalari), shunda chiqib-kirish oson.
+        if not config.WINDOWED:
+            self.setWindowFlags(
+                Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
+            self.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)  # o'ng tugma o'chirildi
         self.setWindowTitle("Kiosk")
-        self.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)  # o'ng tugma o'chirildi
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -174,6 +176,7 @@ class MainWindow(QWidget):
         self.ws.status.connect(self._on_status)
         self.ws.announcement.connect(self.show_announcement)
         self.ws.sync.connect(self._on_sync)
+        self.ws.cache_clear.connect(self._on_cache_clear)
         self.ws.link.connect(self._on_ws_link)
         self.ws.start()
 
@@ -302,6 +305,12 @@ class MainWindow(QWidget):
             self._reload_page("sites")
         if all_scopes or scope in ("route", "settings"):
             self._reload_page("map")
+
+    def _on_cache_clear(self):
+        """Admin «keshni tozalash» buyrug'i: lokal media keshi o'chiriladi.
+        Kesh yoqiq bo'lsa, keyingi sinxda fayllar qaytadan yuklanadi."""
+        if hasattr(self, "media_sync"):
+            self.media_sync.clear()
 
     def show_announcement(self, text):
         """Admin yuborgan e'lonni ustki bannerda ko'rsatadi (10 soniya)."""
@@ -518,7 +527,9 @@ class MainWindow(QWidget):
         threads.wait_all(2000)
 
     def closeEvent(self, e):
-        if not self._allow_exit:
+        # WINDOWED rejimda close (X) tugmasi normal yopsin; kiosk rejimda esa
+        # faqat PIN/admin chiqishi (_allow_exit) ruxsat beradi.
+        if not config.WINDOWED and not self._allow_exit:
             e.ignore()
             return
         self._shutdown()
@@ -537,12 +548,25 @@ def main():
         screen = app.primaryScreen()
         if screen is not None:
             T.init_scale(screen.size())
+        # Serverni topish: manzil qo'lda berilmagan bo'lsa, imzolangan UDP
+        # beacon orqali avtomatik topiladi (bir nechta bo'lsa tanlatadi).
+        # MUHIM: MainWindow (ApiClient/WSClient) yaratilishidan OLDIN.
+        from services import discovery
+        try:
+            discovery.resolve_server()
+        except Exception:
+            logsetup.get_logger(__name__).exception("Discovery xatosi")
         # OS-darajali klaviatura qulfi (Win/Alt+Tab) — faqat frozen buildda
-        # yoki KIOSK_LOCKDOWN=1 bo'lsa (system/lockdown.py'ga qarang)
+        # yoki KIOSK_LOCKDOWN=1 bo'lsa (system/lockdown.py'ga qarang).
+        # VAQTINCHALIK: WINDOWED rejimda qulf o'rnatilmaydi.
         from system import lockdown
-        lockdown.install()
+        if not config.WINDOWED:
+            lockdown.install()
         win = MainWindow()
-        win.showFullScreen()
+        if config.WINDOWED:
+            win.showMaximized()    # ramkali, lekin ekranni to'ldiradi
+        else:
+            win.showFullScreen()
         win.start_splash()     # logotipli splash
         sys.exit(app.exec())
     except Exception:

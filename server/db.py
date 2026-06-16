@@ -103,7 +103,8 @@ CREATE TABLE IF NOT EXISTS route_stops (
     latitude       REAL,
     longitude      REAL,
     distance_km    INTEGER,               -- boshlang'ich bekatdan masofa
-    sort_order     INTEGER DEFAULT 0
+    sort_order     INTEGER DEFAULT 0,
+    direction      INTEGER DEFAULT 0      -- 0 = borish, 1 = qaytish
 );
 
 CREATE TABLE IF NOT EXISTS kiosks (
@@ -156,6 +157,9 @@ def init_db():
         if "distance_km" not in cols:
             conn.execute(
                 "ALTER TABLE route_stops ADD COLUMN distance_km INTEGER")
+        if "direction" not in cols:    # ikki yo'nalish (borish/qaytish)
+            conn.execute("ALTER TABLE route_stops ADD COLUMN direction"
+                         " INTEGER DEFAULT 0")
         # content: til ustunlari (ko'p tilli katalog). Mavjud yozuvlar 'uz'
         # deb belgilanadi (kiosk qat'iy til filtri bilan ishlaydi).
         ccols = {r["name"] for r in
@@ -211,7 +215,9 @@ def _ensure_defaults(conn):
             ("ad_interval_min", "5"),
             ("ad_algorithm", "weighted"),
             ("media_cache", "1"),
+            ("cache_limit_gb", "0"),
             ("sos_enabled", "0"),
+            ("active_route_direction", "0"),   # 0=borish, 1=qaytish (kioskda faol)
         ])
 
 
@@ -434,11 +440,28 @@ def get_sites():
     return [dict(r) for r in rows]
 
 
-def get_route():
+def get_route(direction=None):
+    """Yo'nalish bekatlari (tartib bo'yicha).
+
+    direction=None — KIOSKDA FAOL yo'nalish (`active_route_direction` sozlamasi,
+    standart 0). API va status shu yo'l bilan faolni oladi.
+    direction=0/1 — aniq yo'nalish (admin tahrirlash ko'rinishi)."""
     conn = connect()
-    rows = conn.execute("SELECT * FROM route_stops ORDER BY sort_order, id").fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    try:
+        if direction is None:
+            row = conn.execute(
+                "SELECT value FROM settings WHERE key='active_route_direction'"
+            ).fetchone()
+            try:
+                direction = int(row["value"]) if row else 0
+            except (TypeError, ValueError):
+                direction = 0
+        rows = conn.execute(
+            "SELECT * FROM route_stops WHERE direction=? "
+            "ORDER BY sort_order, id", (direction,)).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
 
 
 def get_settings():
@@ -463,7 +486,7 @@ ADS_COLS = ["media_path", "title", "subtitle", "link_url", "duration",
             "is_active", "sort_order"]
 SITE_COLS = ["name", "url", "description", "features", "icon", "sort_order"]
 STOP_COLS = ["name", "arrival_time", "departure_time", "latitude", "longitude",
-             "distance_km", "sort_order"]
+             "distance_km", "sort_order", "direction"]
 
 
 def _insert(table, cols, data):
