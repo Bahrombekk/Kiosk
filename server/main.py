@@ -140,7 +140,9 @@ def health():
 def content(type: str | None = None):
     if type and type not in db.CONTENT_TYPES:
         raise HTTPException(400, f"Noma'lum tur: {type}")
-    return db.get_content(type)
+    # Kioskka faqat KO'RINADIGAN kontent beriladi (admin "Kiosklarda
+    # ko'rsatilsin"ni olib tashlagan bo'lsa — ro'yxatda umuman chiqmaydi).
+    return [c for c in db.get_content(type) if c.get("visible", 1)]
 
 
 @app.get("/api/content/{content_id}")
@@ -368,6 +370,17 @@ def heartbeat(payload: dict, request: Request):
     if not isinstance(ids, list):
         ids = []
     ids = [i for i in ids[:1000] if isinstance(i, int)]
+    # Hozir yuklanayotgan media (ixtiyoriy): {id, pct, title} — admin jonli ko'radi
+    cg = payload.get("caching")
+    if isinstance(cg, dict) and isinstance(cg.get("id"), int):
+        caching = json.dumps({
+            "id": cg["id"],
+            "pct": _i(cg.get("pct")) if isinstance(cg.get("pct"), int)
+                   and cg.get("pct") >= 0 else -1,
+            "title": str(cg.get("title") or "")[:200],
+        })
+    else:
+        caching = None   # yuklash yo'q — bo'shatamiz
     db.upsert_kiosk(
         device_id,
         kiosk_no=str(payload.get("kiosk_no") or "").strip()[:32],
@@ -377,10 +390,13 @@ def heartbeat(payload: dict, request: Request):
         cached_ids=json.dumps(ids),
         disk_total=_i(payload.get("disk_total")),
         disk_free=_i(payload.get("disk_free")),
+        caching=caching,
         ip=(request.client.host if request.client else ""),
         last_seen=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     )
-    return {"ok": True}
+    # Kioskка JAVOBда shu qurilmaning lokal-kesh ruxsatini qaytaramiz —
+    # admin xotirasiz kiosklarда keshni o'chirib qo'yishi mumkin.
+    return {"ok": True, "cache": db.get_kiosk_cache_enabled(device_id)}
 
 
 @app.get("/api/route")

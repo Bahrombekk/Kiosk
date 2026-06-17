@@ -141,6 +141,7 @@ Filename: "{cmd}"; Parameters: "/C taskkill /IM {#AppExe} /F"; Flags: runhidden;
 var
   TrustPage: TInputFileWizardPage;
   ServerPage: TInputQueryWizardPage;
+  KioskPage: TInputQueryWizardPage;
 
 procedure InitializeWizard();
 begin
@@ -164,6 +165,16 @@ begin
     #13#10 + 'Masalan: http://192.168.136.69:8765');
   ServerPage.Add('Server manzili (URL):', False);
   ServerPage.Add('API kalit:', False);
+
+  // Kiosk identifikatori — admin panelda kiosklarni ajratish uchun
+  KioskPage := CreateInputQueryPage(ServerPage.ID,
+    'Kiosk identifikatori',
+    'Bu kiosk qayerda turishini kiriting',
+    'Kiosk raqami va xona/vagon raqamini kiriting. Bular admin panelidagi ' +
+    '"Kiosklar" va "Lokal kesh" ro''yxatlarida ko''rinadi — qaysi kiosk ' +
+    'qayerdaligini shu orqali bilasiz. (Ixtiyoriy, lekin tavsiya etiladi.)');
+  KioskPage.Add('Kiosk raqami (masalan: 12):', False);
+  KioskPage.Add('Xona / vagon (masalan: 6-vagon):', False);
 end;
 
 function NormalizeUrl(S: string): string;
@@ -198,7 +209,7 @@ end;
 // va/yoki server.txt yozish.
 procedure CurStepChanged(CurStep: TSetupStep);
 var
-  AppDir, TrustSrc, CertPath, PS: string;
+  AppDir, TrustSrc, CertPath, PS, Txt: string;
   RC: Integer;
 begin
   if CurStep = ssPostInstall then
@@ -226,12 +237,22 @@ begin
                'ishlaydi).', mbInformation, MB_OK);
     end;
 
-    // URL kiritilgan bo'lsa server.txt (override / eski HTTP usul). trust.json
-    // berilgan bo'lsa va URL bo'sh bo'lsa — yozmaymiz (discovery topadi).
+    // server.txt: kiosk raqami/xona DOIM yoziladi (kiritilgan bo'lsa),
+    // URL/kalit esa faqat eski HTTP usulда (trust.json bo'lmasa). trust.json
+    // berilgan bo'lsa server manzilini discovery topadi — URL yozilmaydi,
+    // lekin kiosk raqami/xona baribir yoziladi (admin panelда ko'rinsin).
+    Txt := '# Kiosk sozlamasi. Tahrirlab qayta ishga tushiring ' +
+           '(qayta o''rnatish shart emas).' + #13#10;
     if Trim(ServerPage.Values[0]) <> '' then
-      SaveStringToFile(AppDir + '\server.txt',
-        '# Kiosk server manzili. Tahrirlab qayta ishga tushiring (qayta o''rnatish shart emas).' + #13#10 +
-        NormalizeUrl(ServerPage.Values[0]) + #13#10 +
-        'key=' + Trim(ServerPage.Values[1]) + #13#10, False);
+      Txt := Txt + NormalizeUrl(ServerPage.Values[0]) + #13#10 +
+             'key=' + Trim(ServerPage.Values[1]) + #13#10;
+    if Trim(KioskPage.Values[0]) <> '' then
+      Txt := Txt + 'kiosk=' + Trim(KioskPage.Values[0]) + #13#10;
+    if Trim(KioskPage.Values[1]) <> '' then
+      Txt := Txt + 'xona=' + Trim(KioskPage.Values[1]) + #13#10;
+    // URL yoki kiosk/xona kiritilgan bo'lsagina faylni yozamiz
+    if (Trim(ServerPage.Values[0]) <> '') or (Trim(KioskPage.Values[0]) <> '')
+       or (Trim(KioskPage.Values[1]) <> '') then
+      SaveStringToFile(AppDir + '\server.txt', Txt, False);
   end;
 end;

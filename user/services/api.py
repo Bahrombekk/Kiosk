@@ -33,6 +33,8 @@ class ApiClient:
         self.base_url = (base_url or config.SERVER_URL).rstrip("/")
         self.timeout = timeout or config.REQUEST_TIMEOUT
         self.offline = False   # oxirgi katalog so'rovi keshdan keldimi?
+        self.last_sync = None  # oxirgi muvaffaqiyatli server aloqasi (epoch sek)
+        self._net_down = False # ulanish xatosi log'i bir marta yozilsin (spam yo'q)
         # API kalit: REST'da header orqali, VLC/rasm URL'larida ?k= orqali
         self._headers = ({"X-API-Key": config.API_KEY}
                          if config.API_KEY else {})
@@ -40,7 +42,17 @@ class ApiClient:
                          if config.API_KEY else "")
 
     def _cached(self, name, fetch):
-        """fetch() natijasini keshlaydi; tarmoq xatosida keshdan qaytaradi."""
+        """fetch() natijasini keshlaydi; tarmoq xatosida keshdan qaytaradi.
+
+        Ulanish uzilgani ANIQ bo'lsa (`_net_down` — health doimiy tekshiradi)
+        tarmoqni kutib o'tirmaymiz: keshdan DARHOL qaytaramiz (oflayn UI tez
+        bo'lsin). Ulanish tiklanganda health `_net_down`ni tozalaydi va keyingi
+        chaqiruv yana tarmoqdan oladi."""
+        if self._net_down:
+            hit = cache.load_json(name)
+            if hit is not None:
+                self.offline = True
+                return hit[0]
         try:
             data = fetch()
             cache.save_json(name, data)
@@ -79,13 +91,37 @@ class ApiClient:
                         "`key=...` qatori bormi / kalit to'g'rimi tekshiring "
                         "(admin oynasi -> Boshqaruv -> Nusxalash).")
                 r.raise_for_status()
+                # Muvaffaqiyatli aloqa — vaqtni belgilaymiz; uzilgan bo'lsa
+                # "tiklandi" deb BIR marta yozamiz (log spam'iga yo'l qo'ymaymiz)
+                self.last_sync = time.time()
+                if self._net_down:
+                    log.info("Server bilan aloqa tiklandi")
+                    self._net_down = False
                 return r
             except (requests.ConnectionError, requests.Timeout) as e:
                 if attempt >= retries:
-                    log.warning("So'rov muvaffaqiyatsiz (%s): %s", path, e)
+                    # Faqat BIRINCHI uzilishda warning; keyingilari debug
+                    # (server o'chiq turganda log to'lib ketmasin)
+                    if not self._net_down:
+                        log.warning("Server bilan aloqa uzildi (%s): %s", path, e)
+                        self._net_down = True
+                    else:
+                        log.debug("So'rov muvaffaqiyatsiz (%s): %s", path, e)
                     raise
                 time.sleep(delay)
                 delay *= 2
+
+    def last_sync_text(self):
+        """Oxirgi muvaffaqiyatli server aloqasi 'HH:MM' (yoki '' — noma'lum).
+        Sessiyada hali ulanmagan bo'lsa — kontent keshi yoshidan chamalaydi."""
+        ts = self.last_sync
+        if ts is None:
+            hit = cache.load_json("content")
+            if hit is not None:
+                ts = time.time() - hit[1]
+        if ts is None:
+            return ""
+        return time.strftime("%H:%M", time.localtime(ts))
 
     # --- Ulanish ---
     def health(self):
@@ -139,9 +175,15 @@ class ApiClient:
         return self.stream_url(content_id)
 
     def heartbeat(self, info):
-        """Kiosk o'zini serverga tanitadi (admin "Kiosklar" jadvali uchun)."""
-        netpin.post(f"{self.base_url}/api/heartbeat", json=info,
-                    headers=self._headers, timeout=self.timeout)
+        """Kiosk o'zini serverga tanitadi (admin "Kiosklar" jadvali uchun).
+        Server javobi qaytariladi (masalan {"cache": 0/1} — shu qurilmada
+        lokal kesh ruxsati)."""
+        r = netpin.post(f"{self.base_url}/api/heartbeat", json=info,
+                        headers=self._headers, timeout=self.timeout)
+        try:
+            return r.json()
+        except (ValueError, AttributeError):
+            return {}
 
     def get_book_text(self, content_id):
         """Kitob matni (boblar bilan) — o'qilgan kitoblar oflaynda ham ochiladi."""
@@ -158,9 +200,14 @@ class ApiClient:
         return f"{self.base_url}/api/ads/{ad_id}/media{self._url_key}"
 
     def ad_media_play_url(self, ad_id):
-        """Video reklama pleyeri (Qt Multimedia) uchun — TLS'da lokal proxy
-        (self-signed sertifikatni pleyer rad etadi; play_url bilan bir xil
-        sabab)."""
+        """Video reklama pleyeri (Qt Multimedia) uchun:
+          1) lokal keshda tayyor fayl bo'lsa — fayl yo'li (oflaynда ham);
+          2) TLS bo'lsa — lokal proxy (self-signed sertifikat muammosi);
+          3) aks holda — to'g'ridan-to'g'ri URL."""
+        from services import media_cache
+        local = media_cache.ad_local_path(ad_id)
+        if local:
+            return local
         from core import config
         if config.is_tls():
             from services import stream_proxy

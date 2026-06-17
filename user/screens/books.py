@@ -168,12 +168,13 @@ class BooksScreen(QWidget):
 
     # --- Yuklash ---
     def on_show(self):
-        if not self.all_items:
-            self.reload()
+        # Har ochilganda yangilaymiz — oflayn holati va lokal kesh filtri dolzarb
+        self.reload()
 
     def reload(self):
         self.empty.hide()
-        self.status.loading(tr("common.loading"))
+        if not self.all_items:
+            self.status.loading(tr("common.loading"))
         self._loader = track(_Loader(self.api))
         self._loader.done.connect(self._on_loaded)
         self._loader.fail.connect(
@@ -205,6 +206,9 @@ class BooksScreen(QWidget):
 
     def _filtered(self):
         from core.i18n import content_visible
+        from services import media_cache
+        from core import cache
+        offline = self.api.offline
         out = []
         match = self._tabs[self.active_tab][0]   # janr (None=Barchasi)
         for it in self.all_items:
@@ -214,6 +218,13 @@ class BooksScreen(QWidget):
                 continue
             if match is not None and (it.get("genre") != match):
                 continue
+            # Oflaynda — faqat oflaynda ochiladigan kitoblar: audiosi yuklab
+            # olingan YOKI matni avval ochilib keshlangan bo'lsa
+            if offline:
+                has_audio = media_cache.local_path(it.get("id")) is not None
+                has_text = cache.load_json(f"book_{it.get('id')}") is not None
+                if not (has_audio or has_text):
+                    continue
             out.append(it)
         return out
 
@@ -224,9 +235,11 @@ class BooksScreen(QWidget):
                 w.deleteLater()
         self.cards = []
         items = self._filtered()
+        offline = self.api.offline
         if not items:
             self.status.clear()
-            self.empty.set_message(tr("common.nothing_found"))
+            self.empty.set_message(tr("offline.empty") if offline
+                                   else tr("common.nothing_found"))
             self.empty.show()
             return
         self.status.clear()

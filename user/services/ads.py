@@ -58,7 +58,8 @@ import time
 from datetime import datetime
 
 from PyQt6.QtWidgets import QLabel, QWidget
-from PyQt6.QtCore import Qt, QThread, QTimer, QUrl, QRectF, QObject, pyqtSignal
+from PyQt6.QtCore import (Qt, QThread, QTimer, QUrl, QRect, QRectF, QObject,
+                          pyqtSignal)
 from PyQt6.QtGui import QPixmap, QPainter, QPainterPath
 
 from core import cache
@@ -112,8 +113,8 @@ class _AdsLoader(QThread):
 
 
 class _AdMedia(QLabel):
-    """Reklama media maydoni: rasm yoki video kadrlari, markazdan kesib
-    to'ldiriladi, burchaklari yumaloq."""
+    """Reklama media maydoni: rasm yoki video kadrlari — TO'LIQ ko'rsatiladi
+    (kesilmaydi, nisbat saqlanadi), burchaklari yumaloq."""
 
     def __init__(self, w, h, radius):
         super().__init__()
@@ -131,18 +132,27 @@ class _AdMedia(QLabel):
         if not self._orig:
             return
         w, h = self.width(), self.height()
-        scaled = self._orig.scaled(
-            w, h, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-            Qt.TransformationMode.SmoothTransformation)
         out = QPixmap(w, h)
         out.fill(Qt.GlobalColor.transparent)
         p = QPainter(out)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         clip = QPainterPath()
         clip.addRoundedRect(QRectF(0, 0, w, h), self._radius, self._radius)
         p.setClipPath(clip)
-        p.drawPixmap((w - scaled.width()) // 2,
-                     (h - scaled.height()) // 2, scaled)
+        # 1) Ambient fon — reklamaning xira (blur) nusxasi maydonni to'ldiradi
+        #    (kichraytirib-kattalaytirish bilan arzon blur), so'ng biroz qoraytamiz
+        sm = self._orig.scaled(max(1, w // 16), max(1, h // 16),
+                               Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                               Qt.TransformationMode.SmoothTransformation)
+        bg = sm.scaled(w, h, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                       Qt.TransformationMode.SmoothTransformation)
+        p.drawPixmap((w - bg.width()) // 2, (h - bg.height()) // 2, bg)
+        p.fillRect(0, 0, w, h, QColor(10, 14, 22, 110))
+        # 2) To'liq reklama — markazda, kesilmasdan (nisbat saqlanadi)
+        fg = self._orig.scaled(w, h, Qt.AspectRatioMode.KeepAspectRatio,
+                               Qt.TransformationMode.SmoothTransformation)
+        p.drawPixmap((w - fg.width()) // 2, (h - fg.height()) // 2, fg)
         p.end()
         self.setPixmap(out)
 
@@ -161,7 +171,9 @@ class AdPopup(Modal):
     failed = pyqtSignal()   # video: boshlanmadi (404/tarmoq/kodek)
 
     def __init__(self, parent, ad, api, pixmap=None):
-        # Panel — oyna kengligining ~62%, 16:9 (balandlikka sig'masa kichikroq)
+        # Panel — keng 16:9 maydon (oyna kengligining ~62%). Reklama TO'LIQ
+        # (kesilmasdan) markazda ko'rsatiladi; atrofi reklamaning xira (blur)
+        # nusxasi bilan to'ldiriladi — qora bo'shliq qolmaydi.
         pw = max(480, int(parent.width() * 0.62))
         ph = int(pw * 9 / 16)
         maxh = int(parent.height() * 0.8)
@@ -251,7 +263,10 @@ class AdPopup(Modal):
         self._vsink.videoFrameChanged.connect(self._on_frame)
         self._vplayer.mediaStatusChanged.connect(self._on_media_status)
         self._vplayer.errorOccurred.connect(self._on_error)
-        self._vplayer.setSource(QUrl(url))
+        # Lokal fayl bo'lsa file:// URL (oflaynда ham), aks holda tarmoq URL
+        src = (QUrl(url) if str(url).startswith(("http://", "https://"))
+               else QUrl.fromLocalFile(url))
+        self._vplayer.setSource(src)
         self._vplayer.play()
 
     def _on_frame(self, frame):
@@ -452,16 +467,16 @@ class AdManager(QObject):
 
     # ---- Ko'rsatish ----
     def _busy(self):
-        """Hozir reklama chiqarish noo'rin: pleyer/o'quvchi ochiq, zastavka,
-        PIN oynasi yoki server bilan aloqa yo'q (media yuklab bo'lmaydi)."""
+        """Hozir reklama chiqarish noo'rin: pleyer/o'quvchi ochiq, zastavka yoki
+        PIN oynasi. OFLAYN holatда to'smaymiz — reklamalar lokal keshda bo'lsa
+        ko'rsatiladi (keshda bo'lmasa urinish jimgina o'tkazib yuboriladi)."""
         try:
             media_open = self.win._media_open()
         except Exception:                            # noqa: BLE001
             media_open = False
         return (media_open
                 or self.win.saver.isVisible()
-                or getattr(self.win, "_pin_open", False)
-                or not getattr(self.win, "connected", False))
+                or getattr(self.win, "_pin_open", False))
 
     def _maybe_show(self):
         """Har TICK: global slot vaqti kelganida BITTA reklama chiqaradi.
@@ -523,6 +538,15 @@ class AdManager(QObject):
         """Kino atrofida (pre/mid/end) reklama ko'rsatilsinmi."""
         return "media" in cls._algorithms()
 
+    @staticmethod
+    def _media_slots():
+        """Media reklama QAYSI joylarda chiqsin: {'pre','mid','end'} to'plami
+        (admin «media_ad_slots» sozlamasidan). Bo'sh/eski — hammasi (standart)."""
+        hit = cache.load_json("settings")
+        raw = (hit[0].get("media_ad_slots") or "") if hit else ""
+        sel = {x.strip() for x in raw.split(",") if x.strip()} & {"pre", "mid", "end"}
+        return sel or {"pre", "mid", "end"}
+
     def _pick_candidates(self, now):
         """Slot uchun nomzodlar ro'yxati: birinchisi ko'rsatiladi, qolganlari
         media xatosida zaxira. Tartibni admin tanlagan algoritm belgilaydi
@@ -572,6 +596,10 @@ class AdManager(QObject):
                 or self._popup is not None or self._pending is not None):
             on_done()
             return
+        # Admin tanlagan joylar: faqat boshida / boshi+oxiri / hammasi
+        if stage not in self._media_slots():
+            on_done()
+            return
         if stage == "pre" and time.monotonic() - self._last_close_ts < MIN_GAP_S:
             # Foydalanuvchi kinolarni ketma-ket ochib-yopsa, har ochilishda
             # pre-roll urilmasin — oxirgi reklamadan kamida MIN_GAP_S o'tsin
@@ -590,7 +618,12 @@ class AdManager(QObject):
         if not cands:
             on_done()
             return
-        self._media_ctx = (_MediaAdLayer(host.geometry()), on_done, stage)
+        # Qatlam mustaqil top-level oyna — host (pleyer) endi kiosk oynasi
+        # ICHIDA bola, shuning uchun GLOBAL koordinatasini olamiz (aks holda
+        # ekran chap-yuqorisida noto'g'ri joyda chiqadi).
+        tl = host.mapToGlobal(host.rect().topLeft())
+        grect = QRect(tl.x(), tl.y(), host.width(), host.height())
+        self._media_ctx = (_MediaAdLayer(grect), on_done, stage)
         self._try_candidates(cands)
 
     def _popup_parent(self):
@@ -624,6 +657,17 @@ class AdManager(QObject):
             pop.failed.connect(lambda ad=ad, rest=rest:
                                self._on_video_fail(ad, rest))
         else:
+            # Lokal keshda tayyor rasm bo'lsa — to'g'ridan o'qiymiz (oflaynда ham)
+            from services import media_cache
+            local = media_cache.ad_local_path(ad["id"])
+            if local:
+                try:
+                    with open(local, "rb") as fh:
+                        data = fh.read()
+                    self._on_image(ad, rest, data)
+                    return
+                except OSError:
+                    pass
             f = track(_Fetcher(self.api.ad_media_url(ad["id"])))
             self._fetch = f
             f.done.connect(lambda data, _c, ad=ad, rest=rest:

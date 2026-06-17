@@ -101,6 +101,14 @@ STRINGS = {
     "audio.offline":  ("Server bilan aloqa yo'q — audio vaqtincha mavjud emas",
                        "Нет связи с сервером — аудио временно недоступно",
                        "No server connection — audio is temporarily unavailable"),
+    # Oflayn rejim: faqat lokal keshga yuklab olingan kontent ko'rinadi
+    "offline.local_only": ("Oflayn rejim — faqat yuklab olingan kontent",
+                           "Офлайн режим — только загруженный контент",
+                           "Offline mode — only downloaded content"),
+    "offline.last_sync":  ("oxirgi sinx", "последняя синхр.", "last sync"),
+    "offline.empty":      ("Oflayn — yuklab olingan kontent yo'q",
+                           "Офлайн — нет загруженного контента",
+                           "Offline — no downloaded content"),
 
     "books.pages": ("{n} sahifa", "{n} стр.", "{n} pages"),
 

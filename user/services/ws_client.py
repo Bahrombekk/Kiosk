@@ -49,6 +49,7 @@ class WSClient(QThread):
     announcement = pyqtSignal(str)    # announcement keldi
     sync = pyqtSignal(dict)           # katalog/sozlama yangilandi
     cache_clear = pyqtSignal()        # admin: lokal keshni tozalash buyrug'i
+    cache_sync = pyqtSignal()         # admin: media keshni darhol sinxlash buyrug'i
     link = pyqtSignal(bool)           # ulanish bor/yo'q
 
     def __init__(self, url=None):
@@ -74,6 +75,9 @@ class WSClient(QThread):
                         ping_interval=20, ping_timeout=20,
                         ssl=_ssl_context()) as wsconn:
                     self.link.emit(True)
+                    if getattr(self, "_down_logged", False):
+                        log.info("WS qayta ulandi")
+                        self._down_logged = False
                     await wsconn.send(json.dumps(
                         {"type": "register", "device_id": self.device_id,
                          "platform": self.platform}))
@@ -82,7 +86,13 @@ class WSClient(QThread):
                             return
                         self._handle(raw)
             except Exception as e:
-                log.warning("WS uzildi (%s), qayta urinamiz", e)
+                # Faqat birinchi uzilishda warning — server o'chiq turganda
+                # har 5 soniyada takror yozib log'ni to'ldirmaymiz
+                if not getattr(self, "_down_logged", False):
+                    log.warning("WS uzildi (%s), qayta urinamiz", e)
+                    self._down_logged = True
+                else:
+                    log.debug("WS qayta urinish (%s)", e)
                 # Ulanish uzildi — biroz kutib qayta urinamiz (TZ 12.2).
                 # Uyquni mayda bo'laklarga bo'lamiz: stop() darhol ta'sir qilsin
                 # (aks holda ilova yopilganda thread 5s ishlab turib, Qt'ni
@@ -109,6 +119,8 @@ class WSClient(QThread):
             self.sync.emit(data)
         elif mtype == "cache_clear":
             self.cache_clear.emit()
+        elif mtype == "cache_sync":
+            self.cache_sync.emit()
 
     def stop(self):
         self._stop = True

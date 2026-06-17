@@ -193,12 +193,14 @@ class VideosScreen(QWidget):
 
     # ---------- Ma'lumot yuklash ----------
     def on_show(self):
-        if not self.all_items:
-            self.reload()
+        # Har ochilganda yangilaymiz — oflayn holati (get_content) va lokal kesh
+        # filtri dolzarb bo'lsin. Birinchi marta — spinner, keyin jim yangilash.
+        self.reload()
 
     def reload(self):
         self.empty.hide()
-        self.status.loading(tr("common.loading"))
+        if not self.all_items:
+            self.status.loading(tr("common.loading"))
         self._loader = track(_Loader(self.api))
         self._loader.done.connect(self._on_loaded)
         self._loader.fail.connect(
@@ -223,7 +225,9 @@ class VideosScreen(QWidget):
 
     def _filtered(self):
         from core.i18n import content_visible
+        from services import media_cache
         types = TABS[self.active_tab][1]
+        offline = self.api.offline
         out = []
         for it in self.all_items:
             if it.get("type") not in types:
@@ -231,6 +235,9 @@ class VideosScreen(QWidget):
             if not content_visible(it):   # faqat joriy tildagi kontent
                 continue
             if self.search_text and self.search_text not in (it.get("title") or "").lower():
+                continue
+            # Oflaynda — faqat lokal keshga yuklab olingan kontent (striming yo'q)
+            if offline and media_cache.local_path(it.get("id")) is None:
                 continue
             out.append(it)
         return out
@@ -288,9 +295,11 @@ class VideosScreen(QWidget):
         self._headers = []
 
         items = self._filtered()
+        offline = self.api.offline
         if not items:
             self.status.clear()
-            self.empty.set_message(tr("common.nothing_found"))
+            self.empty.set_message(tr("offline.empty") if offline
+                                   else tr("common.nothing_found"))
             self.empty.show()
             return
         self.status.clear()

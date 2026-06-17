@@ -11,6 +11,7 @@ from ui.styles import C_ACCENT, C_BAD
 from ui.helpers import local_ips
 from ui.server_thread import ServerThread
 from ui.pages.dashboard import DashboardPageMixin
+from ui.pages.cache import CachePageMixin
 from ui.pages.content import ContentPageMixin
 from ui.pages.ads import AdsPageMixin
 from ui.pages.crud import CrudPagesMixin
@@ -21,12 +22,13 @@ from ui.pages.stats import StatsPageMixin
 # ----------------------------------------------------------------------------
 #  Asosiy admin oynasi
 # ----------------------------------------------------------------------------
-class AdminWindow(DashboardPageMixin, ContentPageMixin, AdsPageMixin,
-                  CrudPagesMixin, SettingsPageMixin, StatsPageMixin,
-                  QMainWindow):
+class AdminWindow(DashboardPageMixin, CachePageMixin, ContentPageMixin,
+                  AdsPageMixin, CrudPagesMixin, SettingsPageMixin,
+                  StatsPageMixin, QMainWindow):
     NAV = [
         ("dashboard", "Boshqaruv", "layout-dashboard"),
         ("content", "Kontent", "clapperboard"),
+        ("cache", "Lokal kesh", "save"),
         ("ads", "Reklama", "megaphone"),
         ("sites", "Saytlar", "globe"),
         ("route", "Bekatlar", "train-front"),
@@ -61,6 +63,7 @@ class AdminWindow(DashboardPageMixin, ContentPageMixin, AdsPageMixin,
         self._page_refs = []
         builders = {
             "dashboard": self._dashboard_page, "content": self._content_page,
+            "cache": self._cache_page,
             "ads": self._ads_page, "sites": self._sites_page,
             "route": self._route_page, "stats": self._stats_page,
             "settings": self._settings_page,
@@ -163,6 +166,11 @@ class AdminWindow(DashboardPageMixin, ContentPageMixin, AdsPageMixin,
             self._update_stats()
         if key == "stats":
             self.refresh_usage_stats()
+        if key == "cache" and hasattr(self, "_cache_timer"):
+            self._refresh_cache_matrix()       # darhol
+            self._cache_timer.start(2000)      # jonli yangilab turadi
+        elif hasattr(self, "_cache_timer"):
+            self._cache_timer.stop()           # boshqa sahifada — to'xtatamiz
         if key == "content":
             # Sahifa ko'rinib viewport haqiqiy kenglik olgach qayta teramiz
             QTimer.singleShot(0, self._recheck_cols)

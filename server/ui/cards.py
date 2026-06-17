@@ -255,6 +255,14 @@ class AdminContentCard(QFrame):
             sub.setWordWrap(True)
             lay.addWidget(sub)
 
+        # Kiosklarda ko'rinmaydi (admin yashirgan) — eng muhim belgi, qizil
+        if not item.get("visible", 1):
+            hb = QLabel("🚫 Kiosklarda ko'rinmaydi (yashirilgan)")
+            hb.setObjectName("ccSub")
+            hb.setStyleSheet("color: #DC2626; font-size: 11px;"
+                             " font-weight: 700;")
+            lay.addWidget(hb)
+
         # Lokal kesh belgisi qo'yilmagan media — kiosklarga yuklanmaydi
         # (faqat striming); admin buni kartadan ko'rib tursin.
         if (item.get("type") in ("movie", "cartoon", "music", "audiobook")

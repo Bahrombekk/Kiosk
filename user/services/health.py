@@ -27,7 +27,7 @@ class HealthChecker(QThread):
             try:
                 from services import media_cache
                 du = shutil.disk_usage(config.APP_DIR)
-                self.api.heartbeat({
+                resp = self.api.heartbeat({
                     "device_id": socket.gethostname(),
                     "kiosk_no": config.KIOSK_NO,
                     "room": config.ROOM_NO,
@@ -35,9 +35,14 @@ class HealthChecker(QThread):
                                 f"{_platform.release()}".strip(),
                     "cached": media_cache.count(),
                     "cached_ids": media_cache.cached_ids(),
+                    "caching": media_cache.caching_status(),
                     "disk_total": du.total,
                     "disk_free": du.free,
                 })
+                # Server shu qurilma uchun lokal keshni o'chirib qo'ygan bo'lsa
+                # (xotirasiz kiosk) — yuklashni to'xtatamiz
+                if isinstance(resp, dict) and "cache" in resp:
+                    media_cache.set_device_allowed(bool(resp.get("cache")))
             except Exception:                       # noqa: BLE001
                 pass   # heartbeat yetmasa ham health natijasi muhimroq
         self.result.emit(ok)

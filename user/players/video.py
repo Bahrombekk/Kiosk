@@ -371,11 +371,18 @@ class VideoPlayer(QWidget):
                 self._begin_ad("end", self._after_end_ad)
 
     # ---------- Boshqaruvni ko'rsatish/yashirish ----------
+    def _controls_geom(self):
+        """Boshqaruv — alohida top-level oyna; uning joyi GLOBAL koordinatada
+        bo'lishi kerak. Pleyer kiosk oynasi ichida bola bo'lgani uchun
+        self.geometry() ota-oynaga nisbiy bo'ladi — shuning uchun mapToGlobal."""
+        tl = self.mapToGlobal(self.rect().topLeft())
+        return tl.x(), tl.y(), self.width(), self.height()
+
     def _show_controls(self):
         if self._ad_open:
             return   # reklama qatlami ustida boshqaruv ko'rinmasin
         # Boshqaruv oynasi videoni aniq qoplashi uchun geometriyani moslaymiz.
-        self.controls.setGeometry(self.geometry())
+        self.controls.setGeometry(*self._controls_geom())
         self.controls.show()
         self.controls.raise_()
         self._hide_timer.start(5000)
@@ -437,5 +444,5 @@ class VideoPlayer(QWidget):
     def resizeEvent(self, e):
         self.video.setGeometry(self.rect())
         if self.controls.isVisible():
-            self.controls.setGeometry(self.geometry())
+            self.controls.setGeometry(*self._controls_geom())
         super().resizeEvent(e)

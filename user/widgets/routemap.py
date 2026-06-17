@@ -150,8 +150,9 @@ class RouteMap(QWidget):
         sx, sy = aw / dlon, ah / dlat
         s = min(sx, sy)                      # gorizontal — nisbatni saqlaydi
         # Marshrut keng+past bo'lsa vertikal juda yupqa chiqadi — biroz cho'zib
-        # panelni to'ldiramiz (cheklangan: xunuk buzilmasin).
-        syy = min(sy, s * 2.4)
+        # panelni to'ldiramiz, lekin geografiya haqqoniy qolsin (kam cho'zish —
+        # cho'qqilar tabiiy, poyezd "uchmaydi").
+        syy = min(sy, s * 1.7)
         used_w, used_h = dlon * s, dlat * syy
         ox = rect.left() + pad + (aw - used_w) / 2
         oy = rect.top() + pad + (ah - used_h) / 2
@@ -160,18 +161,34 @@ class RouteMap(QWidget):
 
     @staticmethod
     def _smooth_path(pts):
-        """Nuqtalar orqali silliq egri (Catmull-Rom -> kubik Bezier)."""
-        path = QPainterPath(pts[0])
+        """Rels chizig'i: to'g'ri segmentlar + YUMALOQ burchaklar. Catmull-Rom
+        kabi overshoot qilmaydi (keskin burilishda chiziq nuqtadan oshib
+        "uchib" ketmaydi) — haqiqiy temir yo'l sxemasiga o'xshaydi."""
         n = len(pts)
-        for i in range(n - 1):
-            p0 = pts[i - 1] if i > 0 else pts[0]
-            p1, p2 = pts[i], pts[i + 1]
-            p3 = pts[i + 2] if i + 2 < n else pts[n - 1]
-            c1 = QPointF(p1.x() + (p2.x() - p0.x()) / 6.0,
-                         p1.y() + (p2.y() - p0.y()) / 6.0)
-            c2 = QPointF(p2.x() - (p3.x() - p1.x()) / 6.0,
-                         p2.y() - (p3.y() - p1.y()) / 6.0)
-            path.cubicTo(c1, c2, p2)
+        if n == 0:
+            return QPainterPath()
+        path = QPainterPath(pts[0])
+        if n < 3:
+            for q in pts[1:]:
+                path.lineTo(q)
+            return path
+
+        def _lerp(a, b, t):
+            return QPointF(a.x() + (b.x() - a.x()) * t,
+                           a.y() + (b.y() - a.y()) * t)
+
+        def _dist(a, b):
+            return math.hypot(a.x() - b.x(), a.y() - b.y()) or 1e-6
+
+        rmax = T.s(46)
+        for i in range(1, n - 1):
+            p0, p1, p2 = pts[i - 1], pts[i], pts[i + 1]
+            d1, d2 = _dist(p0, p1), _dist(p1, p2)
+            rad = min(d1 / 2, d2 / 2, rmax)   # burchak yumaloqlik radiusi
+            # p1 ga rad oldin to'g'ri kelamiz, so'ng burchakni yumaloq aylanamiz
+            path.lineTo(_lerp(p1, p0, rad / d1))
+            path.quadTo(p1, _lerp(p1, p2, rad / d2))
+        path.lineTo(pts[-1])
         return path
 
     # ---- Chizish ----

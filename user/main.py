@@ -70,7 +70,8 @@ from system.vlcsetup import setup_vlc
 
 setup_vlc()
 
-from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QStackedWidget
+from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QStackedWidget,
+                             QLabel, QGraphicsDropShadowEffect)
 from PyQt6.QtCore import Qt, QTimer, QEvent
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QIcon
 
@@ -171,12 +172,29 @@ class MainWindow(QWidget):
         # E'lon banneri (announcement uchun) — ustki qatlam (widgets/banner.py).
         self.banner = AnnouncementBanner(self)
 
+        # Oflayn eslatmasi — pastki-o'ng burchakdagi mayda "pill" (server o'chsa
+        # ko'rinadi: faqat yuklab olingan kontent + oxirgi sinx vaqti).
+        self.offline_banner = QLabel(self)
+        self.offline_banner.setObjectName("offlineBanner")
+        self.offline_banner.setTextFormat(Qt.TextFormat.RichText)
+        self.offline_banner.setStyleSheet(
+            "#offlineBanner { background: rgba(255,255,255,0.94);"
+            " color: #5B6472; border: 1px solid rgba(20,30,50,0.08);"
+            f" border-radius: {T.s(18)}px; padding: {T.s(8)}px {T.s(20)}px;"
+            f" font-size: {T.s(15)}px; font-weight: 600; }}")
+        _osh = QGraphicsDropShadowEffect(self.offline_banner)
+        _osh.setBlurRadius(T.s(28)); _osh.setOffset(0, T.s(6))
+        _osh.setColor(QColor(20, 30, 60, 70))
+        self.offline_banner.setGraphicsEffect(_osh)
+        self.offline_banner.hide()
+
         # WebSocket real-time (TZ 11.2): status va e'lonlarni tinglaydi
         self.ws = track(WSClient())
         self.ws.status.connect(self._on_status)
         self.ws.announcement.connect(self.show_announcement)
         self.ws.sync.connect(self._on_sync)
         self.ws.cache_clear.connect(self._on_cache_clear)
+        self.ws.cache_sync.connect(self._on_cache_sync)
         self.ws.link.connect(self._on_ws_link)
         self.ws.start()
 
@@ -235,6 +253,28 @@ class MainWindow(QWidget):
         self._checker.result.connect(self._on_health)
         self._checker.start()
 
+    def _show_offline_banner(self, offline):
+        """Pastki-o'ng oflayn pill'ini ko'rsatadi/yashiradi (oxirgi sinx bilan)."""
+        b = self.offline_banner
+        if offline:
+            sync = self.api.last_sync_text()
+            msg = i18n.tr("offline.local_only")
+            if sync:
+                msg += f"  ·  {i18n.tr('offline.last_sync')}: {sync}"
+            b.setText(f"<span style='color:#F59E0B'>●</span>&nbsp; {msg}")
+            b.adjustSize()
+            self._position_offline_banner()
+            b.show()
+            b.raise_()
+        else:
+            b.hide()
+
+    def _position_offline_banner(self):
+        b = self.offline_banner
+        b.adjustSize()
+        m = T.s(20)
+        b.move(self.width() - b.width() - m, self.height() - b.height() - m)
+
     def _on_health(self, ok):
         was = self.connected
         self.connected = ok
@@ -243,6 +283,7 @@ class MainWindow(QWidget):
         self.nav.set_sos_visible(sos_enabled())
         if ok:
             self.nav.set_offline(False)
+            self._show_offline_banner(False)
             self.outer.setCurrentWidget(self.app)
             if not was:
                 self.go(self.nav.active)  # qayta ulanganda joriy sahifani yangilash
@@ -254,6 +295,7 @@ class MainWindow(QWidget):
             # "ulanmoqda" ekraniga qaytarmaymiz, kiosk ishlashda davom etadi
             # (ro'yxat/kitoblar keshdan; faqat video striming ishlamaydi).
             self.nav.set_offline(True)
+            self._show_offline_banner(True)
             self.outer.setCurrentWidget(self.app)
         else:
             # Birinchi ishga tushish (kesh yo'q) — ulanish ekrani
@@ -273,6 +315,11 @@ class MainWindow(QWidget):
     def _refresh_settings_cache(self):
         worker = track(_SettingsPrefetch(self.api))
         worker.finished.connect(lambda: self.nav.set_sos_visible(sos_enabled()))
+        # Sozlama yangilangach media sinxni kick qilamiz — "Lokal media kesh"
+        # yangi yoqilgan bo'lsa kesh keshlangach (server_enabled() yangi qiymat)
+        # darhol yuklash boshlanadi (10 daqiqalik taymerni kutmaydi).
+        worker.finished.connect(
+            lambda: self.media_sync.kick() if hasattr(self, "media_sync") else None)
         worker.start()
 
     def _reload_page(self, key):
@@ -312,6 +359,12 @@ class MainWindow(QWidget):
         if hasattr(self, "media_sync"):
             self.media_sync.clear()
 
+    def _on_cache_sync(self):
+        """Admin «hoziroq yukla» buyrug'i: media sinxni darhol ishga tushiradi
+        (10 daqiqalik davriy taymerni kutmasdan)."""
+        if hasattr(self, "media_sync"):
+            self.media_sync.kick()
+
     def show_announcement(self, text):
         """Admin yuborgan e'lonni ustki bannerda ko'rsatadi (10 soniya)."""
         self.banner.show_message(text)
@@ -342,6 +395,8 @@ class MainWindow(QWidget):
     def resizeEvent(self, e):
         if hasattr(self, "banner"):
             self.banner.reposition()
+        if getattr(self, "offline_banner", None) and self.offline_banner.isVisible():
+            self._position_offline_banner()
         # Zastavka mustaqil top-level oyna (o'z ekraniga to'liq cho'ziladi) —
         # bu yerda boshqarish shart emas.
         super().resizeEvent(e)

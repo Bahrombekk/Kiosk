@@ -442,12 +442,21 @@ class _HomeCanvas(QWidget):
         self.book_card.setSizePolicy(QSizePolicy.Policy.Expanding,
                                      QSizePolicy.Policy.Expanding)
         bc = QHBoxLayout(self.book_card)
-        bc.setContentsMargins(22, 22, 22, 22)
-        bc.setSpacing(24)
-        self.book_cover = CoverLabel(180, 250)
+        bc.setContentsMargins(26, 26, 26, 26)
+        bc.setSpacing(28)
+        self.book_cover = CoverLabel(190, 264, radius=16)
         bc.addWidget(self.book_cover, alignment=Qt.AlignmentFlag.AlignVCenter)
         btext = QVBoxLayout()
-        btext.setSpacing(6)
+        btext.setSpacing(8)
+        btext.addStretch(1)
+        # Janr chipi (mavjud bo'lsa)
+        self.book_genre = QLabel("")
+        self.book_genre.setObjectName("bGenre")
+        self.book_genre.hide()
+        grow = QHBoxLayout()
+        grow.addWidget(self.book_genre)
+        grow.addStretch(1)
+        btext.addLayout(grow)
         self.book_title = QLabel("—")
         self.book_title.setObjectName("tBig")
         self.book_title.setWordWrap(True)
@@ -456,6 +465,7 @@ class _HomeCanvas(QWidget):
         btext.addWidget(self.book_title)
         btext.addWidget(self.book_author)
         btext.addStretch(1)
+        btext.addSpacing(4)
         self.listen_btn = QPushButton(tr("common.listen"))
         self.listen_btn.setObjectName("listenBtn")
         self.listen_btn.setIcon(svg_icon("headphones", "#FFFFFF", 48))
@@ -464,11 +474,12 @@ class _HomeCanvas(QWidget):
         self.read_btn.setIcon(svg_icon("book-open", "#FFFFFF", 48))
         for b in (self.listen_btn, self.read_btn):
             b.setCursor(Qt.CursorShape.PointingHandCursor)
-            b.setFixedHeight(58)
-            b.setIconSize(QSize(24, 24))
+            b.setFixedHeight(62)
+            b.setIconSize(QSize(26, 26))
         self.listen_btn.clicked.connect(self._listen_book)
         self.read_btn.clicked.connect(self._read_book)
         btext.addWidget(self.listen_btn)
+        btext.addSpacing(12)
         btext.addWidget(self.read_btn)
         bc.addLayout(btext, 1)
         rl.addWidget(self.book_card, 4)
@@ -513,6 +524,17 @@ class _HomeCanvas(QWidget):
         # Tavsiyalar ham joriy interfeys tiliga mos bo'lsin (qat'iy filtr)
         from core.i18n import content_visible
         content = [c for c in content if content_visible(c)]
+        # Oflaynda — faqat oflaynda ochiladigan kontent tavsiya qilinadi
+        if self.api.offline:
+            from services import media_cache
+            from core import cache as _c
+            def _avail(it):
+                if media_cache.local_path(it.get("id")) is not None:
+                    return True
+                if it.get("type") in BOOK_TYPES:
+                    return _c.load_json(f"book_{it.get('id')}") is not None
+                return False
+            content = [c for c in content if _avail(c)]
         # "Tavsiya etamiz" karuselida FAQAT kino (musiqa/multfilm chiqmaydi)
         recs = [c for c in content if c.get("is_recommended")
                 and c.get("type") == "movie"]
@@ -660,8 +682,13 @@ class _HomeCanvas(QWidget):
             self.book_cover.load(self.api.cover_url(self.rec_book["id"]))
             self.book_title.setText(self.rec_book.get("title", ""))
             self.book_author.setText(self.rec_book.get("author") or "")
-            self.listen_btn.show()
-            self.read_btn.show()
+            genre = self.rec_book.get("genre") or ""
+            self.book_genre.setText(genre)
+            self.book_genre.setVisible(bool(genre))
+            # Tugmalar faqat mavjud bo'lsa: audio bo'lsa Tinglash, matn bo'lsa O'qish
+            from widgets.card import can_listen, can_read
+            self.listen_btn.setVisible(can_listen(self.rec_book))
+            self.read_btn.setVisible(can_read(self.rec_book))
         else:
             self.book_card.hide()
 
@@ -683,6 +710,10 @@ class _HomeCanvas(QWidget):
     def _play_movie(self, item):
         if self._modal:
             self._modal.close_modal()
+        # Tavsiyadan ochilsa ham — avval "o'z bo'limi" (Videolar)ga o'tamiz,
+        # pleyer yopilganda foydalanuvchi Videolarда qoladi (Asosiyда emas).
+        if hasattr(self.host, "go"):
+            self.host.go("videos")
         # Audio musiqa — qora video emas, AudioPlayer (muqova + to'lqin)
         from screens.videos import _is_audio_music
         if _is_audio_music(item):
@@ -694,7 +725,7 @@ class _HomeCanvas(QWidget):
                 old_v.stop_and_close()
             stats.event("content_open", id=item.get("id"),
                         title=item.get("title"), type=item.get("type"))
-            self._audio = AudioPlayer(self.api, item, self.theme_name, host=self.window())
+            self._audio = AudioPlayer(self.api, item, self.theme_name, host=self.host)
             self._audio.closed.connect(lambda: setattr(self, "_audio", None))
             self._audio.start()
             return
@@ -705,10 +736,10 @@ class _HomeCanvas(QWidget):
         stats.event("content_open", id=item.get("id"),
                     title=item.get("title"), type=item.get("type"))
         self._player = VideoPlayer(self.api.play_url(item["id"]),
-                                   item.get("title", ""), host=self.window())
+                                   item.get("title", ""), host=self.host)
         # "Media" reklama algoritmida kino boshida/o'rtasida/oxirida reklama
         # chiqadi (boshqa rejimlarda hook hech narsa qilmaydi).
-        mgr = getattr(self.window(), "ad_manager", None)
+        mgr = getattr(self.host, "ad_manager", None)
         if mgr is not None:
             self._player.ad_hook = mgr.media_ad
         self._player.closed.connect(lambda: setattr(self, "_player", None))
@@ -716,20 +747,25 @@ class _HomeCanvas(QWidget):
 
     def _read_book(self):
         if self.rec_book:
-            stats.event("content_open", id=self.rec_book.get("id"),
-                        title=self.rec_book.get("title"),
-                        type=self.rec_book.get("type"))
-            self._reader = Reader(self.api, self.rec_book, self.theme_name,
-                                  host=self.window())
+            item = self.rec_book
+            if hasattr(self.host, "go"):
+                self.host.go("books")   # o'z bo'limiga o'tib ochamiz
+            stats.event("content_open", id=item.get("id"),
+                        title=item.get("title"), type=item.get("type"))
+            self._reader = Reader(self.api, item, self.theme_name,
+                                  host=self.host)
             self._reader.start()
 
     def _listen_book(self):
         if self.rec_book:
+            item = self.rec_book
+            if hasattr(self.host, "go"):
+                self.host.go("books")   # o'z bo'limiga o'tib ochamiz
             old = getattr(self, "_audio", None)
             if old is not None:
                 old.stop_and_close()
-            self._audio = AudioPlayer(self.api, self.rec_book, self.theme_name,
-                                      host=self.window())
+            self._audio = AudioPlayer(self.api, item, self.theme_name,
+                                      host=self.host)
             self._audio.closed.connect(lambda: setattr(self, "_audio", None))
             self._audio.start()
 
@@ -740,11 +776,15 @@ class _HomeCanvas(QWidget):
         self.setStyleSheet(
             f"#homeCanvas {{ background: transparent; }}"
             f"#card {{ background: {c['surface']}; border-radius: {T.RADIUS['card']}px; }}"
-            f"#bookCard {{ background: #F6F8FB; border: 1px solid #EAEFF6;"
-            f" border-radius: {T.RADIUS['card']}px; }}"
+            f"#bookCard {{ background: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
+            f" stop:0 #FFFFFF, stop:1 #F7F9FD);"
+            f" border: 1px solid #EBF0F8; border-radius: {T.RADIUS['card']}px; }}"
+            f"#bGenre {{ background: #EEF1FF; color: #5B62D6; font-size: 18px;"
+            f" font-weight: 700; border-radius: 14px; padding: 5px 16px; }}"
             f"#tile {{ background: {c['surface2']}; border-radius: 22px; }}"
-            f"#tBig {{ color: {c['text']}; font-size: 30px; font-weight: 600; }}"
-            f"#tNote {{ color: {c['text_secondary']}; font-size: 22px; font-weight: 500; }}"
+            f"#tBig {{ color: {c['text']}; font-size: 32px; font-weight: 700;"
+            f" letter-spacing: 0.2px; }}"
+            f"#tNote {{ color: {c['text_secondary']}; font-size: 21px; font-weight: 500; }}"
             f"#recHead {{ color: {c['text']}; font-size: 36px; font-weight: 600; }}"
             f"#poster {{ background: #0c1418; border-radius: {T.RADIUS['card']}px; }}"
             f"#posterPill {{ background: rgba(244,246,249,0.93);"
@@ -753,13 +793,17 @@ class _HomeCanvas(QWidget):
             f"#pMeta {{ color: #7c8595; font-size: 20px; font-weight: 500; }}"
             f"#pArr {{ background: transparent; color: #3a4252; border: none;"
             f" font-size: 40px; font-weight: 400; }}"
-            f"#listenBtn {{ background: {c['orange']}; color: #FFFFFF; border: none;"
-            f" border-radius: {T.RADIUS['button']}px; font-size: 24px; font-weight: 600; }}"
-            f"#listenBtn:hover {{ background: #D97706; }}"
-            f"#listenBtn:pressed {{ background: #B45309; }}"
-            f"#readBtn {{ background: {c['accent']}; color: {c['accent_text']}; border: none;"
-            f" border-radius: {T.RADIUS['button']}px; font-size: 24px; font-weight: 600; }}"
-            f"#readBtn:hover {{ background: #1D4ED8; }}"
+            f"#listenBtn {{ background: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
+            f" stop:0 #FBB540, stop:1 #F59E0B); color: #FFFFFF; border: none;"
+            f" border-radius: 18px; font-size: 24px; font-weight: 700; }}"
+            f"#listenBtn:hover {{ background: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
+            f" stop:0 #F5A623, stop:1 #E08C00); }}"
+            f"#listenBtn:pressed {{ background: #C2780A; }}"
+            f"#readBtn {{ background: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
+            f" stop:0 #4C82FF, stop:1 #2F68F4); color: {c['accent_text']}; border: none;"
+            f" border-radius: 18px; font-size: 24px; font-weight: 700; }}"
+            f"#readBtn:hover {{ background: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
+            f" stop:0 #2F68F4, stop:1 #2456D8); }}"
             f"#readBtn:pressed {{ background: #1E40AF; }}"
             f"#pArr:pressed {{ color: {c['accent']}; }}")
 

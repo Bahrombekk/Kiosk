@@ -46,4 +46,14 @@ def show_over_host(overlay, host):
     filt = _FollowFilter(overlay, host)
     host.installEventFilter(filt)
     overlay._host_filter = filt
-    overlay.destroyed.connect(lambda *_a: host.removeEventFilter(filt))
+
+    def _detach(*_a):
+        # Overlay yo'q qilinganda filtrni olib tashlaymiz. Ilova yopilayotgan
+        # bo'lsa host (MainWindow) ALLAQACHON o'chgan bo'lishi mumkin —
+        # RuntimeError'ni yutamiz (aks holda excepthook fail-fast qiladi va
+        # tarmoq oqimini yarim yo'lda uzib access violation keltiradi).
+        try:
+            host.removeEventFilter(filt)
+        except RuntimeError:
+            pass
+    overlay.destroyed.connect(_detach)

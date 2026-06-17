@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS content (
     lang_group    INTEGER,                 -- bir asarning til versiyalari guruhi
     cache_enabled INTEGER DEFAULT 1,       -- 1 = kiosklar lokal keshiga yuklansin
     is_recommended INTEGER DEFAULT 0,
+    visible       INTEGER DEFAULT 1,       -- 0 = kiosklarda umuman ko'rinmaydi
     created_at    TEXT DEFAULT (datetime('now'))
 );
 
@@ -117,6 +118,8 @@ CREATE TABLE IF NOT EXISTS kiosks (
     cached_ids TEXT,                        -- keshlangan kontent id'lari (JSON)
     disk_total INTEGER,                     -- kiosk diski hajmi (bayt)
     disk_free  INTEGER,                     -- bo'sh joy (bayt)
+    caching    TEXT,                        -- hozir yuklanayotgan media (JSON: id/pct/title)
+    cache_enabled INTEGER DEFAULT 1,        -- 0 = shu kioskда lokal kesh o'chiq (xotirasiz kiosk)
     first_seen TEXT DEFAULT (datetime('now','localtime')),
     last_seen  TEXT                         -- oxirgi heartbeat vaqti
 );
@@ -172,6 +175,9 @@ def init_db():
         if "cache_enabled" not in ccols:
             conn.execute("ALTER TABLE content ADD COLUMN cache_enabled"
                          " INTEGER DEFAULT 1")
+        if "visible" not in ccols:
+            conn.execute("ALTER TABLE content ADD COLUMN visible"
+                         " INTEGER DEFAULT 1")
         # ads: media (rasm/video), davomiylik va vaqt oralig'i ustunlari
         acols = {r["name"] for r in
                  conn.execute("PRAGMA table_info(ads)").fetchall()}
@@ -195,7 +201,8 @@ def init_db():
         kcols = {r["name"] for r in
                  conn.execute("PRAGMA table_info(kiosks)").fetchall()}
         for col, ddl in (("cached_ids", "TEXT"), ("disk_total", "INTEGER"),
-                         ("disk_free", "INTEGER")):
+                         ("disk_free", "INTEGER"), ("caching", "TEXT"),
+                         ("cache_enabled", "INTEGER DEFAULT 1")):
             if col not in kcols:
                 conn.execute(f"ALTER TABLE kiosks ADD COLUMN {col} {ddl}")
         conn.commit()
@@ -389,7 +396,7 @@ def upsert_kiosk(device_id, **fields):
     if not device_id:
         return
     allowed = ("kiosk_no", "room", "ip", "platform", "cached_n",
-               "cached_ids", "disk_total", "disk_free", "last_seen")
+               "cached_ids", "disk_total", "disk_free", "caching", "last_seen")
     f = {k: v for k, v in fields.items() if k in allowed}
     if not f:
         return
@@ -412,6 +419,28 @@ def get_kiosks():
         "SELECT * FROM kiosks ORDER BY kiosk_no, device_id").fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def get_kiosk_cache_enabled(device_id):
+    """Shu kioskда lokal kesh yoqilganmi (1/0). Noma'lum kiosk — 1 (yoqiq)."""
+    if not device_id:
+        return 1
+    conn = connect()
+    row = conn.execute("SELECT cache_enabled FROM kiosks WHERE device_id=?",
+                       [device_id]).fetchone()
+    conn.close()
+    if row is None or row["cache_enabled"] is None:
+        return 1
+    return int(row["cache_enabled"])
+
+
+def set_kiosk_cache_enabled(device_id, enabled):
+    """Admin shu kiosk uchun lokal keshni yoqadi/o'chiradi (xotirasiz kiosklar)."""
+    if not device_id:
+        return
+    with _conn() as c:
+        c.execute("UPDATE kiosks SET cache_enabled=? WHERE device_id=?",
+                  [1 if enabled else 0, device_id])
 
 
 def get_ads(active_only=True):
@@ -480,7 +509,7 @@ def get_settings():
 CONTENT_COLS = ["type", "title", "author", "genre", "description", "duration",
                 "pages", "cover_path", "file_path", "text_path",
                 "category_tab", "lang", "lang_group", "cache_enabled",
-                "is_recommended"]
+                "is_recommended", "visible"]
 ADS_COLS = ["media_path", "title", "subtitle", "link_url", "duration",
             "interval_min", "start_time", "end_time", "placement",
             "is_active", "sort_order"]

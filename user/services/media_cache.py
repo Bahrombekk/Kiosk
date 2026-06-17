@@ -20,6 +20,7 @@ sinxlash va fayl almashganini aniqlash uchun.
 import logging
 import os
 import shutil
+import threading
 
 import requests
 from PyQt6.QtCore import QThread
@@ -29,15 +30,66 @@ from core import netpin
 
 log = logging.getLogger(__name__)
 
+# Hozir yuklanayotgan media holati — heartbeat orqali admin jonli ko'radi.
+# {"id":int, "pct":int(-1 noma'lum), "title":str} yoki bo'sh {} (yuklash yo'q).
+_cache_lock = threading.Lock()
+_caching = {}
+
+
+def caching_status():
+    """Hozir yuklanayotgan media (id/pct/title) yoki {} — health heartbeat
+    shuni yuboradi, admin dialogi jonli foizni shundan oladi."""
+    with _cache_lock:
+        return dict(_caching)
+
+
+def _set_caching(item, pct):
+    with _cache_lock:
+        _caching.clear()
+        _caching.update({"id": item.get("id"),
+                         "title": item.get("title") or "",
+                         "pct": int(pct)})
+
+
+def _clear_caching():
+    with _cache_lock:
+        _caching.clear()
+
 MEDIA_DIR = os.path.join(config.APP_DIR, "cache", "media")
-MIN_FREE = 2 * 1024 ** 3        # diskda kamida 2 GB bo'sh joy qolsin
+# Diskda DOIM bo'sh qoldiriladigan zaxira (kiosk/Windows qotmasin). Mutlaq
+# floor 3 GB; katta disklarда 8% gacha; lekin 12 GB dan oshmaydi (joy isrofi).
+MIN_FREE = 3 * 1024 ** 3
+RESERVE_PCT = 0.08
+RESERVE_MAX = 12 * 1024 ** 3
 SYNC_INTERVAL_S = 10 * 60       # to'liq sinx oralig'i (kick bilan tezlashadi)
 CHUNK = 256 * 1024
+
+
+def _reserve(total):
+    """Shu disk uchun doim bo'sh qoldiriladigan joy (baytda)."""
+    return min(RESERVE_MAX, max(MIN_FREE, int((total or 0) * RESERVE_PCT)))
 AV_TYPES = ("movie", "cartoon", "music", "audiobook", "book")  # kitob audiosi ham
 
 
 def _name(item):
     return f"{item['id']}__{os.path.basename(item.get('file_path') or '')}"
+
+
+def _ad_name(ad):
+    """Reklama fayli nomi — 'ad_' prefiksi bilan (kontentdan ajralib tursin)."""
+    return f"ad_{ad['id']}__{os.path.basename(ad.get('media_path') or '')}"
+
+
+def ad_local_path(ad_id):
+    """Reklamaning lokal keshdagi TAYYOR fayli yoki None (oflaynда ham ko'rsatish)."""
+    try:
+        pref = f"ad_{ad_id}__"
+        for fn in os.listdir(MEDIA_DIR):
+            if fn.startswith(pref) and not fn.endswith(".part"):
+                return os.path.join(MEDIA_DIR, fn)
+    except OSError:
+        pass
+    return None
 
 
 def local_path(content_id):
@@ -77,9 +129,23 @@ def cached_ids():
     return sorted(ids)
 
 
+# Shu QURILMA uchun lokal kesh ruxsati (server heartbeat javobidan keladi —
+# admin xotirasiz kioskда o'chirib qo'yishi mumkin). True — yoqiq.
+_device_allowed = True
+
+
+def set_device_allowed(v):
+    """Server bu kioskда keshni yoqdi/o'chirdi (heartbeat javobi)."""
+    global _device_allowed
+    _device_allowed = bool(v)
+
+
 def server_enabled():
-    """Admin sozlamasi (Sozlamalar -> "Lokal media kesh"): '0' — yuklash
-    to'xtaydi (mavjud fayllar qoladi, ijro lokal nusxadan davom etadi)."""
+    """Lokal kesh yoqilganmi? Ikki shart: (1) GLOBAL sozlama (Sozlamalar ->
+    "Lokal media kesh"); (2) SHU QURILMA uchun ruxsat (admin xotirasiz
+    kioskда o'chirsa). Biri o'chiq bo'lsa — yuklanmaydi."""
+    if not _device_allowed:
+        return False
     from core import cache
     hit = cache.load_json("settings")
     if hit:
@@ -156,10 +222,14 @@ class MediaCacheSync(QThread):
                 if self._clear_req:
                     self._clear_req = False
                     self._clear_all()
-                # Admin sozlamasi: kesh o'chirilgan bo'lsa yuklamaymiz
-                # (sozlama yoqilishini kutib tekshirib turamiz)
+                # Reklamalar DOIM keshlanadi (kontent keshi o'chiq bo'lsa ham —
+                # oflaynда ham ko'rsatish uchun; ular kichik, joy ham tekshiriladi)
+                if not self.api.offline:
+                    self._sync_ads()
+                # Kontent — faqat sozlama/qurilma ruxsati bo'lsa
                 if server_enabled():
-                    self._sync_once()
+                    self._sync_content()
+                _clear_caching()
             except Exception:
                 log.exception("Media sinxda kutilmagan xato")
             self._wake.wait(SYNC_INTERVAL_S)
@@ -180,11 +250,40 @@ class MediaCacheSync(QThread):
         log.info("Lokal kesh tozalandi (admin buyrug'i): %d fayl o'chirildi",
                  removed)
 
-    def _sync_once(self):
+    def _sync_ads(self):
+        """Reklama media fayllarini keshlaydi (HAMMASI, doim) — oflaynда ham
+        ko'rsatish uchun. Kontent keshidan mustaqil ishlaydi."""
+        try:
+            ads = self.api.get_ads()
+        except Exception:
+            return
+        if self.api.offline:
+            return
+        want = {_ad_name(a): a for a in ads if a.get("media_path")}
+        # Serverda yo'q reklama fayllarini o'chiramiz (faqat ad_ fayllari)
+        for fn in os.listdir(MEDIA_DIR):
+            if not fn.startswith("ad_"):
+                continue
+            base = fn[:-5] if fn.endswith(".part") else fn
+            if base not in want:
+                try:
+                    os.remove(os.path.join(MEDIA_DIR, fn))
+                except OSError:
+                    pass
+        for fn, a in want.items():
+            if self._stop:
+                return
+            dst = os.path.join(MEDIA_DIR, fn)
+            if not os.path.exists(dst):
+                self._download(a, dst, url=self.api.ad_media_url(a["id"]))
+
+    def _sync_content(self):
         items = self.api.get_content()
         if self.api.offline:
             # Oflaynda yuklab bo'lmaydi; o'chirish ham xavfli (ro'yxat eski
             # keshdan kelgan bo'lishi mumkin) — serverni kutamiz.
+            log.info("Media sinx: OFLAYN — server bilan aloqa yo'q, "
+                     "yuklash o'tkazildi")
             return
         # Admin har kontentga alohida belgi qo'yadi (cache_enabled) —
         # belgilanmaganlari yuklanmaydi; belgisi olib tashlansa keyingi
@@ -192,8 +291,14 @@ class MediaCacheSync(QThread):
         want = {_name(it): it for it in items
                 if it.get("type") in AV_TYPES and it.get("file_path")
                 and (it.get("cache_enabled") is None or it.get("cache_enabled"))}
-        # 1) Serverda yo'q (o'chirilgan/almashtirilgan) fayllarni o'chiramiz
+        todo = [fn for fn in want
+                if not os.path.exists(os.path.join(MEDIA_DIR, fn))]
+        log.info("Media sinx: %d ta belgilangan media, %d yuklanishi kerak",
+                 len(want), len(todo))
+        # Serverda yo'q kontent fayllarini o'chiramiz (reklama — ad_ — tegmaymiz)
         for fn in os.listdir(MEDIA_DIR):
+            if fn.startswith("ad_"):
+                continue
             base = fn[:-5] if fn.endswith(".part") else fn
             if base not in want:
                 try:
@@ -201,8 +306,7 @@ class MediaCacheSync(QThread):
                     log.info("Media kesh: o'chirildi %s (serverda yo'q)", fn)
                 except OSError:
                     pass
-        # 2) Yetishmayotganlarini KETMA-KET yuklaymiz (tarmoqni band qilmaslik
-        #    uchun bittadan; har faylda joy tekshiriladi)
+        # Yetishmayotganlarini KETMA-KET (har faylda joy tekshiriladi)
         for fn, it in want.items():
             if self._stop:
                 return
@@ -210,19 +314,24 @@ class MediaCacheSync(QThread):
             if not os.path.exists(dst):
                 self._download(it, dst)
 
-    def _download(self, it, dst):
+    def _download(self, it, dst, url=None):
         tmp = dst + ".part"
         try:
-            url = self.api.stream_url(it["id"])
+            if url is None:
+                url = self.api.stream_url(it["id"])
             # stream=True — javob o'qilgunicha session ochiq tursin (pin bilan)
             with netpin.session() as _s, _s.get(url, stream=True, timeout=15) as r:
                 r.raise_for_status()
                 size = int(r.headers.get("content-length") or 0)
-                free = shutil.disk_usage(MEDIA_DIR).free
-                if free - size < MIN_FREE:
+                du = shutil.disk_usage(MEDIA_DIR)
+                free = du.free
+                reserve = _reserve(du.total)   # doim shuncha bo'sh qolsin
+                if free - size < reserve:
                     log.info("Media kesh: joy yetmaydi — #%s o'tkazildi "
-                             "(%.0f MB kerak, %.0f MB bo'sh)",
-                             it["id"], size / 1e6, (free - MIN_FREE) / 1e6)
+                             "(%.0f MB kerak, %.0f MB ishlatsa bo'ladi, "
+                             "%.1f GB zaxira qoladi)",
+                             it["id"], size / 1e6,
+                             max(0, free - reserve) / 1e6, reserve / 1024 ** 3)
                     return
                 # Admin «Kesh hajmi cheklovi» — joriy kesh + yangi fayl chegaradan
                 # oshmasin (0 = cheklov yo'q). used yuklashdan oldin o'lchanadi.
@@ -233,16 +342,25 @@ class MediaCacheSync(QThread):
                              "o'tkazildi", limit / 1024 ** 3, it["id"])
                     return
                 written = 0
+                last_pct = -2
+                _set_caching(it, 0 if size > 0 else -1)   # admin jonli ko'rsin
                 with open(tmp, "wb") as f:
                     for chunk in r.iter_content(CHUNK):
                         if self._stop:
                             raise InterruptedError
                         f.write(chunk)
                         written += len(chunk)
+                        # Yuklash foizi — har 1% o'zgarganda holatni yangilaymiz
+                        # (heartbeat keyingi safar shuni admin'ga yetkazadi)
+                        if size > 0:
+                            pct = min(100, int(written * 100 / size))
+                            if pct != last_pct:
+                                last_pct = pct
+                                _set_caching(it, pct)
                         # Davomiyligi noma'lum (chunked) fayl diskni/chegarani
                         # to'ldirib yubormasin — vaqti-vaqti bilan tekshiramiz
                         if written % (CHUNK * 64) < CHUNK:
-                            if shutil.disk_usage(MEDIA_DIR).free < MIN_FREE:
+                            if shutil.disk_usage(MEDIA_DIR).free < reserve:
                                 raise OSError("bo'sh joy tugadi")
                             if limit and used + written > limit:
                                 raise OSError("kesh hajmi chegarasi")

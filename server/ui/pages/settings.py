@@ -163,14 +163,34 @@ class SettingsPageMixin:
             algo_box.addWidget(cb)
         clay.addLayout(self._field(
             "Reklama algoritmlari (bir nechtasini tanlash mumkin)", algo_holder))
+
+        # «Media» tanlangan bo'lsa — kino ichida qaysi joylarda chiqsin
+        self.s_media_slots = QComboBox()
+        for label, val in (
+                ("Boshida, o'rtasida va oxirida", "pre,mid,end"),
+                ("Boshida va oxirida", "pre,end"),
+                ("Faqat boshida", "pre")):
+            self.s_media_slots.addItem(label, val)
+        no_wheel(self.s_media_slots)   # scroll paytida adashib o'zgarmasin
+        clay.addLayout(self._field(
+            "Media reklama joylashuvi (kino ichida)", self.s_media_slots))
+
+        def _upd_media_slots():
+            self.s_media_slots.setEnabled(self.s_ad_algos["media"].isChecked())
+        self.s_ad_algos["media"].toggled.connect(lambda _c: _upd_media_slots())
+        _upd_media_slots()
+
         ad_hint = QLabel(
             "Oraliq — popup chastotasi: har shu daqiqada BITTA reklama "
             "chiqadi. «Vaznli»da har reklamaning o'z oralig'i (Reklama "
             "bo'limida) vazn bo'lib xizmat qiladi; «Navbat bilan» va "
             "«Tasodifiy»da reklamalar teng aylanadi. Bu uchovidan bittasi "
             "ishlatiladi (bir nechtasi belgilansa — yuqoridagisi). «Media» "
-            "alohida: reklama kino boshida, o'rtasida va oxirida ham "
-            "ko'rsatiladi. «Media»ni popup usuli bilan birga belgilash mumkin.")
+            "alohida: reklama kino ichida ko'rsatiladi — joyini quyidagi "
+            "«Media reklama joylashuvi» orqali tanlaysiz (faqat boshida / "
+            "boshi va oxiri / boshi-o'rtasi-oxiri). Har kino ochilganda "
+            "navbatdagi boshqa reklama chiqadi; ikki joy tanlansa har biriga "
+            "boshqa reklama. «Media»ni popup usuli bilan birga belgilash mumkin.")
         ad_hint.setObjectName("hint")
         ad_hint.setWordWrap(True)   # MUHIM: aks holda oyna kichraymay qoladi
         clay.addWidget(ad_hint)
@@ -318,6 +338,11 @@ class SettingsPageMixin:
                if x.strip()} or {"weighted"}
         for key, cb in self.s_ad_algos.items():
             cb.setChecked(key in sel)
+        # Media reklama joylashuvi (kino ichida)
+        slots = s.get("media_ad_slots") or "pre,mid,end"
+        idx = self.s_media_slots.findData(slots)
+        self.s_media_slots.setCurrentIndex(idx if idx >= 0 else 0)
+        self.s_media_slots.setEnabled("media" in sel)
 
     def save_settings(self):
         import re
@@ -340,6 +365,7 @@ class SettingsPageMixin:
         db.set_setting("ad_interval_min", str(self.s_ad_int.value()))
         algos = [k for k, cb in self.s_ad_algos.items() if cb.isChecked()]
         db.set_setting("ad_algorithm", ",".join(algos) or "weighted")
+        db.set_setting("media_ad_slots", self.s_media_slots.currentData())
         db.set_setting("kiosk_location", self.s_location.text().strip())
         # Standart ro'yxat o'zgartirilmagan bo'lsa bo'sh saqlanadi — kiosk
         # uni i18n orqali 3 tilda ko'rsatishda davom etadi.

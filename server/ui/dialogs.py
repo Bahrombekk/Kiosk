@@ -122,6 +122,11 @@ class ContentDialog(QDialog):
         self.cacheable.setChecked(
             bool(self.item.get("cache_enabled", 1)))
 
+        # Belgi olib tashlansa — kontent kiosklarda UMUMAN ko'rinmaydi
+        # (ro'yxatdan yashiriladi; server uni kioskka bermaydi).
+        self.visible = QCheckBox("Kiosklarda ko'rsatilsin")
+        self.visible.setChecked(bool(self.item.get("visible", 1)))
+
         form.addRow("Turi:", self.type)
         form.addRow("Nomi:", self.title)
         form.addRow("Tili:", self.lang)
@@ -148,6 +153,7 @@ class ContentDialog(QDialog):
         form.addRow("Media fayl:", self.media_widget)
         form.addRow("Muqova rasmi:", self.cover_widget)
         form.addRow("Kitob matni:", self.text_widget)
+        form.addRow("", self.visible)
         form.addRow("", self.recommended)
         form.addRow("", self.cacheable)
         top.addLayout(form, 1)
@@ -379,6 +385,7 @@ class ContentDialog(QDialog):
             "lang_group": self.item.get("lang_group"),   # bog'lanish saqlansin
             "cache_enabled": 1 if self.cacheable.isChecked() else 0,
             "is_recommended": 1 if self.recommended.isChecked() else 0,
+            "visible": 1 if self.visible.isChecked() else 0,
         }
         # Tanlangan fayllarni content/ ostidagi papkalarga ko'chiramiz
         for src, dst_dir, key in (

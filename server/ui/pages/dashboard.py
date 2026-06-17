@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QProgressBar, QWidget,
     QDialog, QDialogButtonBox, QFileDialog, QMessageBox
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor
 
 import config
@@ -273,6 +273,19 @@ class DashboardPageMixin:
                 except ValueError:
                     pass
             online_n += online
+            # Lokal kesh ustuni: o'chirilgan / "N/M media" + yuklanayotgan ⬇NN%
+            if not k.get("cache_enabled", 1):
+                kesh = "— o'chirilgan"
+            else:
+                kesh = f"{k.get('cached_n') or 0}/{total_av} media"
+                try:
+                    cg = json.loads(k.get("caching") or "null") or {}
+                except (ValueError, TypeError):
+                    cg = {}
+                if online and cg.get("id") is not None:
+                    pct = cg.get("pct", -1)
+                    kesh += f"  ·  ⬇ {pct}%" if isinstance(pct, int) and pct >= 0 \
+                            else "  ·  ⬇ yuklanmoqda"
             cells = [
                 k.get("kiosk_no") or "—",
                 k.get("room") or "—",
@@ -280,7 +293,7 @@ class DashboardPageMixin:
                 k.get("ip") or "",
                 "● Onlayn" if online else "● Oflayn",
                 k.get("last_seen") or "—",
-                f"{k.get('cached_n') or 0}/{total_av} media",
+                kesh,
             ]
             for col, val in enumerate(cells):
                 item = QTableWidgetItem(str(val))
@@ -304,6 +317,7 @@ class DashboardPageMixin:
                     if c.get("type") in ("movie", "cartoon", "music",
                                          "audiobook", "book")
                     and c.get("file_path")
+                    and c.get("visible", 1)
                     and (c.get("cache_enabled") is None
                          or c.get("cache_enabled"))]
         except Exception:
@@ -349,38 +363,115 @@ class DashboardPageMixin:
         except (ValueError, TypeError):
             ids = set()
         av = self._cacheable_av()
+        dev = k.get("device_id")
         dlg = QDialog(self)
         title = k.get("kiosk_no") or k.get("device_id") or "Kiosk"
         dlg.setWindowTitle(f"Kiosk {title} — lokal kesh"
                            + (f" (xona {k['room']})" if k.get("room") else ""))
         dlg.setMinimumSize(560, 420)
         lay = QVBoxLayout(dlg)
-        info = QLabel(f"Yuklangan: {len(ids & {c['id'] for c in av})} / "
-                      f"{len(av)} ta media")
+        info = QLabel("")
         info.setObjectName("cardTitle")
         lay.addWidget(info)
+        # Global "Lokal media kesh" o'chiq bo'lsa — hech narsa yuklanmaydi.
+        # Admin sababini bilsin (aks holda hammasi "Navbatda" qotib turadi).
+        try:
+            cache_on = str(db.get_settings().get("media_cache", "1")) != "0"
+        except Exception:
+            cache_on = True
+        if not cache_on:
+            warn = QLabel("⚠ «Lokal media kesh» Sozlamalarda O'CHIRILGAN — "
+                          "kiosklar yuklamaydi. Yoqib qo'ying.")
+            warn.setStyleSheet("color:#B45309; background:#FEF3C7;"
+                               " border:1px solid #FCD34D; border-radius:8px;"
+                               " padding:8px 12px; font-weight:600;")
+            warn.setWordWrap(True)
+            lay.addWidget(warn)
+
+        # --- Shu kiosk uchun lokal kesh yoq/yo'q (xotirasiz kiosklar uchun) ---
+        from ui.toggle import ToggleSwitch
+        crow = QHBoxLayout()
+        clbl = QLabel("Bu kioskda lokal kesh (kontentni diskka yuklab olish):")
+        clbl.setStyleSheet("font-weight: 600;")
+        crow.addWidget(clbl)
+        crow.addStretch(1)
+        dev_toggle = ToggleSwitch()
+        dev_toggle.setChecked(bool(k.get("cache_enabled", 1)))
+        dev_toggle.setEnabled(bool(dev))
+        dev_toggle.toggled.connect(
+            lambda on, d=dev: self._set_kiosk_cache_enabled(d, on))
+        crow.addWidget(dev_toggle)
+        lay.addLayout(crow)
+
         table = QTableWidget(len(av), 3)
         table.setHorizontalHeaderLabels(["Holat", "Nomi", "Turi"])
         th = table.horizontalHeader()
         th.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self._setup_table(table)
         from ui.styles import TYPE_LABELS
+        # Nomi/Turi ustunlari o'zgarmaydi — bir marta to'ldiramiz
         for r, c in enumerate(av):
-            ok = c["id"] in ids
-            st = QTableWidgetItem("✓ Yuklangan" if ok else "○ Yuklanmagan")
-            st.setForeground(QColor("#16A34A") if ok else QColor("#94A3B8"))
-            table.setItem(r, 0, st)
+            table.setItem(r, 0, QTableWidgetItem(""))
             table.setItem(r, 1, QTableWidgetItem(c.get("title") or ""))
             table.setItem(r, 2, QTableWidgetItem(
                 TYPE_LABELS.get(c.get("type"), c.get("type"))))
         lay.addWidget(table, 1)
-        # Pastki qator: shu kioskning keshini masofadan tozalash + Yopish
+
+        def _refresh_status():
+            """Heartbeat'dan kelgan jonli holatni o'qib qatorlarni yangilaydi:
+            ✓ Yuklandi / ⬇ NN% / ○ Navbatda."""
+            row = next((x for x in db.get_kiosks()
+                        if x.get("device_id") == dev), None) if dev else None
+            if row is None:
+                row = k
+            try:
+                cur_ids = set(json.loads(row.get("cached_ids") or "[]"))
+            except (ValueError, TypeError):
+                cur_ids = set()
+            try:
+                cg = json.loads(row.get("caching") or "null") or {}
+            except (ValueError, TypeError):
+                cg = {}
+            cg_id = cg.get("id")
+            cg_pct = cg.get("pct", -1)
+            done = len(cur_ids & {c["id"] for c in av})
+            head = f"Yuklangan: {done} / {len(av)} ta media"
+            if cg_id is not None and cg_id not in cur_ids:
+                pc = f"{cg_pct}%" if isinstance(cg_pct, int) and cg_pct >= 0 \
+                     else "yuklanmoqda…"
+                head += f"   •   Hozir: «{cg.get('title') or ''}» {pc}"
+            info.setText(head)
+            for r, c in enumerate(av):
+                it = table.item(r, 0)
+                if c["id"] in cur_ids:
+                    it.setText("✓ Yuklandi"); it.setForeground(QColor("#16A34A"))
+                elif c["id"] == cg_id:
+                    pc = f"{cg_pct}%" if isinstance(cg_pct, int) and cg_pct >= 0 \
+                         else "yuklanmoqda…"
+                    it.setText(f"⬇ {pc}"); it.setForeground(QColor("#2563EB"))
+                else:
+                    it.setText("○ Navbatda"); it.setForeground(QColor("#94A3B8"))
+
+        _refresh_status()
+        # Jonli yangilanish (heartbeat har ~5s keladi — biz 1.5s da o'qiymiz)
+        live = QTimer(dlg)
+        live.timeout.connect(_refresh_status)
+        live.start(1500)
+        dlg.finished.connect(lambda _r: live.stop())
+        # Pastki qator: hoziroq yuklash + keshni tozalash + Yopish
         foot = QHBoxLayout()
+        online = k.get("device_id") in {c.get("device_id")
+                                        for c in ws.manager.clients()}
+        sync_btn = self._btn("Hoziroq yukla", "refresh-cw",
+                             lambda: self._sync_kiosk_cache(k),
+                             kind="primary")
+        sync_btn.setEnabled(bool(online and k.get("device_id")))
+        if not online:
+            sync_btn.setToolTip("Kiosk oflayn — buyruq qabul qilolmaydi")
+        foot.addWidget(sync_btn)
         clear_btn = self._btn("Bu kioskning keshini tozalash", "trash-2",
                               lambda: self._clear_kiosk_cache(k, dlg),
                               kind="ghost")
-        online = k.get("device_id") in {c.get("device_id")
-                                        for c in ws.manager.clients()}
         clear_btn.setEnabled(bool(online and k.get("device_id")))
         if not online:
             clear_btn.setToolTip("Kiosk oflayn — buyruq qabul qilolmaydi")
@@ -410,6 +501,35 @@ class DashboardPageMixin:
         self.statusBar().showMessage(
             f"«{name}» keshini tozalash buyrug'i yuborildi.", 4000)
         dlg.accept()
+
+    def _set_kiosk_cache_enabled(self, dev, on):
+        """Admin shu kiosk uchun lokal keshni yoqadi/o'chiradi. Yoqilganда —
+        darhol yuklash boshlanadi; o'chirilganда — yuklash to'xtaydi (mavjud
+        keshni «...keshini tozalash» tugmasi bilan bo'shatish mumkin)."""
+        if not dev:
+            return
+        db.set_kiosk_cache_enabled(dev, on)
+        db.log_action("kiosk_cache_" + ("on" if on else "off"), dev)
+        if on:
+            ws.manager.send_to_device_threadsafe(dev, {"type": "cache_sync"})
+            self.statusBar().showMessage(
+                "Bu kioskда lokal kesh YOQILDI — yuklash boshlanadi.", 4000)
+        else:
+            self.statusBar().showMessage(
+                "Bu kioskда lokal kesh O'CHIRILDI — yangi yuklash to'xtaydi "
+                "(joyni bo'shatish uchun «...keshini tozalash»ни bosing).", 6000)
+
+    def _sync_kiosk_cache(self, k):
+        """Kioskka «hoziroq yukla» buyrug'ini yuboradi — media sinxni darhol
+        ishga tushiradi (oyna ochiq qoladi, foiz jonli ko'rinadi)."""
+        dev = k.get("device_id")
+        if not dev:
+            return
+        name = k.get("kiosk_no") or dev
+        ws.manager.send_to_device_threadsafe(dev, {"type": "cache_sync"})
+        db.log_action("cache_sync_device", dev)
+        self.statusBar().showMessage(
+            f"«{name}» — yuklash boshlandi (sinx buyrug'i yuborildi).", 4000)
 
     def _update_stats(self):
         """Dashboard'dagi kontent/reklama/sayt sonlarini yangilaydi."""
