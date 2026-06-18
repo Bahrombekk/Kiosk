@@ -26,6 +26,7 @@ try:
     from urllib3.poolmanager import PoolManager
 except Exception:                       # noqa: BLE001
     PoolManager = None
+    log.error("urllib3.PoolManager import bo'lmadi — TLS pinning ishlamaydi")
 
 # verify=False bilan ishlaganda (fingerprint pinning) urllib3 har so'rovda
 # InsecureRequestWarning chiqaradi — bu yerda u ATAYLAB (ishonch fingerprint
@@ -66,7 +67,15 @@ def session():
     (`with netpin.session() as s: ...`)."""
     s = requests.Session()
     fp = _pin_fp()
-    if fp and PoolManager is not None:
+    if config.is_tls():
+        # TLS yoqilgan — pinsiz ulanish QILMAYMIZ (fail-closed). Pin materiali
+        # (fingerprint yoki urllib3) yo'q bo'lsa MITM'ga ochiq qolmaslik uchun
+        # rad etamiz. ws_client ham xuddi shunday fail-closed ishlaydi.
+        if not fp or PoolManager is None:
+            # requests.exceptions.SSLError — RequestException merosxo'ri, shuning
+            # uchun api.py dagi mavjud xato ushlovchilar buni tutadi (kesh fallback).
+            raise requests.exceptions.SSLError(
+                "TLS pinning materiali yo'q (fingerprint/urllib3) — ulanish rad etildi")
         s.mount("https://", _PinAdapter(fp))
         # MUHIM: verify=False — aks holda requests har ulanishga CERT_REQUIRED
         # (CA zanjiri tekshiruvi) ni majburlab, adapterning CERT_NONE+fingerprint

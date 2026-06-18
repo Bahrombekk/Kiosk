@@ -178,8 +178,14 @@ class ApiClient:
         """Kiosk o'zini serverga tanitadi (admin "Kiosklar" jadvali uchun).
         Server javobi qaytariladi (masalan {"cache": 0/1} — shu qurilmada
         lokal kesh ruxsati)."""
-        r = netpin.post(f"{self.base_url}/api/heartbeat", json=info,
-                        headers=self._headers, timeout=self.timeout)
+        try:
+            r = netpin.post(f"{self.base_url}/api/heartbeat", json=info,
+                            headers=self._headers, timeout=self.timeout)
+        except requests.RequestException as e:
+            # Tarmoq/TLS xatosi HealthChecker oqimini yiqitmasin (server o'chiq
+            # bo'lishi normal holat) — bo'sh javob qaytaramiz.
+            log.debug("Heartbeat yuborilmadi: %s", e)
+            return {}
         try:
             return r.json()
         except (ValueError, AttributeError):

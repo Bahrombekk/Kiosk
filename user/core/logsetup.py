@@ -34,7 +34,11 @@ def setup():
 
     log_dir = os.path.join(base_dir(), "logs")
     root = logging.getLogger()
-    root.setLevel(logging.INFO)
+    # Daraja KIOSK_LOG_LEVEL muhit o'zgaruvchisidan olinadi (dala diagnostikasi
+    # uchun kodni o'zgartirmay DEBUG yoqish mumkin); standart INFO.
+    level = getattr(logging, os.environ.get("KIOSK_LOG_LEVEL", "INFO").upper(),
+                    logging.INFO)
+    root.setLevel(level)
     fmt = logging.Formatter(
         "%(asctime)s %(levelname)-7s %(name)s %(message)s")
 

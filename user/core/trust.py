@@ -35,21 +35,34 @@ log = logging.getLogger(__name__)
 TRUST_PATH = os.path.join(config.APP_DIR, "trust.json")
 
 _cache = None
-_loaded = False
+_cache_mtime = None
 
 
 def load():
-    """trust.json'ni o'qiydi (dict) yoki yo'q/buzuq bo'lsa None qaytaradi."""
-    global _cache, _loaded
-    if _loaded:
-        return _cache
-    _loaded = True
+    """trust.json'ni o'qiydi (dict) yoki yo'q/buzuq bo'lsa None qaytaradi.
+
+    Fayl mtime'i o'zgarsa qayta o'qiydi — cert rotatsiyasidan (yangi trust.json)
+    keyin ilovani qayta ishga tushirish shart emas."""
+    global _cache, _cache_mtime
     try:
-        with open(TRUST_PATH, encoding="utf-8") as f:
-            _cache = json.load(f)
-    except (OSError, ValueError):
-        _cache = None
+        mtime = os.path.getmtime(TRUST_PATH)
+    except OSError:
+        _cache, _cache_mtime = None, None
+        return None
+    if mtime != _cache_mtime:
+        try:
+            with open(TRUST_PATH, encoding="utf-8") as f:
+                _cache = json.load(f)
+        except (OSError, ValueError):
+            _cache = None
+        _cache_mtime = mtime
     return _cache
+
+
+def reload():
+    """Keyingi load()ni majburan qayta o'qishga majbur qiladi."""
+    global _cache_mtime
+    _cache_mtime = None
 
 
 def has_trust():

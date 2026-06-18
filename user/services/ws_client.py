@@ -117,12 +117,16 @@ class WSClient(QThread):
             data = json.loads(raw)
         except (ValueError, TypeError):
             return
+        # JSON massiv/satr ham to'g'ri parse bo'ladi — lekin .get yo'q, AttributeError
+        # bermasin: faqat obyekt (dict) xabarlarni qabul qilamiz.
+        if not isinstance(data, dict):
+            return
         mtype = data.get("type")
         if mtype == "status_update":
             self.status.emit(data)
         elif mtype == "announcement":
             self.announcement.emit(data.get("text", ""))
-        elif mtype in ("catalog_update", "settings_update", "reload"):
+        elif mtype == "catalog_update":
             self.sync.emit(data)
         elif mtype == "cache_clear":
             self.cache_clear.emit()

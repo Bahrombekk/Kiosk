@@ -13,6 +13,10 @@ Til almashganda (i18n.set_lang) main.py sahifalarni qayta quradi — har bir
 widget tr()ni qurilish paytida chaqirgani uchun retranslate mexanizmi kerak emas.
 """
 
+import logging
+
+log = logging.getLogger(__name__)
+
 LANGS = ("uz", "ru", "en")
 DEFAULT = "uz"
 _lang = DEFAULT
@@ -39,9 +43,22 @@ def content_visible(item):
 
 
 def tr(key, **kw):
-    """Joriy tildagi matn. Format argumentlari: tr("pin.wrong", n=3)."""
-    txt = STRINGS[key][LANGS.index(_lang)]
-    return txt.format(**kw) if kw else txt
+    """Joriy tildagi matn. Format argumentlari: tr("pin.wrong", n=3).
+
+    Kalit topilmasa yoki format mos kelmasa — yiqilmaymiz: kalitning o'zini
+    (yoki formatlanmagan matnni) qaytaramiz, bitta typo butun ekranni buzmasin."""
+    entry = STRINGS.get(key)
+    if entry is None:
+        log.warning("i18n: topilmagan kalit %r", key)
+        return key
+    txt = entry[LANGS.index(_lang)]
+    if not kw:
+        return txt
+    try:
+        return txt.format(**kw)
+    except (KeyError, IndexError, ValueError):
+        log.warning("i18n: format mos emas (kalit %r)", key)
+        return txt
 
 
 def month_name(m):

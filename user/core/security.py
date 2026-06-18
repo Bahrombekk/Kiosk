@@ -8,6 +8,7 @@ callback chaqiriladi (MainWindow._exit_app). Ctrl+Shift+Q/C ham shu
 """
 import hmac
 import os
+import sys
 import time
 
 from PyQt6.QtCore import QPoint, QRect
@@ -28,12 +29,27 @@ class ExitGuard:
       - `on_exit` — to'g'ri PIN kiritilganda chaqiriladigan callback
     """
 
+    # Brute-force bloki: har lockout'dan keyin eksponensial o'sadi (60s, 2m, 4m,
+    # ... 1 soatgacha). Diskka saqlanadi — ilovani qayta ishga tushirib reset
+    # qilib bo'lmaydi.
+    _LOCK_FILE = "exit_lockout"
+    _LOCK_BASE_S = 60
+    _LOCK_CAP_S = 3600
+
     def __init__(self, win, on_exit):
         self.win = win
         self.on_exit = on_exit
         self._exit_taps = []
         self.pin_open = False        # PIN oynasi ochiqmi (zastavka/til bloklari)
-        self._pin_block_until = 0    # brute-force bloki tugaydigan vaqt
+
+    def _lock_state(self):
+        hit = cache.load_json(self._LOCK_FILE)
+        data = hit[0] if hit and isinstance(hit[0], dict) else {}
+        return int(data.get("fails", 0)), float(data.get("block_until", 0))
+
+    def _blocked(self):
+        _fails, until = self._lock_state()
+        return time.time() < until
 
     def register_tap(self, gpos):
         """Navbar'dagi SOAT ustiga ketma-ket teginishlarni sanaydi.
@@ -78,15 +94,20 @@ class ExitGuard:
         stored = hit[0].get("exit_pin_hash") if hit else None
         if stored:
             return pinhash.verify_secret(entered, stored)
-        # Na env, na serverdan kelgan xesh bor — qattiq kodlangan default PINga
-        # tushyapmiz. Bu XAVFSIZ EMAS (umumiy/ma'lum kod). Provisioning qilingan
-        # kioskда serverdan exit_pin_hash kelishi kerak. Operatorga bir marta
-        # ogohlantirish yozamiz (har urinishda emas).
+        # Na env, na serverdan kelgan xesh bor — qattiq kodlangan default PIN.
+        # Bu XAVFSIZ EMAS (umumiy/ma'lum kod). Frozen (production) build'da uni
+        # UMUMAN qabul qilmaymiz: chiqish faqat KIOSK_EXIT_PIN yoki serverdan
+        # kelgan xesh bilan ochiladi (fail-closed). Faqat ishlab chiqishda (dev)
+        # qulaylik uchun default ishlaydi.
+        if getattr(sys, "frozen", False):
+            logsetup.get_logger(__name__).warning(
+                "Chiqish PINi sozlanmagan va default rad etildi (production build). "
+                "Admin paneldan PIN o'rnating yoki KIOSK_EXIT_PIN bering.")
+            return False
         if not getattr(self, "_default_pin_warned", False):
             logsetup.get_logger(__name__).warning(
-                "Chiqish PINi sozlanmagan — qattiq kodlangan default ishlatilmoqda. "
-                "Xavfsizlik uchun admin paneldan chiqish PINini o'rnating yoki "
-                "KIOSK_EXIT_PIN muhit o'zgaruvchisini bering.")
+                "Chiqish PINi sozlanmagan — qattiq kodlangan default ishlatilmoqda "
+                "(faqat dev). Production'da admin PIN yoki KIOSK_EXIT_PIN kerak.")
             self._default_pin_warned = True
         return hmac.compare_digest(entered.encode(),
                                    config.EXIT_PIN.encode())
@@ -94,8 +115,9 @@ class ExitGuard:
     def ask_exit_pin(self):
         if self.pin_open:
             return
-        # Urinishlar tugagan bo'lsa — 60 soniya blok (brute-force qiyinlashadi)
-        if time.monotonic() < self._pin_block_until:
+        # Diskka saqlangan blok hali tugamagan bo'lsa — ochmaymiz (qayta ishga
+        # tushirish blokni o'chirmaydi, har lockout bilan blok uzayadi).
+        if self._blocked():
             return
         self.pin_open = True
         try:
@@ -104,10 +126,18 @@ class ExitGuard:
                             theme=self.win.theme_name)
             ok = dlg.exec()
             if dlg.lockout:
-                self._pin_block_until = time.monotonic() + 60
+                fails, _until = self._lock_state()
+                fails += 1
+                block = min(self._LOCK_BASE_S * (2 ** (fails - 1)),
+                            self._LOCK_CAP_S)
+                cache.save_json(self._LOCK_FILE, {
+                    "fails": fails, "block_until": time.time() + block})
                 logsetup.get_logger(__name__).warning(
-                    "PIN 5 marta noto'g'ri kiritildi — 60s blok")
+                    "PIN 5 marta noto'g'ri — %ds blok (jami %d marta)",
+                    block, fails)
         finally:
             self.pin_open = False
         if ok:
+            # Muvaffaqiyatli chiqish — brute-force hisoblagichini tozalaymiz.
+            cache.save_json(self._LOCK_FILE, {"fails": 0, "block_until": 0})
             self.on_exit()

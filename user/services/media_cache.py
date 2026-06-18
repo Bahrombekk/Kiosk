@@ -364,6 +364,11 @@ class MediaCacheSync(QThread):
                                 raise OSError("bo'sh joy tugadi")
                             if limit and used + written > limit:
                                 raise OSError("kesh hajmi chegarasi")
+            # Yuklab olingan hajm e'lon qilingan content-length'ga teng emasmi —
+            # uzilgan/qisman yuklash. Bunday faylni "tayyor" deb saqlamaymiz
+            # (aks holda buzilgan media abadiy lokal keshda qolib ketardi).
+            if size > 0 and written != size:
+                raise OSError(f"to'liq yuklanmadi ({written}/{size} bayt)")
             os.replace(tmp, dst)
             log.info("Media kesh: yuklandi %s (%.0f MB)",
                      os.path.basename(dst), written / 1e6)

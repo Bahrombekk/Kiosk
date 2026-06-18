@@ -126,7 +126,7 @@ class _Flusher(QThread):
                     pass   # buzilgan qator (yarim yozilgan) — tashlab ketamiz
             if not events:
                 # fayl faqat buzilgan qatorlardan iborat — tozalaymiz
-                self._drop(len(batch))
+                self._drop(batch)
                 return
             from core import netpin
             r = netpin.post(
@@ -134,7 +134,7 @@ class _Flusher(QThread):
                 json={"device_id": DEVICE_ID, "events": events},
                 headers=self.api._headers, timeout=self.api.timeout)
             r.raise_for_status()
-            self._drop(len(batch))
+            self._drop(batch)
             log.debug("Statistika yuborildi: %d yozuv", len(events))
         except requests.RequestException:
             pass   # oflayn — navbat joyida qoladi, keyingi siklda yana urinamiz
@@ -142,15 +142,24 @@ class _Flusher(QThread):
             log.warning("Statistika yuborishda xato", exc_info=True)
 
     @staticmethod
-    def _drop(n):
-        """Yuborilgan birinchi n qatorni navbatdan olib tashlaydi (atomik).
+    def _drop(sent):
+        """Yuborilgan AYNI qatorlarni navbat boshidan olib tashlaydi (atomik).
 
-        Yuborish paytida kelgan yangi yozuvlar fayl oxirida — ular saqlanadi."""
+        Pozitsion son emas, KONTENT mosligi bo'yicha o'chiramiz: POST davomida
+        _trim_if_huge() eng eski yarmini tashlab fayilni qayta raqamlasa,
+        pozitsion o'chirish yuborilmagan yozuvlarni o'chirib qo'yardi. Endi
+        faqat boshidagi mos qatorlar olinadi — trim bo'lsa hech narsa o'chmaydi
+        (eng yomon holatda o'sha batch keyingi siklda qayta yuboriladi, lekin
+        yo'qolmaydi). Yuborish paytida qo'shilgan yangi yozuvlar fayl oxirida —
+        ular doim saqlanadi."""
         with _lock:
             try:
                 with open(QUEUE_FILE, encoding="utf-8") as f:
                     lines = f.readlines()
-                rest = lines[n:]
+                i = 0
+                while i < len(sent) and i < len(lines) and lines[i] == sent[i]:
+                    i += 1
+                rest = lines[i:]
                 tmp = QUEUE_FILE + ".tmp"
                 with open(tmp, "w", encoding="utf-8") as f:
                     f.writelines(rest)

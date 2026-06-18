@@ -14,6 +14,7 @@ Bitta nusxa butun ilova davomida ishlaydi (ensure_proxy bir marta yoqadi).
 """
 import http.server
 import logging
+import secrets
 import threading
 
 from core import config
@@ -23,6 +24,7 @@ log = logging.getLogger(__name__)
 
 _httpd = None
 _port = None
+_token = None       # sessiya tokeni — URL ichida, begona jarayon o'g'irlolmasin
 _lock = threading.Lock()
 
 # Proxy yo'llari -> server endpointi
@@ -39,11 +41,16 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         parts = self.path.lstrip("/").split("?", 1)[0].split("/")
-        if len(parts) != 2 or parts[0] not in _ROUTES:
+        # Yo'l: /<kind>/<token>/<id>. Token mos kelmasa — 404 (loopback portga
+        # ulangan boshqa lokal jarayon API-kalit bilan kontent ololmasin).
+        if len(parts) != 3 or parts[0] not in _ROUTES:
             self.send_error(404)
             return
-        kind, cid = parts
-        if not cid.isdigit():
+        kind, tok, cid = parts
+        if not _token or not secrets.compare_digest(tok, _token):
+            self.send_error(404)
+            return
+        if not cid.isdigit() or len(cid) > 12:
             self.send_error(404)
             return
         upstream = config.SERVER_URL.rstrip("/") + _ROUTES[kind].format(id=cid)
@@ -99,7 +106,7 @@ class _QuietServer(http.server.ThreadingHTTPServer):
 
 def ensure_proxy():
     """Lokal proxy serverini (bir marta) yoqadi, port qaytaradi (xato -> None)."""
-    global _httpd, _port
+    global _httpd, _port, _token
     with _lock:
         if _httpd is not None:
             return _port
@@ -110,6 +117,7 @@ def ensure_proxy():
             return None
         _httpd = httpd
         _port = httpd.server_address[1]
+        _token = secrets.token_urlsafe(18)
         threading.Thread(target=httpd.serve_forever, daemon=True).start()
         log.info("Stream proxy 127.0.0.1:%d da ishga tushdi", _port)
         return _port
@@ -118,10 +126,10 @@ def ensure_proxy():
 def play_proxy_url(content_id):
     """Kino/audio uchun lokal proxy URL (yoki None)."""
     port = ensure_proxy()
-    return f"http://127.0.0.1:{port}/m/{content_id}" if port else None
+    return f"http://127.0.0.1:{port}/m/{_token}/{content_id}" if port else None
 
 
 def ad_proxy_url(ad_id):
     """Video reklama uchun lokal proxy URL (yoki None)."""
     port = ensure_proxy()
-    return f"http://127.0.0.1:{port}/ad/{ad_id}" if port else None
+    return f"http://127.0.0.1:{port}/ad/{_token}/{ad_id}" if port else None

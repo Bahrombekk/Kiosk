@@ -20,6 +20,8 @@ Foydalanish:
     self._loader = track(_Loader(self.api))
     self._loader.start()
 """
+import threading
+
 from PyQt6.QtCore import QObject, QThread
 
 
@@ -27,26 +29,31 @@ class _Registry(QObject):
     def __init__(self):
         super().__init__()
         self._alive = set()
+        self._lock = threading.Lock()
 
     def track(self, thread):
-        self._alive.add(thread)
+        with self._lock:
+            self._alive.add(thread)
         # Asosiy oqimdagi QObject'ga ulanish -> queued yetkazish. Slot ishlaganda
         # thread haqiqatan tugagan bo'ladi, shu sababli havolani olib tashlash xavfsiz.
         thread.finished.connect(self._retire)
         return thread
 
     def _retire(self):
-        self._alive.discard(self.sender())
+        with self._lock:
+            self._alive.discard(self.sender())
 
 
 _registry = None
+_registry_lock = threading.Lock()
 
 
 def track(thread):
     """QThread'ni u tugagunicha tirik saqlaydi (GC abort'ining oldini oladi)."""
     global _registry
-    if _registry is None:
-        _registry = _Registry()
+    with _registry_lock:
+        if _registry is None:
+            _registry = _Registry()
     return _registry.track(thread)
 
 
@@ -58,7 +65,9 @@ def wait_all(timeout_ms=2000):
     if _registry is None:
         return
     cur = QThread.currentThread()
-    for th in list(_registry._alive):
+    with _registry._lock:
+        pending = list(_registry._alive)
+    for th in pending:
         try:
             if th is cur or not th.isRunning():
                 continue
