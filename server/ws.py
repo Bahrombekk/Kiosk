@@ -16,13 +16,14 @@ import time
 
 
 class ConnectionManager:
+    # Bitta socketga yuborish maksimal kutish vaqti — "yarim o'lik" kiosk
+    # (TCP buferi to'lgan) butun serverни osib qo'ymasin.
+    SEND_TIMEOUT_S = 5
+
     def __init__(self):
-        # websocket -> {"device_id", "ip", "platform", "connected_at"}
+        # websocket -> {"device_id", "ip", "platform", "connected_at", "lock"}
         self.active = {}
         self.loop = None     # server event-loop (admin oqimidan uzatish uchun)
-        # Barcha send_json'larni serializatsiya qiladi: bir socketда ikki
-        # korutina bir vaqtda yozsa Starlette "Concurrent call to send" beradi.
-        self._send_lock = asyncio.Lock()
 
     def set_loop(self, loop):
         self.loop = loop
@@ -39,6 +40,10 @@ class ConnectionManager:
             "ip": ip,
             "platform": None,
             "connected_at": time.time(),
+            # Har socketga ALOHIDA qulf: bir socketда ikki korutina bir vaqtda
+            # yozsa Starlette "Concurrent call to send" beradi. Lekin har socket
+            # mustaqil — bittasiga yuborish boshqasiniki bilan parallel ketadi.
+            "lock": asyncio.Lock(),
         }
 
     def register(self, ws, device_id, platform=None):
@@ -74,21 +79,38 @@ class ConnectionManager:
         out.sort(key=lambda c: c["connected_at"] or 0, reverse=True)
         return out
 
+    async def _safe_send(self, ws, message: dict):
+        """Bitta socketga uning ALOHIDA qulfi ostida, timeout bilan yuboradi.
+        Muvaffaqiyatsiz bo'lsa (xato/timeout) socketni qaytaradi (o'lik deb
+        belgilash uchun), aks holda None."""
+        info = self.active.get(ws)
+        if info is None:
+            return None
+        lock = info["lock"]
+        try:
+            async with lock:
+                await asyncio.wait_for(ws.send_json(message),
+                                       timeout=self.SEND_TIMEOUT_S)
+        except Exception:
+            return ws
+        return None
+
     async def send_personal(self, ws, message: dict):
-        """Bitta socketga qulf ostida yuboradi (broadcast bilan to'qnashmaslik uchun)."""
-        async with self._send_lock:
-            await ws.send_json(message)
+        """Bitta socketga yuboradi (o'sha socket qulfi ostida)."""
+        await self._safe_send(ws, message)
 
     async def broadcast(self, message: dict):
-        dead = []
-        async with self._send_lock:
-            for ws in list(self.active):
-                try:
-                    await ws.send_json(message)
-                except Exception:
-                    dead.append(ws)
-        for ws in dead:
-            self.disconnect(ws)
+        # Barcha socketlarga PARALLEL yuboramiz — bitta sekin/yarim o'lik kiosk
+        # qolganlarini bloklamaydi (har biri o'z qulfi + timeoutida).
+        targets = list(self.active)
+        results = await asyncio.gather(
+            *(self._safe_send(ws, message) for ws in targets),
+            return_exceptions=True)
+        for r in results:
+            if isinstance(r, BaseException):
+                continue
+            if r is not None:        # _safe_send o'lik socketni qaytardi
+                self.disconnect(r)
 
     def broadcast_threadsafe(self, message: dict):
         """Admin oqimidan (Qt) chaqiriladi — broadcast'ni server loop'iga qo'yadi."""
@@ -96,13 +118,14 @@ class ConnectionManager:
             asyncio.run_coroutine_threadsafe(self.broadcast(message), self.loop)
 
     async def _send_to_device(self, device_id, message: dict):
-        async with self._send_lock:
-            for ws, info in list(self.active.items()):
-                if info.get("device_id") == device_id:
-                    try:
-                        await ws.send_json(message)
-                    except Exception:
-                        pass
+        targets = [ws for ws, info in list(self.active.items())
+                   if info.get("device_id") == device_id]
+        results = await asyncio.gather(
+            *(self._safe_send(ws, message) for ws in targets),
+            return_exceptions=True)
+        for r in results:
+            if not isinstance(r, BaseException) and r is not None:
+                self.disconnect(r)
 
     def send_to_device_threadsafe(self, device_id, message: dict):
         """Admin oqimidan — buyruqni faqat shu device_id'li kiosk(lar)ga yuboradi."""

@@ -60,7 +60,7 @@ from datetime import datetime
 from PyQt6.QtWidgets import QLabel, QWidget
 from PyQt6.QtCore import (Qt, QThread, QTimer, QUrl, QRect, QRectF, QObject,
                           pyqtSignal)
-from PyQt6.QtGui import QPixmap, QPainter, QPainterPath
+from PyQt6.QtGui import QPixmap, QPainter, QPainterPath, QColor
 
 from core import cache
 from core import theme as T
@@ -592,18 +592,30 @@ class AdManager(QObject):
 
         Tanlov — aylanma navbat (eng uzoq ko'rsatilmagani), 'media' algoritmi
         belgilangandagina ishlaydi."""
-        if (not self._media_enabled() or not self._active
-                or self._popup is not None or self._pending is not None):
+        log.debug("media_ad kirdi: stage=%s, enabled=%s, active=%s, ads=%d",
+                  stage, self._media_enabled(), self._active, len(self.ads))
+        if not self._media_enabled():
+            log.info("Media reklama (%s) o'tkazildi: 'media' algoritmi yoqilmagan",
+                     stage)
+            on_done()
+            return
+        if (not self._active or self._popup is not None
+                or self._pending is not None):
+            log.info("Media reklama (%s) o'tkazildi: band (popup ochiq/tayyor)",
+                     stage)
             on_done()
             return
         # Admin tanlagan joylar: faqat boshida / boshi+oxiri / hammasi
         if stage not in self._media_slots():
+            log.info("Media reklama (%s) o'tkazildi: bu joy tanlanmagan (%s)",
+                     stage, ",".join(sorted(self._media_slots())))
             on_done()
             return
-        if stage == "pre" and time.monotonic() - self._last_close_ts < MIN_GAP_S:
-            # Foydalanuvchi kinolarni ketma-ket ochib-yopsa, har ochilishda
-            # pre-roll urilmasin — oxirgi reklamadan kamida MIN_GAP_S o'tsin
-            # (mid/end bunga kirmaydi: ular kino davomida tabiiy siyrak).
+        # Eslatma: pre-roll'да MIN_GAP YO'Q — admin «media» rejimini tanlagan,
+        # demak HAR kino ochilganda reklama chiqsin (navbatdagi boshqa reklama).
+        # Faqat tasodifiy ikki marta urilishdan himoya (juda qisqa 3s oyna).
+        if stage == "pre" and time.monotonic() - self._last_close_ts < 3:
+            log.info("Media reklama (pre) o'tkazildi: endigina yopildi (<3s)")
             on_done()
             return
         cands = sorted(self._eligible(),
@@ -616,13 +628,18 @@ class AdManager(QObject):
                      "oralig'i/turi bo'yicha filtrlangan",
                      stage, len(cands), len(self.ads))
         if not cands:
+            log.info("Media reklama (%s) o'tkazildi: mos reklama yo'q "
+                     "(%d ta reklama, hammasi banner/vaqt oralig'idan tashqari?)",
+                     stage, len(self.ads))
             on_done()
             return
-        # Qatlam mustaqil top-level oyna — host (pleyer) endi kiosk oynasi
-        # ICHIDA bola, shuning uchun GLOBAL koordinatasini olamiz (aks holda
-        # ekran chap-yuqorisida noto'g'ri joyda chiqadi).
-        tl = host.mapToGlobal(host.rect().topLeft())
-        grect = QRect(tl.x(), tl.y(), host.width(), host.height())
+        # Qatlam mustaqil top-level oyna — uni KIOSK OYNASI (self.win) ustiga
+        # joylaymiz. host (pleyer) kiosk oynasi ichida bola va reklama chaqirilgan
+        # paytда uning global joyi hali aniq bo'lmasligi mumkin; self.win esa
+        # doim barqaror va to'liq oynani qoplaydi.
+        win = self.win
+        tl = win.mapToGlobal(win.rect().topLeft())
+        grect = QRect(tl.x(), tl.y(), win.width(), win.height())
         self._media_ctx = (_MediaAdLayer(grect), on_done, stage)
         self._try_candidates(cands)
 

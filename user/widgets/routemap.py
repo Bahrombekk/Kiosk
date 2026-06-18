@@ -86,6 +86,14 @@ class RouteMap(QWidget):
         self.theme_name = "light"
         self._geo = []          # har bekat uchun (lon, lat) yoki None
         self._phase = 0.0       # animatsiya fazasi [0,1)
+        # Statik geometriya keshi — har frame qayta hisoblanmasin (paintEvent
+        # 40ms'da chaqiriladi, lekin yo'l/nuqtalar faqat marshrut yoki o'lcham
+        # o'zgarganda o'zgaradi). _cache_size keshning qaysi o'lchamga tegishli
+        # ekanini saqlaydi; mos kelmasa qayta hisoblanadi.
+        self._cache_size = None
+        self._cache_pts = None
+        self._cache_full_path = None
+        self._cache_passed = None
         self.setMinimumSize(T.s(360), T.s(320))
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._tick)
@@ -97,9 +105,37 @@ class RouteMap(QWidget):
         self.current = max(0, min(current, len(self.stops) - 1)) if self.stops else 0
         self.theme_name = theme_name
         self._geo = [_lookup(s.get("name", "")) for s in self.stops]
+        self._invalidate_cache()   # yangi marshrut — keshni qayta hisoblaymiz
         if self.stops and self.isVisible():
             self.timer.start()
         self.update()
+
+    def _invalidate_cache(self):
+        self._cache_size = None
+        self._cache_pts = None
+        self._cache_full_path = None
+        self._cache_passed = None
+
+    def _ensure_cache(self):
+        """Statik yo'l geometriyasini joriy o'lcham uchun bir marta hisoblab
+        keshlaydi: bekat nuqtalari, to'liq yo'l, o'tilgan qism. paintEvent
+        shulardan foydalanadi — har frame qayta hisoblanmaydi."""
+        sz = (self.width(), self.height())
+        if self._cache_size == sz and self._cache_pts is not None:
+            return
+        self._cache_size = sz
+        full = QRectF(0, 0, self.width(), self.height())
+        pad = T.s(64)
+        pts = self._points(full, pad)
+        self._cache_pts = pts
+        n = len(pts)
+        self._cache_full_path = self._smooth_path(pts) if n >= 2 else None
+        self._cache_passed = (self._smooth_path(pts[:self.current + 1])
+                              if (n >= 2 and self.current >= 1) else None)
+
+    def resizeEvent(self, e):
+        self._invalidate_cache()   # o'lcham o'zgardi — geometriya qayta kerak
+        super().resizeEvent(e)
 
     def _tick(self):
         self._phase = (self._phase + 0.012) % 1.0
@@ -227,28 +263,28 @@ class RouteMap(QWidget):
             p.end()
             return
 
-        pad = T.s(64)
-        pts = self._points(full, pad)
+        self._ensure_cache()            # statik geometriya (keshlangan)
+        pts = self._cache_pts
         accent = QColor(c["accent"])
         gray = QColor("#AEB7C6")
         cur = self.current
         n = len(pts)
 
         # Silliq egri marshrut: yumshoq yo'lak -> butun yo'l (kulrang) ->
-        # o'tilgan qism (accent) joriy bekatgacha.
-        if n >= 2:
-            full_path = self._smooth_path(pts)
+        # o'tilgan qism (accent) joriy bekatgacha. Yo'llar keshlangan — bu yerda
+        # faqat chiziladi, qayta hisoblanmaydi.
+        if self._cache_full_path is not None:
+            full_path = self._cache_full_path
             p.setPen(QPen(land, T.s(22), Qt.PenStyle.SolidLine,
                           Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
             p.drawPath(full_path)
             p.setPen(QPen(gray, T.s(5), Qt.PenStyle.SolidLine,
                           Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
             p.drawPath(full_path)
-            if cur >= 1:
-                passed = self._smooth_path(pts[:cur + 1])
+            if self._cache_passed is not None:
                 p.setPen(QPen(accent, T.s(6), Qt.PenStyle.SolidLine,
                               Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-                p.drawPath(passed)
+                p.drawPath(self._cache_passed)
 
         # Harakatlanuvchi poyezd nuqtasi (joriy segment bo'ylab) yoki oxirgi bekatda pulse
         if cur < n - 1:

@@ -96,6 +96,12 @@ class BooksScreen(QWidget):
         self._modal = None
         self._reader = None
         self._audio = None
+        # Oyna sudralganda har piksel o'zgarishida emas, debounce bilan
+        # ustun sonini qayta tekshiramiz (og'ir _render kamroq chaqirilsin).
+        self._resize_timer = QTimer(self)
+        self._resize_timer.setSingleShot(True)
+        self._resize_timer.setInterval(160)
+        self._resize_timer.timeout.connect(self._do_resize)
         self._build()
 
     def _build(self):
@@ -282,6 +288,10 @@ class BooksScreen(QWidget):
 
     def resizeEvent(self, e):
         super().resizeEvent(e)
+        # Debounce: sudralish tugagach (160ms) bir marta tekshiramiz.
+        self._resize_timer.start()
+
+    def _do_resize(self):
         if self.all_items and self._calc_cols() != getattr(self, "_cols", 0):
             self._render()
 

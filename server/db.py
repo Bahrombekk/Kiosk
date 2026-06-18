@@ -8,6 +8,9 @@ Birinchi ishga tushishda baza yaratiladi va test kontent bilan to'ldiriladi
 import sqlite3
 import os
 import logging
+import hashlib
+import hmac
+import secrets
 from contextlib import contextmanager
 
 import config
@@ -283,74 +286,6 @@ def _remove_legacy_seed(conn):
     conn.execute(
         "INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)",
         ("legacy_seed_cleanup_done", "1"))
-
-
-def _seed(conn):
-    """Boshlang'ich test ma'lumotlari (admin keyinroq haqiqiysini qo'shadi)."""
-    content = [
-        # type, title, author, genre, description, duration, pages, cover, file, text, tab, rec
-        ("movie",  "Baron", None, "Kriminal, Ekshn",
-         "O'zbek kriminal dramasi.", 6600, None,
-         "baron.svg", "baron.mp4", None, "Kinolar", 1),
-        ("movie",  "Sarob", None, "Drama",
-         "Hayotiy drama filmi.", 5400, None,
-         "sarob.svg", "sarob.mp4", None, "Kinolar", 0),
-        ("cartoon", "Zumrad va Qimmat", None, "Multfilm",
-         "Bolalar uchun multfilm.", 3600, None,
-         "zumrad.svg", "zumrad.mp4", None, "Multfilmlar", 0),
-        ("music",  "Yulduz Usmonova — Konsert", "Yulduz Usmonova", "Konsert",
-         "Jonli konsert yozuvi.", 7200, None,
-         "concert.svg", "concert.mp4", None, "Musiqa", 0),
-        ("book",   "O'tkan kunlar", "Abdulla Qodiriy", "Badiiy",
-         "O'zbek adabiyotining durdona asari.", None, 560,
-         "otkan.svg", None, "otkan.json", "Badiiy", 1),
-        ("audiobook", "Mehrobdan chayon", "Abdulla Qodiriy", "Badiiy",
-         "Audiokitob ko'rinishida.", 18000, None,
-         "mehrob.svg", "mehrob.mp3", None, "Badiiy", 0),
-    ]
-    conn.executemany(
-        """INSERT INTO content
-           (type,title,author,genre,description,duration,pages,
-            cover_path,file_path,text_path,category_tab,is_recommended)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""", content)
-
-    conn.executemany(
-        "INSERT INTO ads (image_path,title,subtitle,link_url,is_active,sort_order) VALUES (?,?,?,?,?,?)",
-        [("ad1.jpg", "Afrosiyob bilan tez va qulay",
-          "Toshkent — Samarqand 2 soatda", "https://railway.uz", 1, 0)])
-
-    conn.executemany(
-        "INSERT INTO sites (name,url,description,features,icon,sort_order) VALUES (?,?,?,?,?,?)",
-        [
-            ("Rasmiy sayt", "https://railway.uz",
-             "O'zbekiston temir yo'llari rasmiy sayti",
-             "Jadval; Online chipta; Shaxsiy kabinet; Poyezd holati", "globe", 0),
-            ("E-Chipta portali", "https://chipta.railway.uz",
-             "Onlayn chipta xarid qilish", "Chipta sotib olish; Qaytarish", "globe", 1),
-            ("Telegram kanal", "https://t.me/railway_uz",
-             "Yangiliklar va e'lonlar", "Yangiliklar; Aksiyalar", "globe", 2),
-        ])
-
-    conn.executemany(
-        "INSERT INTO settings (key,value) VALUES (?,?)",
-        [
-            ("wagon_number", "6"),
-            ("wagon_note", "Restoran vagonning chap tarafida"),
-            ("train_name", "AFROSIYOB 764"),
-            ("route", "Toshkent → Samarqand"),
-            ("depart_time", "08:00"),
-            ("duration", "2s 45d"),
-            ("default_theme", "light"),
-        ])
-
-    conn.executemany(
-        "INSERT INTO route_stops (name,arrival_time,latitude,longitude,sort_order) VALUES (?,?,?,?,?)",
-        [
-            ("Toshkent",  "08:00", 41.2995, 69.2401, 0),
-            ("Guliston",  "08:30", 40.4897, 68.7842, 1),
-            ("Jizzax",    "09:10", 40.1158, 67.8422, 2),
-            ("Samarqand", "10:00", 39.6542, 66.9597, 3),
-        ])
 
 
 # --- O'qish funksiyalari (API uchun) ---
@@ -648,7 +583,6 @@ def hash_secret(plain):
 
     Format: pbkdf2$<iteratsiya>$<salt_hex>$<hash_hex> — bitta satrda saqlanadi,
     verify_secret shu formatni o'qiydi. Hech qayerda ochiq matn saqlanmaydi."""
-    import hashlib
     import os as _os
     iterations = 100_000
     salt = _os.urandom(16)
@@ -658,8 +592,6 @@ def hash_secret(plain):
 
 def verify_secret(plain, stored):
     """Kiritilgan qiymatni saqlangan xesh bilan timing-safe solishtiradi."""
-    import hashlib
-    import hmac
     try:
         algo, iterations, salt_hex, hash_hex = stored.split("$")
         if algo != "pbkdf2":
@@ -776,7 +708,6 @@ def get_or_create_api_key():
     Bitta umumiy kalit: server birinchi ishga tushganda generatsiya qilinadi,
     operator uni admin oynasidan ko'chirib kiosk o'rnatuvchisiga kiritadi.
     Kalitsiz so'rovlar 401 oladi (LAN'dagi begona qurilmalardan himoya)."""
-    import secrets
     key = get_settings().get("api_key")
     if not key:
         key = secrets.token_urlsafe(24)

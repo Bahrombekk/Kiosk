@@ -39,12 +39,7 @@ def _is_audio_music(item):
 
 # Tab nomi -> qaysi turlar ko'rsatiladi (+ dizayndagi inline SVG ikonka)
 # Ikonkalar Videolar.html dizaynidan aynan ko'chirilgan.
-_GRID_SVG = ("<svg viewBox='0 0 24 24' fill='currentColor'>"
-             "<rect x='3' y='3' width='7' height='7' rx='1.6'/>"
-             "<rect x='14' y='3' width='7' height='7' rx='1.6'/>"
-             "<rect x='3' y='14' width='7' height='7' rx='1.6'/>"
-             "<rect x='14' y='14' width='7' height='7' rx='1.6'/></svg>")
-_FILM_SVG = ("<svg viewBox='0 0 24 24' fill='currentColor'>"
+_FILM_SVG =("<svg viewBox='0 0 24 24' fill='currentColor'>"
              "<rect x='3' y='6' width='18' height='14' rx='2.5'/>"
              "<path d='M4 6 7 2.5h3L7 6H4Zm6 0 3-3.5h3L13 6h-3Zm6 0 3-3.5h1.6L18.6 6H16Z'/></svg>")
 _WAND_SVG = ("<svg viewBox='0 0 24 24' fill='none'>"
@@ -61,8 +56,6 @@ _SEARCH_SVG = ("<svg viewBox='0 0 24 24' fill='none'>"
 
 # (yorliq tr-kaliti, content turlari, ikonka) — yorliq i18n orqali tarjima qilinadi
 TABS = [
-    # "Barchasi" — faqat video (kino+multfilm); musiqa o'zining tabida
-    ("common.tab_all",      ("movie", "cartoon"),          _GRID_SVG),
     ("videos.tab.movies",   ("movie",),                    _FILM_SVG),
     ("videos.tab.cartoons", ("cartoon",),                  _WAND_SVG),
     ("videos.tab.music",    ("music",),                    _MUSIC_SVG),
@@ -114,6 +107,12 @@ class VideosScreen(QWidget):
         self._player = None
         self._audio = None
         self._modal = None
+        # Oyna sudralganda har piksel o'zgarishida emas, debounce bilan
+        # ustun sonini qayta tekshiramiz (og'ir _render kamroq chaqirilsin).
+        self._resize_timer = QTimer(self)
+        self._resize_timer.setSingleShot(True)
+        self._resize_timer.setInterval(160)
+        self._resize_timer.timeout.connect(self._do_resize)
         self._build()
 
     def _build(self):
@@ -307,14 +306,9 @@ class VideosScreen(QWidget):
 
         cols = self._calc_cols()
         self._cols = cols
-        if self.active_tab == 0:
-            # «Barchasi» — janrga bo'linmaydi, hammasi bitta to'rda ko'rinadi
-            groups = [(None, items)]
-            show_headers = False
-        else:
-            groups = self._group_by_genre(items)
-            # Hammasi janrsiz bo'lsa — sarlavhasiz oddiy to'r
-            show_headers = not (len(groups) == 1 and groups[0][0] is None)
+        # Har tab janr bo'yicha guruhlanadi (janrsiz bo'lsa — sarlavhasiz to'r)
+        groups = self._group_by_genre(items)
+        show_headers = not (len(groups) == 1 and groups[0][0] is None)
         for gname, gitems in groups:
             if show_headers:
                 self.vbox.addWidget(self._genre_header(
@@ -362,6 +356,10 @@ class VideosScreen(QWidget):
 
     def resizeEvent(self, e):
         super().resizeEvent(e)
+        # Debounce: sudralish tugagach (160ms) bir marta tekshiramiz.
+        self._resize_timer.start()
+
+    def _do_resize(self):
         # Kenglik o'zgarib ustunlar soni boshqacha bo'lsa — qaytadan teramiz.
         if self.all_items and self._calc_cols() != getattr(self, "_cols", 0):
             self._render()

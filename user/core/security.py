@@ -78,6 +78,16 @@ class ExitGuard:
         stored = hit[0].get("exit_pin_hash") if hit else None
         if stored:
             return pinhash.verify_secret(entered, stored)
+        # Na env, na serverdan kelgan xesh bor — qattiq kodlangan default PINga
+        # tushyapmiz. Bu XAVFSIZ EMAS (umumiy/ma'lum kod). Provisioning qilingan
+        # kioskда serverdan exit_pin_hash kelishi kerak. Operatorga bir marta
+        # ogohlantirish yozamiz (har urinishda emas).
+        if not getattr(self, "_default_pin_warned", False):
+            logsetup.get_logger(__name__).warning(
+                "Chiqish PINi sozlanmagan — qattiq kodlangan default ishlatilmoqda. "
+                "Xavfsizlik uchun admin paneldan chiqish PINini o'rnating yoki "
+                "KIOSK_EXIT_PIN muhit o'zgaruvchisini bering.")
+            self._default_pin_warned = True
         return hmac.compare_digest(entered.encode(),
                                    config.EXIT_PIN.encode())
 

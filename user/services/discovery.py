@@ -123,23 +123,13 @@ def _choose(candidates, parent=None):
     except Exception:
         return candidates[0]
     items = [f"{c['name']}  —  {c['url']}" for c in candidates]
-    title = tr("conn.choose_title") if _has_key("conn.choose_title") else "Server tanlang"
-    label = (tr("conn.choose_label") if _has_key("conn.choose_label")
-             else "Bir nechta server topildi. Qaysi biriga ulanamiz?")
+    title = tr("conn.choose_title")
+    label = tr("conn.choose_label")
     choice, ok = QInputDialog.getItem(parent, title, label, items,
                                       0, False)
     if ok and choice in items:
         return candidates[items.index(choice)]
     return candidates[0]
-
-
-def _has_key(key):
-    """i18n'da kalit bormi (bo'lmasa zaxira matn ishlatamiz)."""
-    try:
-        from core import i18n
-        return key in getattr(i18n, "_STRINGS", {}).get(i18n.get_lang(), {})
-    except Exception:
-        return False
 
 
 def resolve_server(parent=None, timeout_s=_LISTEN_S):

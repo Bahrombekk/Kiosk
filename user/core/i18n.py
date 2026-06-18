@@ -87,6 +87,12 @@ STRINGS = {
     "common.listen":        (" Tinglash",            " Слушать",              " Listen"),
     "common.read":          (" O'qish",              " Читать",               " Read"),
     "common.tab_all":       ("Barchasi",             "Все",                   "All"),
+
+    # --- Server tanlash (bir nechta server topilganda) ---
+    "conn.choose_title": ("Server tanlang", "Выберите сервер", "Choose server"),
+    "conn.choose_label": ("Bir nechta server topildi. Qaysi biriga ulanamiz?",
+                          "Найдено несколько серверов. К какому подключиться?",
+                          "Multiple servers found. Which one to connect to?"),
     "common.other":         ("Boshqa",               "Другое",                "Other"),
 
     # --- Videolar ---
@@ -189,6 +195,36 @@ STRINGS = {
     "pin.wrong":  ("Noto'g'ri PIN ({n} urinish qoldi)",
                    "Неверный PIN (осталось попыток: {n})",
                    "Wrong PIN ({n} attempts left)"),
+
+    # --- Audio/kitob pleyeri ---
+    "player.now_playing": ("Hozir ijro etilmoqda", "Сейчас играет", "Now playing"),
+    "player.speed":       ("Tezlik", "Скорость", "Speed"),
+    "player.chapters":    ("Boblar", "Главы", "Chapters"),
+    "player.timer":       ("Taymer", "Таймер", "Timer"),
+    "player.timer_val":   ("Taymer · {t}", "Таймер · {t}", "Timer · {t}"),
+    "player.shuffle":     ("Aralash", "Перемешать", "Shuffle"),
+    "player.favorites":   ("Sevimlilar", "Избранное", "Favorites"),
+    "player.favorite":    ("Sevimli", "В избранном", "Favorite"),
+    "player.playlist":    ("Pleylist", "Плейлист", "Playlist"),
+    "player.play":        ("O'ynatish", "Воспроизвести", "Play"),
+    "player.fav_add":     ("Sevimlilarga qo'shish", "Добавить в избранное",
+                           "Add to favorites"),
+    "player.fav_remove":  ("Sevimlidan olib tashlash", "Удалить из избранного",
+                           "Remove from favorites"),
+    "player.mark_pos":    ("Joriy joyni belgilash", "Отметить текущее место",
+                           "Bookmark current position"),
+    "player.timer_off":   ("O'chirish", "Выключить", "Off"),
+    "player.note_title":  ("Eslatma qo'shish", "Добавить заметку", "Add note"),
+    "player.note_body":   ("Joriy vaqt: {t}\nIzoh (ixtiyoriy):",
+                           "Текущее время: {t}\nЗаметка (необязательно):",
+                           "Current time: {t}\nNote (optional):"),
+    "player.notes":       ("Eslatmalar", "Заметки", "Notes"),
+    "player.no_notes":    ("Hozircha eslatma yo'q", "Заметок пока нет",
+                           "No notes yet"),
+    "player.goto":        ("O'tish", "Перейти", "Go"),
+    "player.clear":       ("Tozalash", "Очистить", "Clear"),
+    "player.chapter_fmt": ("{cur} / {total} BOB", "{cur} / {total} гл.",
+                           "{cur} / {total} ch."),
 
     # --- Davomiylik formati ---
     "dur.hour_min": ("{h} soat {m} daqiqa", "{h} ч {m} мин", "{h} h {m} min"),

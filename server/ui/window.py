@@ -1,14 +1,17 @@
 """ui/window.py — Asosiy admin oynasi (sidebar + sahifalar)."""
+import os
+
 from PyQt6.QtWidgets import (
     QWidget, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QFrame, QStackedWidget, QButtonGroup
 )
-from PyQt6.QtCore import Qt, QTimer, QSize
+from PyQt6.QtCore import Qt, QTimer, QSize, QThread
 
 import config
+import db
 from icons import svg_icon, svg_pixmap
 from ui.styles import C_ACCENT, C_BAD
-from ui.helpers import local_ips
+from ui.helpers import local_ips, _media_duration
 from ui.server_thread import ServerThread
 from ui.pages.dashboard import DashboardPageMixin
 from ui.pages.cache import CachePageMixin
@@ -17,6 +20,29 @@ from ui.pages.ads import AdsPageMixin
 from ui.pages.crud import CrudPagesMixin
 from ui.pages.settings import SettingsPageMixin
 from ui.pages.stats import StatsPageMixin
+
+
+class _DurationFiller(QThread):
+    """Davomiyligi 0/bo'sh bo'lgan kontentlar uchun media faylдан davomiylikни
+    fonda hisoblab DB'ga yozadi (eski/ffprobesiz qo'shilganlarini to'g'irlaydi)."""
+
+    def run(self):
+        try:
+            items = db.get_content()
+        except Exception:
+            return
+        for c in items:
+            if c.get("duration") or not c.get("file_path"):
+                continue
+            path = os.path.join(config.MEDIA_DIR, c["file_path"])
+            if not os.path.exists(path):
+                continue
+            try:
+                dur = _media_duration(path)
+                if dur:
+                    db.update_content(c["id"], {"duration": dur})
+            except Exception:
+                pass
 
 
 # ----------------------------------------------------------------------------
@@ -80,6 +106,12 @@ class AdminWindow(DashboardPageMixin, CachePageMixin, ContentPageMixin,
         self.refresh_content()
         self.load_settings()
         self._update_stats()
+
+        # Davomiyligi 0 bo'lgan eski kontentlarni fonda qayta hisoblaymiz
+        # (ffprobe keyin o'rnatilgan bo'lsa — multfilm/kino vaqti to'ldiriladi)
+        self._dur_filler = _DurationFiller()
+        self._dur_filler.finished.connect(self.refresh_content)
+        self._dur_filler.start()
 
         # Jonli holat (har soniyada) va statistika (har 5 soniyada)
         self.timer = QTimer(self)
@@ -242,4 +274,6 @@ class AdminWindow(DashboardPageMixin, CachePageMixin, ContentPageMixin,
     def closeEvent(self, e):
         self.server.stop()
         self.server.wait(3000)
+        if hasattr(self, "_dur_filler") and self._dur_filler.isRunning():
+            self._dur_filler.wait(2000)
         super().closeEvent(e)

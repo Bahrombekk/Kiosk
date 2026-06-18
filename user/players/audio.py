@@ -241,8 +241,12 @@ class AudioPlayer(QWidget):
         # ekran ko'rinib qoladi) — Reader bilan bir xil.
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
 
+        # --no-video: bu AUDIO pleyer. Ba'zi "musiqa" fayllari aslida video
+        # (mp4 .mp3 deb saqlangan) — video o'chirilmasa VLC alohida video oyna
+        # ochib yuboradi. Shu bayroq bilan faqat ovoz chiqadi, oyna ochilmaydi.
         self._instance = vlc.Instance(
-            "--quiet", f"--network-caching={self.NETWORK_CACHING_MS}")
+            "--quiet", "--no-video",
+            f"--network-caching={self.NETWORK_CACHING_MS}")
         self._mp = self._instance.media_player_new()
 
         # Pleyer OYNA o'lchamiga moslashadi (monitor SCALE'iga emas) — dev/oynali
@@ -301,6 +305,24 @@ class AudioPlayer(QWidget):
             self._S = new_s
             self._build()
             self._restyle()
+            # _build() yangi vidjetlarni bo'sh holatda quradi (nom/muallif/
+            # muqova/progress/vaqt yo'qoladi). Joriy holatni qayta tiklaymiz —
+            # ijro davom etadi (set_media/play CHAQIRILMAYDI).
+            if getattr(self, "item", None) is not None:
+                self._apply_state()
+
+    def _apply_state(self):
+        """Joriy item bo'yicha UI'ni tiklaydi (muqova, nom, muallif, playlist,
+        sevimli) — ijro pozitsiyasi/holatiga tegmaydi. _build()dan keyin yoki
+        trek yuklanganda chaqiriladi. Vaqt/progress keyingi _refresh'da to'ladi."""
+        self._set_cover()
+        self.title.setText(self.item.get("title", ""))
+        self.author.setText(self.item.get("author") or "")
+        if self._has_list:
+            self.prev_btn.setEnabled(self.index > 0)
+            self.next_btn.setEnabled(self.index < len(self.playlist) - 1)
+            self._refresh_playlist()
+        self._update_fav_btn()
 
     def _tick_bg(self):
         self._bg_phase += 0.01
@@ -485,7 +507,7 @@ class AudioPlayer(QWidget):
         except (TypeError, ValueError):
             total = 1
         current = min(total, max(1, int(self.item.get("chapter") or 1)))
-        return f"{current} / {total} BOB"
+        return tr("player.chapter_fmt", cur=current, total=total)
 
     def _make_transport(self):
         crow = QHBoxLayout()
@@ -551,7 +573,7 @@ class AudioPlayer(QWidget):
         col = QVBoxLayout(); col.setContentsMargins(0, 0, 0, 0); col.setSpacing(0)
         self.speed_val = QLabel(f"{SPEEDS[self._speed_i]:g}x")
         self.speed_val.setObjectName("aSpeedVal")
-        cap = QLabel("Tezlik"); cap.setObjectName("aSpeedCap")
+        cap = QLabel(tr("player.speed")); cap.setObjectName("aSpeedCap")
         col.addWidget(self.speed_val); col.addWidget(cap)
         l.addLayout(col)
         w.mousePressEvent = lambda _e: self._cycle_speed()
@@ -600,9 +622,9 @@ class AudioPlayer(QWidget):
         bl.setContentsMargins(T.s(16), T.s(10), T.s(16), T.s(10)); bl.setSpacing(T.s(12))
         self._vol_widgets(bl)
         bl.addStretch(1)
-        self.sleep_btn = self._tool_btn("Taymer", self._sleep_menu, _SVG_CLOCK)
-        self.shuffle_btn = self._tool_btn("Aralash", self._toggle_shuffle, _SVG_SHUFFLE)
-        self.fav_btn = self._tool_btn("Sevimlilar", self._toggle_fav, _SVG_HEART)
+        self.sleep_btn = self._tool_btn(tr("player.timer"), self._sleep_menu, _SVG_CLOCK)
+        self.shuffle_btn = self._tool_btn(tr("player.shuffle"), self._toggle_shuffle, _SVG_SHUFFLE)
+        self.fav_btn = self._tool_btn(tr("player.favorites"), self._toggle_fav, _SVG_HEART)
         bl.addWidget(self._inner_pill([self.sleep_btn, self.shuffle_btn, self.fav_btn]))
         return bar
 
@@ -612,8 +634,8 @@ class AudioPlayer(QWidget):
         bl = QHBoxLayout(bar)
         bl.setContentsMargins(T.s(16), T.s(12), T.s(16), T.s(12)); bl.setSpacing(T.s(18))
         speed = self._speed_widget()
-        self.sleep_btn = self._tool_btn("Taymer", self._sleep_menu, _SVG_CLOCK)
-        chapters_btn = self._tool_btn("Boblar", self._show_notes, _SVG_LIST)
+        self.sleep_btn = self._tool_btn(tr("player.timer"), self._sleep_menu, _SVG_CLOCK)
+        chapters_btn = self._tool_btn(tr("player.chapters"), self._show_notes, _SVG_LIST)
         bl.addWidget(self._inner_pill([speed, chapters_btn, self.sleep_btn]))
         bl.addStretch(1)
         self._vol_widgets(bl)
@@ -639,7 +661,7 @@ class AudioPlayer(QWidget):
         badge_l.setSpacing(T.s(8))
         badge_ic = QLabel(); badge_ic.setPixmap(_inline_icon(_SVG_WAVE, "#7C5CF6", T.s(16)))
         badge_ic.setStyleSheet("background: transparent;")
-        badge_tx = QLabel("Hozir ijro etilmoqda"); badge_tx.setObjectName("aBadgeTx")
+        badge_tx = QLabel(tr("player.now_playing")); badge_tx.setObjectName("aBadgeTx")
         badge_l.addWidget(badge_ic); badge_l.addWidget(badge_tx)
         right.addWidget(badge, 0, Qt.AlignmentFlag.AlignLeft)
         right.addSpacing(T.s(20))
@@ -709,7 +731,7 @@ class AudioPlayer(QWidget):
         pl.setContentsMargins(T.s(22), T.s(20), T.s(22), T.s(20))
         pl.setSpacing(T.s(14))
         head = QHBoxLayout()
-        hdr = QLabel("Musiqa"); hdr.setObjectName("aPanelHdr")
+        hdr = QLabel(tr("videos.tab.music")); hdr.setObjectName("aPanelHdr")
         head.addWidget(hdr); head.addStretch(1)
         gear = QLabel(); gear.setObjectName("aPanelGear")
         gear.setPixmap(_inline_icon(_SVG_SLIDERS, "#64748B", T.s(22)))
@@ -792,10 +814,10 @@ class AudioPlayer(QWidget):
         it = self.playlist[idx]
         cid = it.get("id")
         m = QMenu(self)
-        m.addAction("O'ynatish").triggered.connect(lambda: self._goto(idx))
+        m.addAction(tr("player.play")).triggered.connect(lambda: self._goto(idx))
         fav = cid in self._fav_ids()
-        act = m.addAction("Sevimlidan olib tashlash" if fav
-                          else "Sevimlilarga qo'shish")
+        act = m.addAction(tr("player.fav_remove") if fav
+                          else tr("player.fav_add"))
 
         def _togg():
             ids = self._fav_ids()
@@ -807,17 +829,6 @@ class AudioPlayer(QWidget):
         pos = (btn.mapToGlobal(btn.rect().bottomLeft()) if btn
                else self.mapToGlobal(self.rect().center()))
         m.exec(pos)
-
-    def _icon_btn(self, icon, slot, size):
-        b = QPushButton()
-        b.setObjectName("aIconBtn")
-        b.setCursor(Qt.CursorShape.PointingHandCursor)
-        b.setFixedSize(size, size)
-        b.setIcon(svg_icon(icon, "#334155", 40))
-        b.setIconSize(QSize(int(size * 0.42), int(size * 0.42)))
-        b._sz = size
-        b.clicked.connect(slot)
-        return b
 
     def _icon_btn_inline(self, svg, slot, size):
         b = QPushButton()
@@ -916,20 +927,13 @@ class AudioPlayer(QWidget):
         self._mp.set_media(self._media)
         self._mp.play()
         self._mp.set_rate(SPEEDS[self._speed_i])
-        self._set_cover()
-        self.title.setText(self.item.get("title", ""))
-        self.author.setText(self.item.get("author") or "")
         if self.wave is not None:
             self.wave.set_progress(0.0)
         if self.progress is not None:
             self.progress.setValue(0)
         self.cur.setText("00:00")
         self.tot.setText("00:00")
-        if self._has_list:
-            self.prev_btn.setEnabled(self.index > 0)
-            self.next_btn.setEnabled(self.index < len(self.playlist) - 1)
-            self._refresh_playlist()
-        self._update_fav_btn()
+        self._apply_state()
 
     def _goto(self, idx):
         """Playlistda boshqa trekka o'tadi (chegaradan tashqari — e'tiborsiz)."""
@@ -980,7 +984,8 @@ class AudioPlayer(QWidget):
         if not hasattr(self, "fav_btn"):
             return
         fav = self.item.get("id") in self._fav_ids()
-        self.fav_btn.setText("  Sevimli" if fav else "  Sevimlilar")
+        self.fav_btn.setText("  " + (tr("player.favorite") if fav
+                                     else tr("player.favorites")))
         self.fav_btn.setProperty("on", fav)
         self.fav_btn.setIcon(QIcon(_inline_icon(
             _SVG_HEART_FILL if fav else _SVG_HEART,
@@ -1019,20 +1024,14 @@ class AudioPlayer(QWidget):
     def _book_menu(self):
         btn = self.sender()
         m = QMenu(self)
-        m.addAction("Joriy joyni belgilash").triggered.connect(self._add_note)
+        m.addAction(tr("player.mark_pos")).triggered.connect(self._add_note)
         fav = self.item.get("id") in self._fav_ids()
-        a = m.addAction("Sevimlidan olib tashlash" if fav
-                        else "Sevimlilarga qo'shish")
+        a = m.addAction(tr("player.fav_remove") if fav
+                        else tr("player.fav_add"))
         a.triggered.connect(self._toggle_fav)
         pos = (btn.mapToGlobal(btn.rect().bottomLeft()) if btn
                else self.mapToGlobal(self.rect().center()))
         m.exec(pos)
-
-    def _toggle_book_fav(self):
-        ids = self._fav_ids()
-        cid = self.item.get("id")
-        ids.discard(cid) if cid in ids else ids.add(cid)
-        cache.save_json("favorites", sorted(x for x in ids if x is not None))
 
     def _on_seek(self):
         """Progress slayderdan istalgan joyga o'tish."""
@@ -1045,9 +1044,9 @@ class AudioPlayer(QWidget):
     def _sleep_menu(self):
         btn = self.sender()
         m = QMenu(self)
-        for label, mins in (("O'chirish", 0), ("15 daqiqa", 15),
-                            ("30 daqiqa", 30), ("45 daqiqa", 45),
-                            ("60 daqiqa", 60)):
+        items = [(tr("player.timer_off"), 0)]
+        items += [(tr("dur.min", m=n), n) for n in (15, 30, 45, 60)]
+        for label, mins in items:
             act = m.addAction(label)
             act.triggered.connect(
                 lambda _c=False, mn=mins: self._set_sleep(mn))
@@ -1058,10 +1057,10 @@ class AudioPlayer(QWidget):
     def _set_sleep(self, minutes):
         if minutes <= 0:
             self._sleep_deadline = None
-            self.sleep_btn.setText("Taymer")
+            self.sleep_btn.setText(tr("player.timer"))
         else:
             self._sleep_deadline = time.monotonic() + minutes * 60
-            self.sleep_btn.setText(f"Taymer · {minutes} daq")
+            self.sleep_btn.setText(tr("player.timer_val", t=tr("dur.min", m=minutes)))
 
     # --- Eslatma / xatcho'p (lokal, har kitob uchun) ---
     def _notes_key(self):
@@ -1074,8 +1073,8 @@ class AudioPlayer(QWidget):
     def _add_note(self):
         t = max(0, self._mp.get_time())
         text, ok = QInputDialog.getText(
-            self, "Eslatma qo'shish",
-            f"Joriy vaqt: {_fmt(t)}\nIzoh (ixtiyoriy):")
+            self, tr("player.note_title"),
+            tr("player.note_body", t=_fmt(t)))
         if not ok:
             return
         notes = self._load_notes()
@@ -1086,7 +1085,7 @@ class AudioPlayer(QWidget):
     def _show_notes(self):
         notes = self._load_notes()
         dlg = QDialog(self)
-        dlg.setWindowTitle("Eslatmalar")
+        dlg.setWindowTitle(tr("player.notes"))
         dlg.setMinimumSize(T.s(380), T.s(440))
         lay = QVBoxLayout(dlg)
         lst = QListWidget()
@@ -1096,7 +1095,7 @@ class AudioPlayer(QWidget):
                 txt += "  —  " + nm["text"]
             QListWidgetItem(txt, lst)
         if not notes:
-            lst.addItem("Hozircha eslatma yo'q")
+            lst.addItem(tr("player.no_notes"))
             lst.setEnabled(False)
         lay.addWidget(lst)
 
@@ -1107,10 +1106,10 @@ class AudioPlayer(QWidget):
                 dlg.accept()
         lst.itemDoubleClicked.connect(lambda _i: jump())
         btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
-        go = btns.addButton("O'tish", QDialogButtonBox.ButtonRole.AcceptRole)
+        go = btns.addButton(tr("player.goto"), QDialogButtonBox.ButtonRole.AcceptRole)
         go.clicked.connect(jump)
         if notes:
-            clr = btns.addButton("Tozalash",
+            clr = btns.addButton(tr("player.clear"),
                                  QDialogButtonBox.ButtonRole.DestructiveRole)
             clr.clicked.connect(
                 lambda: (cache.save_json(self._notes_key(), []), dlg.accept()))
@@ -1118,35 +1117,9 @@ class AudioPlayer(QWidget):
         lay.addWidget(btns)
         dlg.exec()
 
-    # --- Pleylist (musiqa) ---
-    def _show_playlist(self):
-        dlg = QDialog(self)
-        dlg.setWindowTitle("Pleylist")
-        dlg.setMinimumSize(T.s(440), T.s(540))
-        lay = QVBoxLayout(dlg)
-        lst = QListWidget()
-        for i, it in enumerate(self.playlist):
-            label = f"{i + 1}.  {it.get('title') or ''}"
-            if it.get("author"):
-                label += "\n      " + it["author"]
-            QListWidgetItem(label, lst)
-        lst.setCurrentRow(self.index)
-        lay.addWidget(lst)
-
-        def pick():
-            row = lst.currentRow()
-            if row >= 0:
-                self._goto(row)
-                dlg.accept()
-        lst.itemDoubleClicked.connect(lambda _i: pick())
-        btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
-        play_b = btns.addButton("O'ynatish", QDialogButtonBox.ButtonRole.AcceptRole)
-        play_b.clicked.connect(pick)
-        btns.rejected.connect(dlg.reject)
-        lay.addWidget(btns)
-        dlg.exec()
-
     def _refresh(self):
+        if getattr(self, "_closing", False):
+            return   # VLC bo'shatilgandan keyin timer signali kelsa — e'tiborsiz
         state = self._mp.get_state()
         # Playlist: trek tugasa keyingisiga (Aralash bo'lsa tasodifiy)
         if state == vlc.State.Ended and self._has_list:
@@ -1179,9 +1152,10 @@ class AudioPlayer(QWidget):
             if rem <= 0:
                 self._sleep_deadline = None
                 self._mp.pause()
-                self.sleep_btn.setText("Taymer")
+                self.sleep_btn.setText(tr("player.timer"))
             else:
-                self.sleep_btn.setText("Taymer · " + _fmt(int(rem * 1000)))
+                self.sleep_btn.setText(
+                    tr("player.timer_val", t=_fmt(int(rem * 1000))))
 
     def stop_and_close(self):
         if getattr(self, "_closing", False):

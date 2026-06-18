@@ -40,6 +40,33 @@ TLS_CERT_PATH = os.path.join(config.BASE_DIR, "server_cert.pem")
 TLS_KEY_PATH = os.path.join(config.BASE_DIR, "server_key.pem")
 
 
+def _restrict_key_file(path):
+    """Maxfiy kalit fayliga OS ruxsatlarini cheklaydi (faqat egasi + tizim
+    o'qiy olsin). Windows'da icacls bilan merosni o'chirib, joriy foydalanuvchi,
+    SYSTEM va Administrators'ga cheklaymiz. POSIX'da chmod 600.
+
+    Eng yaxshi-harakat: muvaffaqiyatsiz bo'lsa faqat ogohlantiramiz (kalitlar
+    baribir BASE_DIR'da, git'ga tushmaydi — bu qo'shimcha himoya qatlami)."""
+    if not os.path.isfile(path):
+        return
+    try:
+        if os.name == "nt":
+            import subprocess
+            user = os.environ.get("USERNAME") or ""
+            # Merosni o'chir (/inheritance:r), so'ng faqat kerakli egalarga ruxsat
+            grants = ["/grant:r", "*S-1-5-18:F",      # SYSTEM
+                      "/grant:r", "*S-1-5-32-544:F"]  # Administrators
+            if user:
+                grants += ["/grant:r", f"{user}:F"]
+            subprocess.run(["icacls", path, "/inheritance:r", *grants],
+                           check=False, capture_output=True,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        else:
+            os.chmod(path, 0o600)
+    except Exception as e:                              # noqa: BLE001
+        log.warning("Kalit fayli ruxsatini cheklab bo'lmadi (%s): %s", path, e)
+
+
 def _local_ipv4s():
     """Serverning LAN IPv4 manzillari (sertifikat SAN'iga yoziladi — VLC IP
     orqali ulanganda sertifikatni qabul qilishi uchun). helpers.local_ips bilan
@@ -80,6 +107,7 @@ def _load_or_create_signing_key():
         encryption_algorithm=serialization.NoEncryption())
     with open(SIGNING_KEY_PATH, "wb") as f:
         f.write(pem)
+    _restrict_key_file(SIGNING_KEY_PATH)
     log.info("Yangi Ed25519 imzo kaliti yaratildi: %s", SIGNING_KEY_PATH)
     return key
 
@@ -126,6 +154,7 @@ def _create_tls_cert():
             encoding=serialization.Encoding.PEM,
             format=serialization.PrivateFormat.TraditionalOpenSSL,
             encryption_algorithm=serialization.NoEncryption()))
+    _restrict_key_file(TLS_KEY_PATH)
     with open(TLS_CERT_PATH, "wb") as f:
         f.write(cert.public_bytes(serialization.Encoding.PEM))
     log.info("Yangi TLS sertifikat yaratildi (SAN IP: %s)", _local_ipv4s())

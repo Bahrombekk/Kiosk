@@ -29,18 +29,25 @@ def _ssl_context():
     ulanamiz, ishonch sertifikatga pin orqali."""
     if not config.is_tls():
         return None
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
     pem = trust.cert_pem()
-    if pem:
-        try:
-            ctx.load_verify_locations(cadata=pem)
-            return ctx
-        except ssl.SSLError:
-            log.warning("trust.json cert_pem o'qilmadi", exc_info=True)
-    # Pin materiali yo'q — oxirgi chora (xavfsizroq emas; trust.json bo'lishi shart)
+    if not pem:
+        # FAIL-CLOSED: TLS'da pin materiali (trust.json cert_pem) bo'lmasa
+        # ulanishni RAD etamiz. CERT_NONE'ga tushish MITM'ga eshik ochib qo'yar
+        # edi (istalgan sertifikatга ishonish). REST tarafi (netpin) ham xuddi
+        # shunday fail-closed — bir xil siyosat. Provisioning (trust.json) shart.
+        raise ssl.SSLError(
+            "WSS uchun pin materiali yo'q (trust.json cert_pem) — "
+            "ulanish rad etildi (MITM himoyasi)")
+    ctx = ssl.create_default_context()
+    # Hostname tekshiruvi o'chiq — IP bilan ulanamiz, ishonch sertifikatga pin
+    # orqali (cadata = trust.json'dagi self-signed CA).
     ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
+    try:
+        ctx.load_verify_locations(cadata=pem)
+    except ssl.SSLError:
+        log.warning("trust.json cert_pem o'qilmadi — WSS ulanishi rad etildi",
+                    exc_info=True)
+        raise
     return ctx
 
 

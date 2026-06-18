@@ -11,6 +11,7 @@ Foydalanish:
   pl = VideoPlayer(stream_url, "Baron")
   pl.start()
 """
+import logging
 import sys
 import vlc
 from PyQt6.QtWidgets import (QWidget, QFrame, QHBoxLayout, QVBoxLayout,
@@ -18,6 +19,8 @@ from PyQt6.QtWidgets import (QWidget, QFrame, QHBoxLayout, QVBoxLayout,
 from PyQt6.QtCore import Qt, QTimer, QEvent, pyqtSignal, QSize
 
 from core import theme as T
+
+log = logging.getLogger(__name__)
 from core.i18n import tr
 from widgets.icons import svg_icon, svg_pixmap
 from widgets.spinner import Spinner
@@ -252,6 +255,7 @@ class VideoPlayer(QWidget):
         self._mp.video_set_mouse_input(False)
         self._mp.video_set_key_input(False)
         self._mp.audio_set_volume(self.vol.value())
+        log.debug("VideoPlayer start: ad_hook=%s", self.ad_hook is not None)
         if self.ad_hook:
             # Pre-roll: kino reklamadan KEYIN boshlanadi (qora pleyer ustida
             # reklama qatlami). Mos reklama bo'lmasa yoki media ochilmasa
@@ -281,6 +285,7 @@ class VideoPlayer(QWidget):
         try:
             self.ad_hook(self, stage, done)
         except Exception:                            # noqa: BLE001
+            log.exception("Reklama hook (%s) xato berdi — kino davom etadi", stage)
             done()
 
     def _resume_after_ad(self):
@@ -332,6 +337,8 @@ class VideoPlayer(QWidget):
         self._dragging = False
 
     def _refresh(self):
+        if getattr(self, "_closing", False):
+            return   # VLC bo'shatilgandan keyin timer signali kelsa — e'tiborsiz
         state = self._mp.get_state()
         # Yuklanish/bufer holati — indikator ko'rsatamiz va boshqaruv
         # yashirilmasin (foydalanuvchi nimani kutayotganini bilsin).
