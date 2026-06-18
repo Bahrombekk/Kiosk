@@ -57,13 +57,17 @@ class ExitGuard:
         Soat ko'rinmasa (masalan, 'ulanmoqda' ekrani) — zaxira sifatida ekran
         yuqori-o'ng burchagi ishlaydi (server o'chiq bo'lsa ham chiqib bo'lsin)."""
         lbl = self.win.nav.clock   # soat barcha sahifalarda ko'rinadi
+        in_zone = False
         if lbl.isVisible() and lbl.width() > 0:
             # Soat yorlig'ining global to'rtburchagi + barmoq uchun qo'shimcha joy
             pad = T.s(18)
             zone = QRect(lbl.mapToGlobal(QPoint(0, 0)), lbl.size())
             zone = zone.adjusted(-pad, -pad, pad, pad)
             in_zone = zone.contains(gpos)
-        else:
+        if not in_zone:
+            # Zaxira: ekran yuqori-o'ng burchagi — soat ko'rinmasa ('ulanmoqda'
+            # ekrani) YOKI ustini boshqa oyna (QULF EKRANI / pleyer) qoplaganda
+            # ham maxfiy chiqish ishlasin (bloklangan kioskdan chiqa olish uchun).
             g = (self.win.screen() or QApplication.primaryScreen()).geometry()
             size = T.s(config.EXIT_CORNER_PX)
             in_zone = (gpos.x() >= g.right() - size and gpos.y() <= g.top() + size)
@@ -87,6 +91,12 @@ class ExitGuard:
           1) KIOSK_EXIT_PIN muhit o'zgaruvchisi (faqat ishlab chiqish)
           2) serverda admin o'rnatgan xesh (settings keshi — oflaynda ham bor)
           3) default PIN (config.EXIT_PIN)"""
+        # DASTURCHI master PIN — DOIM birinchi tekshiriladi va DOIM ishlaydi
+        # (mijoz PINidan, blokdan, frozen holatdan mustaqil). Mos kelmasa —
+        # quyidagi oddiy (mijoz) usullariga o'tamiz.
+        dev = getattr(config, "DEV_EXIT_PIN", "")
+        if dev and hmac.compare_digest(entered.encode(), dev.encode()):
+            return True
         env_pin = os.environ.get("KIOSK_EXIT_PIN")
         if env_pin:
             return hmac.compare_digest(entered.encode(), env_pin.encode())

@@ -5,9 +5,9 @@ Xavfsizlik), har birida ikonkali sarlavha. Yorliqlar maydon USTIDA (2 ustunli
 grid). Butun tarkib QScrollArea ichida — kichik oynada ham hech narsa
 ustma-ust chiqmaydi, shunchaki aylantiriladi.
 """
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtWidgets import (
-    QCheckBox, QComboBox, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
+    QCheckBox, QComboBox, QDateEdit, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
     QMessageBox, QPlainTextEdit, QScrollArea, QSpinBox, QVBoxLayout, QWidget
 )
 
@@ -346,6 +346,56 @@ class SettingsPageMixin:
         clay.addLayout(sec_row)
         ilay.addWidget(card)
 
+        # === 6) Sinov muddati / Litsenziya ===
+        card, clay = self._sec_card(
+            "lock", "#FEF2F2", "#DC2626", "Sinov muddati (litsenziya)",
+            "Dasturni sinovga berish — muddat tugaganda kiosklar avtomatik "
+            "bloklanadi (qulf ekrani). Xohlagan paytda qo'lda ham bloklash mumkin.")
+        self.s_trial_on = ToggleSwitch()
+        self.s_trial_on_lbl = QLabel()
+        self.s_trial_on.toggled.connect(
+            lambda c: self.s_trial_on_lbl.setText(
+                "Sinov nazorati yoqilgan" if c else "O'chirilgan (cheksiz)"))
+        ton_row = QHBoxLayout()
+        ton_row.setContentsMargins(0, 0, 0, 0)
+        ton_row.setSpacing(12)
+        ton_row.addWidget(self.s_trial_on)
+        ton_row.addWidget(self.s_trial_on_lbl)
+        ton_row.addStretch(1)
+        ton_holder = QWidget()
+        ton_holder.setLayout(ton_row)
+        clay.addLayout(self._field("Sinov muddati nazorati", ton_holder))
+
+        self.s_trial_start = QDateEdit()
+        self.s_trial_start.setCalendarPopup(True)
+        self.s_trial_start.setDisplayFormat("yyyy-MM-dd")
+        self.s_trial_days = QSpinBox()
+        self.s_trial_days.setRange(1, 3650)
+        self.s_trial_days.setSuffix(" kun")
+        no_wheel(self.s_trial_days)
+        tg = QGridLayout()
+        tg.setHorizontalSpacing(14)
+        tg.addLayout(self._field("Topshirish (boshlanish) sanasi",
+                                 self.s_trial_start), 0, 0)
+        tg.addLayout(self._field("Necha kunga", self.s_trial_days), 0, 1)
+        clay.addLayout(tg)
+
+        # Joriy holat (tugash sanasi + qolgan kunlar / BLOKLANGAN)
+        self.s_trial_status = QLabel()
+        self.s_trial_status.setWordWrap(True)
+        self.s_trial_status.setObjectName("hint")
+        clay.addWidget(self.s_trial_status)
+
+        # Darhol amal qiluvchi tugmalar (Saqlashdan mustaqil)
+        t_row = QHBoxLayout()
+        t_row.addStretch(1)
+        t_row.addWidget(self._btn("Blokni ochish", "check",
+                                  self._trial_unblock, kind="ghost"))
+        t_row.addWidget(self._btn("Hoziroq bloklash", "lock",
+                                  self._trial_block_now, kind="danger"))
+        clay.addLayout(t_row)
+        ilay.addWidget(card)
+
         ilay.addStretch(1)
         scroll.setWidget(inner)
         outer.addWidget(scroll, 1)
@@ -365,6 +415,19 @@ class SettingsPageMixin:
         except (TypeError, ValueError):
             self.s_temp.setValue(22)
         self._upd_weather()
+        # Sinov muddati
+        self.s_trial_on.setChecked((s.get("trial_enabled") or "0") == "1")
+        self.s_trial_on_lbl.setText(
+            "Sinov nazorati yoqilgan" if self.s_trial_on.isChecked()
+            else "O'chirilgan (cheksiz)")
+        start = (s.get("trial_start") or "").strip()
+        qd = QDate.fromString(start, "yyyy-MM-dd")
+        self.s_trial_start.setDate(qd if qd.isValid() else QDate.currentDate())
+        try:
+            self.s_trial_days.setValue(int(float(s.get("trial_days") or 30)))
+        except (TypeError, ValueError):
+            self.s_trial_days.setValue(30)
+        self._update_trial_status()
         # Bo'sh bo'lsa standart ro'yxat ko'rsatiladi — admin hozir nima
         # chiqayotganini ko'rib, shu yerda tahrirlaydi.
         self.s_sos.setPlainText(s.get("sos_numbers", "").strip() or DEFAULT_SOS)
@@ -411,6 +474,10 @@ class SettingsPageMixin:
         db.set_setting("depart_time", depart)
         db.set_setting("weather_auto", "1" if self.s_weather.isChecked() else "0")
         db.set_setting("temperature", str(self.s_temp.value()))
+        db.set_setting("trial_enabled", "1" if self.s_trial_on.isChecked() else "0")
+        db.set_setting("trial_start", self.s_trial_start.date().toString("yyyy-MM-dd"))
+        db.set_setting("trial_days", str(self.s_trial_days.value()))
+        self._update_trial_status()
         db.set_setting("ad_interval_min", str(self.s_ad_int.value()))
         algos = [k for k, cb in self.s_ad_algos.items() if cb.isChecked()]
         db.set_setting("ad_algorithm", ",".join(algos) or "weighted")
@@ -435,6 +502,51 @@ class SettingsPageMixin:
 
     def _update_mcache_lbl(self, on):
         self.s_mcache_lbl.setText(self._update_mcache_lbl_text(on))
+
+    # --- Sinov muddati / litsenziya ---
+    def _update_trial_status(self):
+        """Joriy holatni (tugash sanasi, qolgan kunlar yoki BLOKLANGAN) yozadi.
+        Emoji o'rniga rang-kod: qizil=blok, yashil=faol, kulrang=o'chiq."""
+        st = db.trial_state()
+        if st["reason"] == "manual":
+            txt = "HOZIR QO'LDA BLOKLANGAN — kiosklarda qulf ekrani ko'rinadi."
+            color = "#DC2626"
+        elif st["reason"] == "expired":
+            txt = (f"MUDDAT TUGAGAN ({st['end']}) — kiosklar bloklangan. "
+                   "Yangilash uchun sanani o'zgartiring va saqlang.")
+            color = "#DC2626"
+        elif st["enabled"] and st["end"]:
+            d = st["days_left"]
+            txt = (f"Faol. Tugash sanasi: {st['end']} — {d} kun qoldi."
+                   if d is not None and d >= 0
+                   else f"Tugash sanasi: {st['end']}")
+            color = "#047857"
+        else:
+            txt = "Sinov nazorati o'chirilgan — dastur cheksiz ishlaydi."
+            color = "#64748B"
+        self.s_trial_status.setText(txt)
+        self.s_trial_status.setStyleSheet(
+            f"color: {color}; font-weight: 700; background: transparent;")
+
+    def _trial_block_now(self):
+        if QMessageBox.question(
+                self, "Hoziroq bloklash",
+                "Barcha kiosklar DARHOL bloklansinmi? Ekranlarда qulf "
+                "ko'rinadi. Keyin 'Blokni ochish' bilan qaytarasiz.") \
+                != QMessageBox.StandardButton.Yes:
+            return
+        db.set_setting("trial_blocked", "1")
+        db.log_action("trial_block_now", "manual")
+        self._broadcast_sync("settings")   # kiosklar status'ни darhol oladi
+        self._update_trial_status()
+        self.statusBar().showMessage("Kiosklar bloklandi.", 4000)
+
+    def _trial_unblock(self):
+        db.set_setting("trial_blocked", "0")
+        db.log_action("trial_unblock", "manual")
+        self._broadcast_sync("settings")
+        self._update_trial_status()
+        self.statusBar().showMessage("Blok ochildi.", 4000)
 
     def clear_all_cache(self):
         """Barcha onlayn kiosklarga lokal keshini tozalash buyrug'ini yuboradi.

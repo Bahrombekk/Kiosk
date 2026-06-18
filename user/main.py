@@ -90,6 +90,7 @@ from widgets.banner import AnnouncementBanner
 from widgets.emergency import sos_enabled
 from widgets.navbar import NavBar
 from widgets.screensaver import ScreenSaver
+from widgets.lockscreen import LockScreen
 from players.video import VideoPlayer
 from players.audio import AudioPlayer
 from players.reader import Reader
@@ -209,6 +210,15 @@ class MainWindow(QWidget):
         # Zastavka (splash + screensaver): logotipli to'liq ekran overlay.
         # Harakatsizlik taymeri har qanday teginishda qayta boshlanadi
         # (event filtrda); vaqti kelganda zastavka chiqadi.
+        # Sinov muddati / litsenziya bloki — server status'da blocked=True
+        # kelsa butun ekranni qoplaydi. Oxirgi holat keshlanadi: server o'chgan
+        # bo'lsa ham (bloklangandan keyin) qulf saqlanadi.
+        self.lock = LockScreen()
+        self._blocked = False
+        hit = cache.load_json("license")
+        if hit and isinstance(hit[0], dict) and hit[0].get("blocked"):
+            self._apply_block(True)
+
         self.saver = ScreenSaver()
         self.idle_timer = QTimer(self)
         self.idle_timer.setSingleShot(True)
@@ -305,7 +315,20 @@ class MainWindow(QWidget):
     # --- Real-time (WebSocket) ---
     def _on_status(self, data):
         """Serverdan status_update kelganda Asosiy ekranni jonli yangilaydi."""
+        self._apply_block(bool(data.get("blocked")))
         self.pages["home"]._apply_status(data)
+
+    def _apply_block(self, blocked):
+        """Sinov muddati/litsenziya bloki holatini qo'llaydi (qulf ekrani).
+        Holat keshlanadi — server o'chsa ham oxirgi blok saqlanadi."""
+        if blocked == self._blocked:
+            return
+        self._blocked = blocked
+        cache.save_json("license", {"blocked": blocked})
+        if blocked:
+            self.lock.show_over()
+        else:
+            self.lock.hide()
 
     def _on_ws_link(self, ok):
         """WebSocket qayta ulanganda katalogni bir marta to'liq tenglashtiradi."""
@@ -563,9 +586,9 @@ class MainWindow(QWidget):
 
     # --- Tugmalarni boshqarish (kiosk qulflash, TZ 13.1) ---
     def keyPressEvent(self, e):
-        # Ctrl+Shift+Q yoki Ctrl+Shift+C -> admin chiqishi (PIN talab qilinadi —
-        # klaviatura ulagan yo'lovchi PIN'siz chiqib keta olmasin)
-        if (e.key() in (Qt.Key.Key_Q, Qt.Key.Key_C)
+        # Ctrl+Shift+Q -> chiqish PIN oynasi (dasturchi uchun klaviatura usuli;
+        # kiosk userlarida klaviatura yo'q). Ctrl+Shift+C OLIB TASHLANDI.
+        if (e.key() == Qt.Key.Key_Q
                 and (e.modifiers() & Qt.KeyboardModifier.ControlModifier)
                 and (e.modifiers() & Qt.KeyboardModifier.ShiftModifier)):
             self._exit_guard.ask_exit_pin()

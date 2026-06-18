@@ -497,6 +497,8 @@ def status_payload():
         "current_stop": current,
         "train_name": s.get("train_name"),
         "route": s.get("route"),
+        # Sinov muddati/litsenziya bloki — kiosk True bo'lsa qulf ekranini ko'rsatadi
+        "blocked": db.trial_state(s)["blocked"],
     }
 
 

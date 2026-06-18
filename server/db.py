@@ -230,6 +230,10 @@ def _ensure_defaults(conn):
             ("sos_enabled", "0"),
             ("active_route_direction", "0"),   # 0=borish, 1=qaytish (kioskda faol)
             ("weather_auto", "1"),             # 1=internet ob-havo, 0=qo'lda harorat
+            ("trial_enabled", "0"),            # 1=sinov muddati nazorati yoqiq
+            ("trial_start", ""),               # topshirish sanasi YYYY-MM-DD
+            ("trial_days", "30"),              # necha kunga berilgan
+            ("trial_blocked", "0"),            # 1=qo'lda darhol bloklangan
         ])
 
 
@@ -494,6 +498,44 @@ def get_settings():
     with closing(connect()) as conn:
         rows = conn.execute("SELECT key,value FROM settings").fetchall()
     return {r["key"]: r["value"] for r in rows}
+
+
+# --- Sinov muddati / litsenziya bloki ---
+def trial_state(s=None):
+    """Sinov muddati holatini qaytaradi (dict). Blok = QO'LDA blok YOKI
+    (nazorat yoqiq VA topshirishdan beri trial_days kun o'tgan).
+
+    {enabled, blocked, reason, start, days, end, days_left}
+      reason: 'manual' | 'expired' | None."""
+    from datetime import date, datetime as _dt, timedelta
+    s = s if s is not None else get_settings()
+    enabled = (s.get("trial_enabled") or "0") == "1"
+    manual = (s.get("trial_blocked") or "0") == "1"
+    try:
+        days = int(s.get("trial_days") or 0)
+    except (TypeError, ValueError):
+        days = 0
+    start_raw = (s.get("trial_start") or "").strip()
+    end = None
+    days_left = None
+    if start_raw:
+        try:
+            start = _dt.strptime(start_raw, "%Y-%m-%d").date()
+            end = start + timedelta(days=days)
+            days_left = (end - date.today()).days
+        except ValueError:
+            end = None
+    expired = bool(enabled and end is not None and date.today() >= end)
+    blocked = manual or expired
+    return {
+        "enabled": enabled,
+        "blocked": blocked,
+        "reason": "manual" if manual else ("expired" if expired else None),
+        "start": start_raw,
+        "days": days,
+        "end": end.isoformat() if end else None,
+        "days_left": days_left,
+    }
 
 
 # --- Yozish funksiyalari (admin oyna uchun) ---

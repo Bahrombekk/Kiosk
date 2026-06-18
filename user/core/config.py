@@ -159,9 +159,16 @@ WINDOWED = os.environ.get("KIOSK_WINDOWED", "1") != "0"
 # ekran yuqori-o'ng burchagi (EXIT_CORNER_PX zona).
 # PIN'ni muhit o'zgaruvchisi orqali ham berish mumkin: KIOSK_EXIT_PIN=1234
 EXIT_PIN = os.environ.get("KIOSK_EXIT_PIN", "7777")
-EXIT_TAPS = 7              # nechta teginish kerak
+EXIT_TAPS = 10             # nechta teginish kerak
 EXIT_TAP_WINDOW_S = 4.0    # shu soniya ichida (sekin bosilsa hisob qaytadan)
 EXIT_CORNER_PX = 90        # zaxira burchak zonasi (bazaviy px, miqyoslanadi)
+
+# DASTURCHI (vendor) master PIN — FAQAT SIZ uchun maxfiy chiqish.
+# Mijozning chiqish PINidan MUSTAQIL ishlaydi: mijoz PINni o'zgartirsa,
+# bilmasangiz, hatto sinov muddati bloklangan/frozen bo'lsa ham — bu PIN
+# DOIM dasturni yopadi. Mijozga bermang. Build oldidan O'ZGARTIRING
+# (yoki KIOSK_DEV_PIN muhit o'zgaruvchisi bilan bering).
+DEV_EXIT_PIN = os.environ.get("KIOSK_DEV_PIN", "735519")
 
 # --- Zastavka (splash + screensaver, logotipli ekran) ---
 # Dastur ochilganda SPLASH_SECONDS soniya logotip ko'rinadi. Keyin foydalanuvchi
