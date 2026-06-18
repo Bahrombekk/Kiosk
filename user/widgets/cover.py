@@ -141,7 +141,9 @@ class CoverLabel(QLabel):
         # Eski fetcher hali ishlayotgan bo'lsa, uni majburan to'xtatmaymiz
         # (terminate xavfli) — track() uni tugagunicha tirik saqlaydi; oxirgi
         # boshlangan so'rov natijasi ko'rsatiladi.
-        self._fetcher = track(_Fetcher(url))
+        fetcher = track(_Fetcher(url))
+        fetcher._url = url   # natijani O'Z url'iga bog'laymiz (kesh poisoning'siz)
+        self._fetcher = fetcher
         self._fetcher.done.connect(self._on_data)
         self._fetcher.fail.connect(self._on_fail)
         self._fetcher.start()
@@ -175,12 +177,19 @@ class CoverLabel(QLabel):
         # Karta ro'yxat qayta render bo'lganda o'chirilgan bo'lishi mumkin —
         # C++ obyektga chaqiruv RuntimeError beradi, butun ilovani crash qilmasin.
         try:
+            if not data:
+                self._show_placeholder("?")
+                return
             if "svg" in ctype or data[:5] == b"<svg " or data[:6] == b"<?xml ":
+                renderer = QSvgRenderer(QByteArray(data))
+                if not renderer.isValid():
+                    self._show_placeholder("?")
+                    return
                 bw, bh = max(self._w, 480), max(self._h, 270)
                 pm = QPixmap(bw, bh)
                 pm.fill(Qt.GlobalColor.transparent)
                 painter = QPainter(pm)
-                QSvgRenderer(QByteArray(data)).render(painter, QRectF(0, 0, bw, bh))
+                renderer.render(painter, QRectF(0, 0, bw, bh))
                 painter.end()
                 self._orig = pm
             else:
@@ -190,8 +199,12 @@ class CoverLabel(QLabel):
                     self._show_placeholder("?")
                     return
                 self._orig = raw
-            if getattr(self, "_url", None):
-                _mem_put(self._url, self._orig)
+            # Kesh kalitini fetcher'ning O'Z url'idan olamiz — tez qayta yuklashda
+            # eski fetcher natijasi yangi url ostiga yozilib qolmasin.
+            src = self.sender()
+            key = getattr(src, "_url", None) or getattr(self, "_url", None)
+            if key:
+                _mem_put(key, self._orig)
             want_cross = self.fade_on_next   # crossfade _render_scaled ichida
             self._render_scaled()
             if not want_cross:

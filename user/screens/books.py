@@ -52,16 +52,8 @@ _SPARK_SVG = ("<svg viewBox='0 0 24 24' fill='none'>"
               "<path d='M18 14v3M16.5 15.5h3M6 3v2M5 4h2' stroke='currentColor'"
               " stroke-width='1.6' stroke-linecap='round'/></svg>")
 
-# (DB category_tab kaliti, yorliq tr-kaliti, SVG ikonka).
-# MUHIM: [0] — DB'dagi o'zbekcha qiymat (filtr SHU bilan ishlaydi, tarjima
-# qilinmaydi); [1] — ekranda ko'rinadigan, til almashadigan yorliq.
-TABS = [
-    (None,        "common.tab_all",     _GRID_SVG),
-    ("Badiiy",    "books.tab.fiction",  _GLOBE_SVG),
-    ("Tarixiy",   "books.tab.history",  _BANK_SVG),
-    ("Biznes",    "books.tab.business", _CASE_SVG),
-    ("Bolalarga", "books.tab.kids",     _SPARK_SVG),
-]
+# Eslatma: bo'lim (tab) ro'yxati endi janrlardan DINAMIK quriladi
+# (_on_loaded -> self._tabs). Yuqoridagi SVG ikonkalar shu yerda ishlatiladi.
 BOOK_TYPES = ("book", "audiobook")
 
 

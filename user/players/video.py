@@ -239,7 +239,12 @@ class VideoPlayer(QWidget):
     def start(self):
         from core.overlay import show_over_host
         show_over_host(self, self._host)
-        self._media = self._instance.media_new(self.stream_url)
+        try:
+            self._media = self._instance.media_new(self.stream_url)
+        except Exception as e:                          # noqa: BLE001
+            log.warning("Video: media ochilmadi (%s): %s", self.stream_url, e)
+            QTimer.singleShot(300, self.stop_and_close)
+            return
         self._mp.set_media(self._media)
         # Video chiqarish oynasini ulash (platformaga bog'liq)
         win_id = int(self.video.winId())

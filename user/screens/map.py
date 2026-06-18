@@ -10,6 +10,7 @@ Katta oq karta ichida:
 Bu ekran QGraphicsView miqyoslagichiga O'RALMAGAN — shunda xarita to'g'ridan-to'g'ri
 sichqoncha hodisalarini oladi (interaktiv bo'ladi). Moslashuvchan layout ishlatiladi.
 """
+import logging
 import os
 from datetime import datetime
 
@@ -24,6 +25,8 @@ from core.i18n import tr
 from core.threads import track
 from widgets.icons import svg_pixmap
 from widgets.routemap import RouteMap
+
+log = logging.getLogger(__name__)
 
 ASSETS = os.path.join(os.path.dirname(__file__), "..", "assets", "design")
 TRAIN_IMG = os.path.join(ASSETS, "train.png")
@@ -230,13 +233,25 @@ class MapScreen(QWidget):
     def on_show(self):
         self._loader = track(_Loader(self.api))
         self._loader.done.connect(self._on_data)
+        self._loader.fail.connect(self._on_load_fail)
         self._loader.start()
+
+    def _on_load_fail(self):
+        # Yuklash xatosi — xarita jimgina bo'sh qolmasin (log + bor ma'lumotni
+        # saqlab qolamiz; keshda bo'lsa _Loader o'zi keshdan beradi).
+        log.warning("Xarita ma'lumotini yuklab bo'lmadi")
 
     def _on_data(self, stops, status, settings):
         self.stops = stops
-        cur_name = status.get("current_stop")
-        self.current = next((i for i, s in enumerate(stops)
-                             if s.get("name") == cur_name), 0)
+        # Joriy bekat nomini NORMALLASHTIRIB solishtiramiz — server bergan
+        # `current_stop` katta/kichik harf, bo'sh joy yoki apostrof bilan
+        # bekat ro'yxatidagidan farq qilsa ham topiladi (aks holda jimgina
+        # 0-bekatga tushib "hali jo'namagan" ko'rinardi).
+        from widgets.routemap import _norm
+        cur_name = _norm(status.get("current_stop"))
+        self.current = next(
+            (i for i, s in enumerate(stops) if _norm(s.get("name")) == cur_name),
+            0) if cur_name else 0
         self.train_name.setText(status.get("train_name")
                                 or settings.get("train_name") or tr("map.train"))
         route = status.get("route") or settings.get("route") or ""

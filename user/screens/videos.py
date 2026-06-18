@@ -113,6 +113,12 @@ class VideosScreen(QWidget):
         self._resize_timer.setSingleShot(True)
         self._resize_timer.setInterval(160)
         self._resize_timer.timeout.connect(self._do_resize)
+        # Qidiruv debounce — har bosishda butun to'rni qayta qurmaymiz
+        # (kartalar + muqova fetcher'lari toshqini bo'lmasin).
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(220)
+        self._search_timer.timeout.connect(self._render)
         self._build()
 
     def _build(self):
@@ -220,7 +226,7 @@ class VideosScreen(QWidget):
 
     def _on_search(self, text):
         self.search_text = text.strip().lower()
-        self._render()
+        self._search_timer.start()   # debounce: tinch turilganda _render chaqiriladi
 
     def _filtered(self):
         from core.i18n import content_visible

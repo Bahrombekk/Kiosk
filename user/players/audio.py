@@ -5,6 +5,7 @@ To'liq ekran: tepa-chapda "← Ortga"; markazda muqova, nom, muallif;
 progress chizig'i, joriy/umumiy vaqt; boshqaruv: 10s orqaga, play/pauza,
 10s oldinga, hamda o'qish tezligi (1x → 1.5x → 2x).
 """
+import logging
 import math
 import time
 import vlc
@@ -23,6 +24,8 @@ from core.i18n import tr
 from players.video import _fmt
 from widgets.cover import CoverLabel
 from widgets.icons import svg_icon, svg_pixmap
+
+log = logging.getLogger(__name__)
 
 SPEEDS = [1.0, 1.5, 2.0]
 
@@ -916,15 +919,39 @@ class AudioPlayer(QWidget):
         show_over_host(self, self._host)
         self._bg_anim.start()
         self._load_current()
-        self._mp.audio_set_volume(self.vol.value())
+        try:
+            self._mp.audio_set_volume(self.vol.value())
+        except Exception:                               # noqa: BLE001
+            pass
+
+    def _show_media_error(self):
+        """Media ochilmasa — pleyer yarim qurilib qolmasin: yopamiz."""
+        QTimer.singleShot(300, self.stop_and_close)
 
     def _load_current(self):
         """Joriy index'dagi trekni yuklab o'ynatadi va UI'ni yangilaydi."""
         self.item = self.playlist[self.index]
         self._pal0 = self.index   # har qo'shiq boshqa rang kombinatsiyasidan
+        cid = self.item.get("id")
+        if cid is None:
+            log.warning("Audio: id yo'q trek o'tkazib yuborildi (index %d)",
+                        self.index)
+            self._advance()
+            return
         # Lokal keshda bo'lsa — fayldan (oflaynda ham ishlaydi)
-        self._media = self._instance.media_new(self.api.play_url(self.item["id"]))
+        try:
+            new_media = self._instance.media_new(self.api.play_url(cid))
+        except Exception as e:                          # noqa: BLE001
+            log.warning("Audio: media ochilmadi (#%s): %s", cid, e)
+            self._show_media_error()
+            return
+        # Eski Media obyektini bo'shatamiz — har trek almashganda u to'planib
+        # (libVLC media + parse handle'lari) xotira oqizmasin.
+        old_media = getattr(self, "_media", None)
+        self._media = new_media
         self._mp.set_media(self._media)
+        if old_media is not None:
+            old_media.release()
         self._mp.play()
         self._mp.set_rate(SPEEDS[self._speed_i])
         if self.wave is not None:
@@ -996,15 +1023,22 @@ class AudioPlayer(QWidget):
     def toggle_play(self):
         state = self._mp.get_state()
         if state in (vlc.State.Ended, vlc.State.Stopped):
-            # Tugagan — boshidan qaytadan
+            # Tugagan — boshidan qaytadan. set_media tezlikni 1.0x ga qaytaradi,
+            # shuning uchun joriy tezlikni qayta qo'llaymiz (UI 2x ko'rsatib
+            # turgan bo'lsa ham haqiqatda 1x bo'lib qolmasin).
             self._mp.set_media(self._media)
             self._mp.play()
+            self._mp.set_rate(SPEEDS[self._speed_i])
         else:
             self._mp.pause()
 
     def _seek_rel(self, delta):
         t = self._mp.get_time()
-        self._mp.set_time(max(0, t + delta))
+        new_t = max(0, t + delta)
+        length = self._mp.get_length()
+        if length > 0:
+            new_t = min(new_t, length)
+        self._mp.set_time(new_t)
 
     def _on_wave_seek(self, frac):
         length = self._mp.get_length()
@@ -1176,6 +1210,10 @@ class AudioPlayer(QWidget):
         # aks holda har bir audio ochilishi ularni to'plab boradi.
         self._mp.stop()
         self._mp.release()
+        media = getattr(self, "_media", None)
+        if media is not None:
+            media.release()
+            self._media = None
         self._instance.release()
         self.close()
         self.closed.emit()

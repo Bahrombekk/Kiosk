@@ -36,7 +36,6 @@ from players.audio import AudioPlayer
 
 log = logging.getLogger(__name__)
 
-VIDEO_TYPES = ("movie", "cartoon", "music")
 BOOK_TYPES = ("book", "audiobook")
 
 ASSETS = os.path.join(os.path.dirname(__file__), "..", "assets", "design")
@@ -135,11 +134,16 @@ class BannerImage(QLabel):
         self._fetcher.start()
 
     def _on_data(self, data, ctype):
+        if not data:
+            return
         if "svg" in ctype or data[:5] == b"<svg " or data[:6] == b"<?xml ":
+            renderer = QSvgRenderer(QByteArray(data))
+            if not renderer.isValid():
+                return   # buzilgan/yarim SVG — bo'sh pixmap o'rnatib qo'ymaymiz
             pm = QPixmap(600, self._h * 3)
             pm.fill(Qt.GlobalColor.transparent)
             p = QPainter(pm)
-            QSvgRenderer(QByteArray(data)).render(p, QRectF(0, 0, pm.width(), pm.height()))
+            renderer.render(p, QRectF(0, 0, pm.width(), pm.height()))
             p.end()
             self._orig = pm
         else:
@@ -337,6 +341,7 @@ class _HomeCanvas(QWidget):
         self._modal = None
         self._reader = None
         self._audio = None
+        self._player = None    # video pleyer (host overlay) — getattr'siz aniq init
         # Banner reklamalar (admin: Joylashuv = banner/both) — aylanma
         self.banner_ads = []
         self._banner_idx = -1

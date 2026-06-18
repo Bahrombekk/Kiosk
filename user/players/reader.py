@@ -160,6 +160,8 @@ class Reader(QWidget):
         self._loader.start()
 
     def _on_text(self, data):
+        if getattr(self, "_closing", False):
+            return   # foydalanuvchi yuklash tugashidan oldin chiqib ketgan
         self.pages = paginate(data.get("chapters", []))
         self.idx = 0
         self._render()
@@ -182,6 +184,7 @@ class Reader(QWidget):
         self.scroll.verticalScrollBar().setValue(0)
 
     def close_reader(self):
+        self._closing = True
         self.close()
         self.closed.emit()
         self.deleteLater()
