@@ -125,6 +125,7 @@ class ExitGuard:
             dlg = PinDialog(self.win, self._verify_pin,
                             theme=self.win.theme_name)
             ok = dlg.exec()
+            dlg.deleteLater()   # GC'ni kutmasdan darhol tozalashga qo'yamiz
             if dlg.lockout:
                 fails, _until = self._lock_state()
                 fails += 1

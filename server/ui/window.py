@@ -65,7 +65,7 @@ class AdminWindow(DashboardPageMixin, CachePageMixin, ContentPageMixin,
         ("settings", "Sozlamalar", "settings"),
     ]
 
-    def __init__(self):
+    def __init__(self, server=None):
         super().__init__()
         self.setWindowTitle("Kiosk — Server admin")
         self.setWindowIcon(svg_icon("server", C_ACCENT, 64))
@@ -74,8 +74,14 @@ class AdminWindow(DashboardPageMixin, CachePageMixin, ContentPageMixin,
         # bilan yoziladi — aks holda minimal kenglik matnga teng bo'lib qoladi)
         self.setMinimumSize(880, 560)
 
-        self.server = ServerThread()
-        self.server.start()
+        # Server backend login oynasidan OLDIN ishga tushirilgan bo'lishi mumkin
+        # (kiosklar admin parolsiz ham onlayn ishlaydi). Berilgan bo'lsa shuni
+        # qayta ishlatamiz; bo'lmasa o'zimiz ishga tushiramiz.
+        if server is not None:
+            self.server = server
+        else:
+            self.server = ServerThread()
+            self.server.start()
 
         # Generik CRUD sahifalar holati (reklama/sayt/bekat) shu yerda saqlanadi
         self._crud = {}

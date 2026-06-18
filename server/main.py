@@ -35,6 +35,7 @@ import config
 import db
 import security
 import discovery
+import weather
 from ws import manager
 
 logging.basicConfig(
@@ -67,6 +68,7 @@ async def lifespan(app: FastAPI):
     scheme = "https" if config.USE_TLS else "http"
     log.info("Server tayyor — %s://%s:%s", scheme, config.HOST, config.PORT)
     discovery.start()   # imzolangan beacon — kiosklar serverni topadi
+    weather.start_refresher()   # internet ob-havoni fonda yuklab/yangilab turadi
     task = asyncio.create_task(_status_loop())   # holatni davriy tarqatish
     yield
     discovery.stop()
@@ -444,6 +446,8 @@ def _current_stop(stops, now_min):
     vaqtni shu o'qda joylashtiramiz."""
     if not stops:
         return None
+    # Joriy bekat YOZUVINI (dict) qaytaramiz — chaqiruvchi nom va koordinatani
+    # (ob-havo uchun) oladi.
     seq, prev = [], None
     for st in stops:
         t = _hhmm_to_min(st.get("arrival_time") or st.get("departure_time"))
@@ -454,7 +458,7 @@ def _current_stop(stops, now_min):
             prev = t
     valid = [(i, t) for i, t in enumerate(seq) if t is not None]
     if not valid or now_min is None:
-        return stops[0]["name"]
+        return stops[0]
     start, end = valid[0][1], valid[-1][1]
     cand = now_min
     if cand < start and cand + 1440 <= end + 60:
@@ -463,7 +467,7 @@ def _current_stop(stops, now_min):
     for i, t in valid:
         if t <= cand:
             cur_idx = i
-    return stops[cur_idx]["name"]
+    return stops[cur_idx]
 
 
 def status_payload():
@@ -475,10 +479,19 @@ def status_payload():
     s = db.get_settings()
     stops = db.get_route()
     now = datetime.now()
-    current = _current_stop(stops, now.hour * 60 + now.minute)
+    cur_stop = _current_stop(stops, now.hour * 60 + now.minute)
+    current = cur_stop["name"] if cur_stop else None
+    # Harorat: internet ob-havo yoqilgan bo'lsa joriy bekat hududi + joriy vaqt
+    # bo'yicha keshdan; topilmasa (kesh yo'q/eskirgan) qo'lda kiritilgan qiymat.
+    temperature = _safe_int(s.get("temperature"), 22)
+    if s.get("weather_auto", "1") != "0" and cur_stop:
+        wt = weather.temp_for(cur_stop.get("latitude"),
+                              cur_stop.get("longitude"), now)
+        if wt is not None:
+            temperature = wt
     return {
         "speed": _safe_int(s.get("speed"), 210),
-        "temperature": _safe_int(s.get("temperature"), 22),
+        "temperature": temperature,
         "wagon": s.get("wagon_number"),
         "wagon_note": s.get("wagon_note"),
         "current_stop": current,

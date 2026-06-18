@@ -12,6 +12,7 @@ import hashlib
 import hmac
 import secrets
 from contextlib import contextmanager, closing
+from datetime import datetime
 
 import config
 
@@ -228,6 +229,7 @@ def _ensure_defaults(conn):
             ("cache_limit_gb", "0"),
             ("sos_enabled", "0"),
             ("active_route_direction", "0"),   # 0=borish, 1=qaytish (kioskda faol)
+            ("weather_auto", "1"),             # 1=internet ob-havo, 0=qo'lda harorat
         ])
 
 
@@ -402,22 +404,90 @@ def get_route(direction=None):
     direction=None — KIOSKDA FAOL yo'nalish (`active_route_direction` sozlamasi,
     standart 0). API va status shu yo'l bilan faolni oladi.
     direction=0/1 — aniq yo'nalish (admin tahrirlash ko'rinishi)."""
-    conn = connect()
-    try:
-        if direction is None:
-            row = conn.execute(
-                "SELECT value FROM settings WHERE key='active_route_direction'"
-            ).fetchone()
-            try:
-                direction = int(row["value"]) if row else 0
-            except (TypeError, ValueError):
-                direction = 0
+    if direction is None:
+        direction = effective_direction()
+    with closing(connect()) as conn:
         rows = conn.execute(
             "SELECT * FROM route_stops WHERE direction=? "
             "ORDER BY sort_order, id", (direction,)).fetchall()
-        return [dict(r) for r in rows]
-    finally:
-        conn.close()
+    return [dict(r) for r in rows]
+
+
+# --- Faol yo'nalishni aniqlash (qo'lda 0/1 yoki 'auto' — kun+vaqt bo'yicha) ---
+def effective_direction(now=None):
+    """Kiosklarда hozir ko'rsatiladigan yo'nalish (0=borish, 1=qaytish).
+
+    `active_route_direction` sozlamasi:
+      '0'/'1' — admin qo'lda belgilagan;
+      'auto'  — jadval + joriy vaqt bo'yicha avtomatik (48 soatlik tsikl)."""
+    val = (get_settings().get("active_route_direction") or "0").strip()
+    if val == "auto":
+        return _auto_direction(now)
+    return 1 if val == "1" else 0
+
+
+def _parse_route_min(s):
+    """'HH:MM' yoki 'H.MM' ni yarim tundан minutga aylantiradi (yoki None)."""
+    if not s:
+        return None
+    try:
+        h, m = str(s).replace(".", ":").split(":")[:2]
+        return int(h) * 60 + int(m)
+    except (ValueError, TypeError):
+        return None
+
+
+def _leg_bounds(stops):
+    """Yo'nalish uchun (jo'nash_min, kelish_min, davomiylik_min) yoki None.
+    Davomiylik yarim tunдан o'tishni hisobga oladi."""
+    if len(stops) < 2:
+        return None
+    dep = _parse_route_min(stops[0].get("departure_time")
+                           or stops[0].get("arrival_time"))
+    arr = _parse_route_min(stops[-1].get("arrival_time")
+                           or stops[-1].get("departure_time"))
+    if dep is None or arr is None:
+        return None
+    return dep, arr, ((arr - dep) % 1440) or 1440
+
+
+def _route_anchor(dep_b_min, now):
+    """Borish jo'nashining mos sana-vaqti (tsikl fazasini aniqlash uchun).
+    'route_anchor' sozlamasidan (admin Avto'ni tanlaganда belgilaydi); yo'q
+    bo'lsa — bugungi borish jo'nash vaqti (faqat taxminiy)."""
+    raw = get_settings().get("route_anchor")
+    if raw:
+        try:
+            return datetime.fromisoformat(raw)
+        except ValueError:
+            pass
+    return now.replace(hour=dep_b_min // 60, minute=dep_b_min % 60,
+                       second=0, microsecond=0)
+
+
+def _auto_direction(now=None):
+    """Jadval + joriy vaqt bo'yicha faol yo'nalish. 48 soatlik tsikl:
+    borish -> Xivada turish -> qaytish -> Toshkentda turish. Anchor (bitta
+    borish jo'nashi) qaysi fazada ekanimizni aniqlaydi."""
+    b = _leg_bounds(get_route(0))
+    q = _leg_bounds(get_route(1))
+    if not b or not q:
+        return 0      # jadval to'liq emas — xavfsiz standart: borish
+    dep_b, arr_b, dur_b = b
+    dep_q, arr_q, dur_q = q
+    idle_xiva = (dep_q - arr_b) % 1440      # Xivada turish (kelish->qaytish jo'nash)
+    idle_tosh = (dep_b - arr_q) % 1440      # Toshkentda turish (kelish->borish jo'nash)
+    cycle = dur_b + idle_xiva + dur_q + idle_tosh
+    if cycle <= 0:
+        return 0
+    now = now or datetime.now()
+    anchor = _route_anchor(dep_b, now)
+    elapsed = ((now - anchor).total_seconds() / 60) % cycle
+    if elapsed < dur_b:
+        return 0                            # borish yo'lda
+    if elapsed < dur_b + idle_xiva + dur_q:
+        return 1                            # Xivada turish + qaytish yo'lda
+    return 0                                # Toshkentda turish — keyingi borishga
 
 
 def get_settings():

@@ -23,11 +23,10 @@
 
 ; O'rnatish paroli muhit o'zgaruvchisidan olinadi (git'da saqlanmasin):
 ;   PowerShell:  $env:KIOSK_SETUP_PASS = "yangi-parol"; ISCC.exe installer.iss
-; Berilmasa eski parol ishlatiladi (ogohlantirish bilan).
+; Berilmasa build TO'XTAYDI — ma'lum default parol bilan jo'natilib qolmasin.
 #define InstallPassword GetEnv("KIOSK_SETUP_PASS")
 #if InstallPassword == ""
-  #pragma warning "KIOSK_SETUP_PASS berilmagan — standart parol ishlatilyapti!"
-  #define InstallPassword "kiosk2026"
+  #error KIOSK_SETUP_PASS berilmagan! Build oldidan o'rnating: $env:KIOSK_SETUP_PASS="..."
 #endif
 
 [Setup]

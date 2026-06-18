@@ -81,10 +81,17 @@ class Modal(QWidget):
         self.closed.emit()
         self.deleteLater()
 
+    def mousePressEvent(self, e):
+        # Bosish ham panel tashqarisida boshlangani belgilab qo'yiladi —
+        # panel ichidan boshlangan drag tashqarida tugasa modal yopilmasin.
+        self._press_outside = not self.panel.geometry().contains(e.pos())
+
     def mouseReleaseEvent(self, e):
-        # Panel tashqarisiga bosilsa yopiladi
-        if not self.panel.geometry().contains(e.pos()):
+        # Faqat bosish HAM, qo'yib yuborish HAM panel tashqarisida bo'lsa yopiladi
+        if (getattr(self, "_press_outside", False)
+                and not self.panel.geometry().contains(e.pos())):
             self.close_modal()
+        self._press_outside = False
 
     def _restyle(self):
         c = T.THEMES[self.theme_name]

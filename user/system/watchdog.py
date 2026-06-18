@@ -33,6 +33,12 @@ LOOP_COOLDOWN_S = 60
 
 ERROR_ALREADY_EXISTS = 183
 
+# Operator/admin chiqishi shu faylni yaratsa, watchdog qayta ishga tushirmaydi
+# (texnik xizmat uchun ilovani o'ldirish endi cheksiz relaunch bermaydi).
+STOP_SENTINEL = "watchdog.stop"
+
+_mutex = None   # MUHIM: handle'ni tirik saqlaymiz — aks holda mutex darhol bo'shaydi
+
 
 def _base_dir():
     if getattr(sys, "frozen", False):
@@ -61,8 +67,23 @@ def _setup_log():
 
 def _single_instance():
     """Ikkinchi nusxa ishga tushmasin (True = davom et, False = chiqib ket)."""
-    ctypes.windll.kernel32.CreateMutexW(None, False, "Global\\KioskWatchdog")
+    global _mutex
+    # Handle modul-global'da saqlanadi — mahalliy o'zgaruvchi bo'lsa GC darhol
+    # mutex'ni bo'shatib, yagona-nusxa himoyasini buzardi.
+    _mutex = ctypes.windll.kernel32.CreateMutexW(None, False,
+                                                 "Global\\KioskWatchdog")
     return ctypes.windll.kernel32.GetLastError() != ERROR_ALREADY_EXISTS
+
+
+def _stop_requested():
+    return os.path.isfile(os.path.join(_base_dir(), STOP_SENTINEL))
+
+
+def _clear_stop():
+    try:
+        os.remove(os.path.join(_base_dir(), STOP_SENTINEL))
+    except OSError:
+        pass
 
 
 def _kiosk_cmd():
@@ -78,6 +99,7 @@ def main():
     if not _single_instance():
         return
     log = _setup_log()
+    _clear_stop()   # oldingi seansdan qolgan sentinel'ni tozalaymiz
     cmd = _kiosk_cmd()
     log.info("Watchdog boshlandi: %s", " ".join(cmd))
 
@@ -92,6 +114,12 @@ def main():
         rc = proc.wait()
         if rc == 0:
             log.info("Kiosk toza yopildi (admin chiqishi) — watchdog tugaydi")
+            return
+        # Texnik xizmat: admin/operator stop-sentinel qoldirgan bo'lsa, ilova
+        # tashqaridan o'ldirilgan bo'lsa ham qayta tirkamaymiz.
+        if _stop_requested():
+            log.info("Stop-sentinel topildi — watchdog qayta tushirmaydi")
+            _clear_stop()
             return
         log.warning("Kiosk quladi (chiqish kodi %s) — qayta ishga tushiriladi", rc)
 

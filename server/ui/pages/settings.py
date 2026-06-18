@@ -124,6 +124,47 @@ class SettingsPageMixin:
         g.addLayout(self._field("Jo'nash vaqti", self.s_depart), 2, 0)
         g.addLayout(self._field("Kiosk joylashuvi", self.s_location), 2, 1)
         clay.addLayout(g)
+
+        # Harorat: internet ob-havo (Open-Meteo) yoki qo'lda kiritilgan qiymat.
+        # Yoqilganda server marshrut bekatlari uchun 7 kunlik prognozni yuklab
+        # keshlaydi (internet bo'lganda yangilanadi); joriy bekat + vaqt bo'yicha
+        # harorat asosiy ekranda ko'rinadi. O'chirilsa — quyidagi qo'lda qiymat.
+        self.s_weather = ToggleSwitch()
+        self.s_weather_lbl = QLabel()
+        self.s_temp = QSpinBox()
+        self.s_temp.setRange(-50, 60)
+        self.s_temp.setSuffix(" °C")
+        no_wheel(self.s_temp)
+
+        def _upd_weather(_c=None):
+            on = self.s_weather.isChecked()
+            self.s_weather_lbl.setText(
+                "Internet ob-havo (avtomatik)" if on
+                else "Qo'lda kiritilgan harorat")
+            self.s_temp.setEnabled(not on)
+        self.s_weather.toggled.connect(_upd_weather)
+        self._upd_weather = _upd_weather
+        w_row = QHBoxLayout()
+        w_row.setContentsMargins(0, 0, 0, 0)
+        w_row.setSpacing(12)
+        w_row.addWidget(self.s_weather)
+        w_row.addWidget(self.s_weather_lbl)
+        w_row.addStretch(1)
+        w_holder = QWidget()
+        w_holder.setLayout(w_row)
+        wg = QGridLayout()
+        wg.setHorizontalSpacing(14)
+        wg.addLayout(self._field("Harorat manbai", w_holder), 0, 0)
+        wg.addLayout(self._field("Qo'lda harorat", self.s_temp), 0, 1)
+        wg.setColumnStretch(0, 1)
+        clay.addLayout(wg)
+        w_hint = QLabel(
+            "Internet ob-havo yoqilganda harorat avtomatik — bekat hududi va "
+            "vaqtiga qarab o'zgaradi. Server 7 kunlik prognozni yuklab qo'yadi, "
+            "shuning uchun internet uzilsa ham bir hafta davomida ishlaydi.")
+        w_hint.setObjectName("hint")
+        w_hint.setWordWrap(True)
+        clay.addWidget(w_hint)
         ilay.addWidget(card)
 
         # === 2) Reklama ===
@@ -318,6 +359,12 @@ class SettingsPageMixin:
         self.s_route.setText(s.get("route", ""))
         self.s_depart.setText(s.get("depart_time", ""))
         self.s_location.setText(s.get("kiosk_location", ""))
+        self.s_weather.setChecked(str(s.get("weather_auto") or "1") != "0")
+        try:
+            self.s_temp.setValue(int(float(s.get("temperature") or 22)))
+        except (TypeError, ValueError):
+            self.s_temp.setValue(22)
+        self._upd_weather()
         # Bo'sh bo'lsa standart ro'yxat ko'rsatiladi — admin hozir nima
         # chiqayotganini ko'rib, shu yerda tahrirlaydi.
         self.s_sos.setPlainText(s.get("sos_numbers", "").strip() or DEFAULT_SOS)
@@ -362,6 +409,8 @@ class SettingsPageMixin:
         db.set_setting("train_name", self.s_train.text())
         db.set_setting("route", self.s_route.text())
         db.set_setting("depart_time", depart)
+        db.set_setting("weather_auto", "1" if self.s_weather.isChecked() else "0")
+        db.set_setting("temperature", str(self.s_temp.value()))
         db.set_setting("ad_interval_min", str(self.s_ad_int.value()))
         algos = [k for k, cb in self.s_ad_algos.items() if cb.isChecked()]
         db.set_setting("ad_algorithm", ",".join(algos) or "weighted")

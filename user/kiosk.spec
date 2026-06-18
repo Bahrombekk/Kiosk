@@ -9,7 +9,17 @@ VLC ham birga olinadi — qurilmada VLC o'rnatilgan bo'lishi SHART EMAS.
 """
 import os
 
-VLC_DIR = r"C:\Program Files\VideoLAN\VLC"
+# VLC joyi: KIOSK_VLC_DIR muhit o'zgaruvchisidan, bo'lmasa standart manzil.
+# VLC boshqa joyda/yo'q bo'lsa, build JIM o'tib ketmasin — kerakli DLL'lar
+# mavjudligini tekshiramiz va topilmasa build'ni darhol to'xtatamiz.
+VLC_DIR = os.environ.get("KIOSK_VLC_DIR", r"C:\Program Files\VideoLAN\VLC")
+
+_required = ["libvlc.dll", "libvlccore.dll", "vlc-cache-gen.exe"]
+_missing = [f for f in _required if not os.path.isfile(os.path.join(VLC_DIR, f))]
+if _missing or not os.path.isdir(os.path.join(VLC_DIR, "plugins")):
+    raise SystemExit(
+        f"VLC topilmadi: {VLC_DIR} (yetishmaydi: {_missing or 'plugins/'}). "
+        "KIOSK_VLC_DIR ni to'g'ri VLC papkasiga o'rnating yoki VLC'ni o'rnating.")
 
 datas = [
     ("assets", "assets"),

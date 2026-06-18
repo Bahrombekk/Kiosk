@@ -44,6 +44,8 @@ content/ads/
 content/books/
 content/covers/
 content/media/
+# seed_demo.py yuklab olish belgilari (build artefakti)
+*.done
 
 # Secrets
 .env
@@ -67,6 +69,11 @@ user/server_cert.crt
 # Runtime crash log (main.py yozadi)
 crash.log
 crash.log.1
+
+# Internet ob-havo keshi (weather.py yuklab oladi — qayta tiklanadi)
+weather_cache.json
+server/weather_cache.json
+user/weather_cache.json
 
 # Runtime loglar va oflayn kesh (logsetup.py / cache.py yozadi)
 logs/

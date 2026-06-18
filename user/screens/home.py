@@ -644,7 +644,13 @@ class _HomeCanvas(QWidget):
 
     def _apply_status(self, s):
         self.speed_val.setText(f"{s.get('speed', '—')} km/h")
-        self.temp_val.setText(f"+{s.get('temperature', '—')}°C")
+        # Harorat manfiy ham bo'lishi mumkin (qish) — belgi to'g'ri qo'yiladi:
+        # musbatga '+', manfiyga '−', noma'lumga '—'.
+        t = s.get("temperature")
+        if isinstance(t, (int, float)):
+            self.temp_val.setText(f"{'+' if t >= 0 else ''}{t}°C")
+        else:
+            self.temp_val.setText("—")
         wagon = s.get("wagon")
         self.loc_title.setText(
             tr("home.location_wagon", wagon=wagon) if wagon

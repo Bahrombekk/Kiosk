@@ -31,6 +31,7 @@ import db
 from ui.styles import STYLE
 from ui.helpers import port_in_use
 from ui.login import LoginDialog
+from ui.server_thread import ServerThread
 from ui.window import AdminWindow
 
 
@@ -79,13 +80,22 @@ def main():
             f"jarayonini to'xtating), so'ng qaytadan oching.")
         sys.exit(1)
 
-    # Admin parol darvozasi — server (AdminWindow ichida) faqat muvaffaqiyatli
-    # kirishdan keyin ishga tushadi.
+    # Backend'ni LOGIN'DAN OLDIN ishga tushiramiz — kiosklar (userlar) admin
+    # parol kiritmasdan ham darhol onlayn bo'lib ishlayversin. Parol faqat
+    # admin OYNASIGA (o'zgartirish/yuklash) kirish uchun darvoza.
+    server = ServerThread()
+    server.start()
+
+    # Admin parol darvozasi — login oynasi ko'rinib turganda ham backend
+    # ishlaydi (kiosklar onlayn). Parol kiritilsa — admin oynasi ochiladi.
     login = LoginDialog()
     if not login.exec():
+        # Admin kirmadi/bekor qildi — backendni to'xtatib chiqamiz.
+        server.stop()
+        server.wait(3000)
         sys.exit(1)
 
-    win = AdminWindow()
+    win = AdminWindow(server=server)
     win.show()
     sys.exit(app.exec())
 

@@ -12,8 +12,7 @@
 
 #define InstallPassword GetEnv("KIOSK_SERVER_SETUP_PASS")
 #if InstallPassword == ""
-  #pragma warning "KIOSK_SERVER_SETUP_PASS berilmagan - standart parol ishlatilyapti!"
-  #define InstallPassword "kiosk2026"
+  #error KIOSK_SERVER_SETUP_PASS berilmagan! Build oldidan o'rnating: $env:KIOSK_SERVER_SETUP_PASS="..."
 #endif
 
 [Setup]

@@ -1,9 +1,11 @@
 """ui/pages/crud.py — Generik CRUD sahifalar mixin'i (Saytlar/Bekatlar)."""
 from PyQt6.QtWidgets import (
     QComboBox, QHBoxLayout, QLabel, QTableWidget, QTableWidgetItem,
-    QHeaderView, QMessageBox, QWidget
+    QHeaderView, QMessageBox, QWidget, QDialog, QVBoxLayout, QDateTimeEdit,
+    QDialogButtonBox
 )
 from PyQt6.QtGui import QColor
+from PyQt6.QtCore import QDateTime, QTime
 
 import db
 from ui.styles import C_MUTED
@@ -184,15 +186,15 @@ class CrudPagesMixin:
         self._route_edit_combo = edit_combo
 
         active_combo = QComboBox()
-        active_combo.addItem("Faol: Borish", 0)
-        active_combo.addItem("Faol: Qaytish", 1)
-        try:
-            cur = int(db.get_settings().get("active_route_direction") or 0)
-        except (TypeError, ValueError):
-            cur = 0
-        active_combo.setCurrentIndex(1 if cur == 1 else 0)
+        active_combo.addItem("Faol: Borish", "0")
+        active_combo.addItem("Faol: Qaytish", "1")
+        active_combo.addItem("Faol: Avto (kun+vaqt)", "auto")
+        cur = (db.get_settings().get("active_route_direction") or "0").strip()
+        idx = active_combo.findData(cur)
+        active_combo.setCurrentIndex(idx if idx >= 0 else 0)
         active_combo.currentIndexChanged.connect(self._on_route_active_changed)
-        active_combo.setToolTip("Kiosklarda hozir qaysi yo'nalish ko'rsatilsin")
+        active_combo.setToolTip("Kiosklarda hozir qaysi yo'nalish ko'rsatilsin "
+                                "(Avto — jadval va vaqt bo'yicha o'zi)")
         self._route_active_combo = active_combo
 
         return self._crud_page(
@@ -221,12 +223,59 @@ class CrudPagesMixin:
 
     def _on_route_active_changed(self):
         d = self._route_active_combo.currentData()
+        if d == "auto":
+            if not self._ask_route_anchor():
+                # Bekor qilindi — combo'ni oldingi holatga qaytaramiz
+                prev = (db.get_settings().get("active_route_direction") or "0").strip()
+                self._route_active_combo.blockSignals(True)
+                i = self._route_active_combo.findData(prev)
+                self._route_active_combo.setCurrentIndex(i if i >= 0 else 0)
+                self._route_active_combo.blockSignals(False)
+                return
         db.set_setting("active_route_direction", str(d))
         db.log_action("route_active_direction", str(d))
         self._broadcast_sync("route")
-        self.statusBar().showMessage(
-            "Kioskda faol yo'nalish: "
-            + ("Qaytish" if d == 1 else "Borish"), 3000)
+        label = {"auto": "Avto (kun+vaqt)", "1": "Qaytish"}.get(str(d), "Borish")
+        self.statusBar().showMessage("Kioskda faol yo'nalish: " + label, 3000)
+
+    def _ask_route_anchor(self):
+        """Avto rejim uchun: borish (Toshkent→Xiva) QACHON jo'naganini so'raydi.
+        Server shu nuqtadan 48 soatlik tsiklni hisoblab yo'nalishni aniqlaydi.
+        True = belgilandi, False = bekor qilindi."""
+        # Standart: borish bekatining jo'nash vaqti (jadvaldan), eng yaqin sana
+        dep_min = 22 * 60 + 34   # zaxira: 22:34
+        stops = db.get_route(0)
+        if stops:
+            m = db._parse_route_min(stops[0].get("departure_time")
+                                    or stops[0].get("arrival_time"))
+            if m is not None:
+                dep_min = m
+        now = QDateTime.currentDateTime()
+        default = QDateTime(now.date(), QTime(dep_min // 60, dep_min % 60))
+        if default > now:
+            default = default.addDays(-1)   # eng yaqin O'TGAN jo'nash
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Avto yo'nalish — borish jo'nashi")
+        lay = QVBoxLayout(dlg)
+        lay.addWidget(QLabel(
+            "Borish (Toshkent → Xiva) eng oxirgi marta QACHON jo'nagan?\n"
+            "Server shu sana-vaqtdan 48 soatlik tsiklni hisoblab,\n"
+            "kun va vaqtga qarab borish/qaytishni o'zi almashtiradi."))
+        edit = QDateTimeEdit(default)
+        edit.setDisplayFormat("yyyy-MM-dd  HH:mm")
+        edit.setCalendarPopup(True)
+        lay.addWidget(edit)
+        btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok
+                                | QDialogButtonBox.StandardButton.Cancel)
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        lay.addWidget(btns)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return False
+        anchor = edit.dateTime().toString("yyyy-MM-ddTHH:mm:ss")
+        db.set_setting("route_anchor", anchor)
+        return True
 
     def _show_route_map(self):
         """Tanlangan yo'nalishning barcha bekatlarini xaritada chiziq bilan."""

@@ -549,6 +549,15 @@ class MainWindow(QWidget):
         self._allow_exit = True
         from system import lockdown
         lockdown.uninstall()   # klaviatura quli ochilsin (texnik xizmat uchun)
+        # Watchdog'ga "qayta tushirmа" signali — toza chiqish kodi (0) bilan bir
+        # qatorda sentinel ham qoldiramiz (race bo'lsa ham relaunch bo'lmaydi).
+        try:
+            from system import watchdog
+            from core.config import APP_DIR
+            with open(os.path.join(APP_DIR, watchdog.STOP_SENTINEL), "w") as f:
+                f.write("admin exit")
+        except Exception:                               # noqa: BLE001
+            pass
         self._shutdown()
         QApplication.quit()
 

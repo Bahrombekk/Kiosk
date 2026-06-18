@@ -31,6 +31,7 @@ WM_SYSKEYDOWN = 0x0104
 
 VK_TAB = 0x09
 VK_ESCAPE = 0x1B
+VK_F4 = 0x73
 VK_LWIN = 0x5B
 VK_RWIN = 0x5C
 LLKHF_ALTDOWN = 0x20
@@ -58,8 +59,8 @@ def _should_block(vk, flags):
     if vk in (VK_LWIN, VK_RWIN):
         return True                      # Win tugmasi (Start, Win+R, Win+D...)
     alt = bool(flags & LLKHF_ALTDOWN)
-    if alt and vk in (VK_TAB, VK_ESCAPE):
-        return True                      # Alt+Tab, Alt+Esc
+    if alt and vk in (VK_TAB, VK_ESCAPE, VK_F4):
+        return True                      # Alt+Tab, Alt+Esc, Alt+F4 (oynani yopish)
     ctrl = _user32.GetAsyncKeyState(0x11) & 0x8000   # VK_CONTROL
     if ctrl and vk == VK_ESCAPE:
         return True                      # Ctrl+Esc (Start menyu)
@@ -103,8 +104,12 @@ def install():
 
 def uninstall():
     """Hook'ni olib tashlaydi (toza chiqishda)."""
-    global _hook_handle
+    global _hook_handle, _hook_proc_ref
     if _hook_handle is not None:
-        _user32.UnhookWindowsHookEx(_hook_handle)
+        ok = _user32.UnhookWindowsHookEx(_hook_handle)
         _hook_handle = None
+        # Callback referensini FAQAT unhook muvaffaqiyatli bo'lsa bo'shatamiz —
+        # aks holda hali faol hook bo'shatilgan callback'ni chaqirib crash beradi.
+        if ok:
+            _hook_proc_ref = None
         log.info("Klaviatura qulfi o'chirildi")
