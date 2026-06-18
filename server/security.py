@@ -67,6 +67,18 @@ def _restrict_key_file(path):
         log.warning("Kalit fayli ruxsatini cheklab bo'lmadi (%s): %s", path, e)
 
 
+def _write_private(path, data: bytes):
+    """Maxfiy kalitni YOZISH paytidan boshlab cheklangan ruxsat bilan yaratadi
+    (POSIX'da 0o600 — yozilgandan keyin cheklash oynasini yopadi). Windows'da
+    rejim e'tiborga olinmaydi, _restrict_key_file (icacls) ketidan ishlaydi."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    fd = os.open(path, flags, 0o600)
+    try:
+        os.write(fd, data)
+    finally:
+        os.close(fd)
+
+
 def _local_ipv4s():
     """Serverning LAN IPv4 manzillari (sertifikat SAN'iga yoziladi — VLC IP
     orqali ulanganda sertifikatni qabul qilishi uchun). helpers.local_ips bilan
@@ -105,8 +117,7 @@ def _load_or_create_signing_key():
         encoding=serialization.Encoding.PEM,
         format=serialization.PrivateFormat.PKCS8,
         encryption_algorithm=serialization.NoEncryption())
-    with open(SIGNING_KEY_PATH, "wb") as f:
-        f.write(pem)
+    _write_private(SIGNING_KEY_PATH, pem)
     _restrict_key_file(SIGNING_KEY_PATH)
     log.info("Yangi Ed25519 imzo kaliti yaratildi: %s", SIGNING_KEY_PATH)
     return key
@@ -118,7 +129,7 @@ def _create_tls_cert():
     kioskда Trusted Root'ga qo'shilganda va pin sifatida ishlatilganda mos)."""
     import ipaddress
     from cryptography import x509
-    from cryptography.x509.oid import NameOID
+    from cryptography.x509.oid import NameOID, ExtendedKeyUsageOID
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import rsa
 
@@ -145,15 +156,25 @@ def _create_tls_cert():
         .not_valid_before(now - _dt.timedelta(days=1))
         .not_valid_after(now + _dt.timedelta(days=365 * _CERT_YEARS))
         .add_extension(x509.SubjectAlternativeName(alt), critical=False)
-        .add_extension(x509.BasicConstraints(ca=True, path_length=None),
+        # CA:TRUE — self-signed cert kioskда Trusted Root sifatida ishlaydi
+        # (VLC/ws ishonch o'chog'i). Lekin key_cert_sign=False: kalit sizib
+        # chiqsa ham BOSHQA domenlarga ishonchli cert yasab bo'lmaydi (faqat
+        # shu serverni tasdiqlaydi). EKU=serverAuth — faqat server sifatida.
+        .add_extension(x509.BasicConstraints(ca=True, path_length=0),
                        critical=True)
+        .add_extension(x509.KeyUsage(
+            digital_signature=True, key_encipherment=True,
+            key_cert_sign=False, crl_sign=False, content_commitment=False,
+            data_encipherment=False, key_agreement=False,
+            encipher_only=False, decipher_only=False), critical=True)
+        .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]),
+                       critical=False)
         .sign(key, hashes.SHA256()))
 
-    with open(TLS_KEY_PATH, "wb") as f:
-        f.write(key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.TraditionalOpenSSL,
-            encryption_algorithm=serialization.NoEncryption()))
+    _write_private(TLS_KEY_PATH, key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.TraditionalOpenSSL,
+        encryption_algorithm=serialization.NoEncryption()))
     _restrict_key_file(TLS_KEY_PATH)
     with open(TLS_CERT_PATH, "wb") as f:
         f.write(cert.public_bytes(serialization.Encoding.PEM))

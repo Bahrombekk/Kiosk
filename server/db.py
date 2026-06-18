@@ -11,7 +11,7 @@ import logging
 import hashlib
 import hmac
 import secrets
-from contextlib import contextmanager
+from contextlib import contextmanager, closing
 
 import config
 
@@ -290,13 +290,12 @@ def _remove_legacy_seed(conn):
 
 # --- O'qish funksiyalari (API uchun) ---
 def get_content(content_type=None):
-    conn = connect()
-    if content_type:
-        rows = conn.execute(
-            "SELECT * FROM content WHERE type=? ORDER BY id", (content_type,)).fetchall()
-    else:
-        rows = conn.execute("SELECT * FROM content ORDER BY id").fetchall()
-    conn.close()
+    with closing(connect()) as conn:
+        if content_type:
+            rows = conn.execute(
+                "SELECT * FROM content WHERE type=? ORDER BY id", (content_type,)).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM content ORDER BY id").fetchall()
     return [dict(r) for r in rows]
 
 
@@ -306,22 +305,20 @@ def content_field_values(field, content_type=None):
     ustunlardan bo'ladi (SQL inyeksiyasidan himoya)."""
     if field not in ("genre", "category_tab"):
         return []
-    conn = connect()
     sql = (f"SELECT DISTINCT {field} AS v FROM content"
            f" WHERE {field} IS NOT NULL AND TRIM({field}) != ''")
     args = ()
     if content_type:
         sql += " AND type=?"
         args = (content_type,)
-    rows = conn.execute(sql + " ORDER BY v COLLATE NOCASE", args).fetchall()
-    conn.close()
+    with closing(connect()) as conn:
+        rows = conn.execute(sql + " ORDER BY v COLLATE NOCASE", args).fetchall()
     return [r["v"] for r in rows]
 
 
 def get_content_by_id(content_id):
-    conn = connect()
-    row = conn.execute("SELECT * FROM content WHERE id=?", (content_id,)).fetchone()
-    conn.close()
+    with closing(connect()) as conn:
+        row = conn.execute("SELECT * FROM content WHERE id=?", (content_id,)).fetchone()
     return dict(row) if row else None
 
 
@@ -335,24 +332,23 @@ def upsert_kiosk(device_id, **fields):
     f = {k: v for k, v in fields.items() if k in allowed}
     if not f:
         return
+    # Atomik upsert: bir vaqtda kelgan ikki heartbeat (birinchi ulanishda)
+    # "UPDATE; bo'lmasa INSERT" naqshida poyga qilib IntegrityError berardi.
+    cols = ["device_id", *f.keys()]
+    sets = ",".join(f"{k}=excluded.{k}" for k in f)
     with _conn() as c:
-        cur = c.execute(
-            "UPDATE kiosks SET " + ",".join(f"{k}=?" for k in f)
-            + " WHERE device_id=?", [*f.values(), device_id])
-        if cur.rowcount == 0:
-            cols = ["device_id", *f.keys()]
-            c.execute(
-                f"INSERT INTO kiosks ({','.join(cols)})"
-                f" VALUES ({','.join('?' * len(cols))})",
-                [device_id, *f.values()])
+        c.execute(
+            f"INSERT INTO kiosks ({','.join(cols)})"
+            f" VALUES ({','.join('?' * len(cols))})"
+            f" ON CONFLICT(device_id) DO UPDATE SET {sets}",
+            [device_id, *f.values()])
 
 
 def get_kiosks():
     """Ro'yxatdan o'tgan barcha kiosklar (admin jadvali uchun)."""
-    conn = connect()
-    rows = conn.execute(
-        "SELECT * FROM kiosks ORDER BY kiosk_no, device_id").fetchall()
-    conn.close()
+    with closing(connect()) as conn:
+        rows = conn.execute(
+            "SELECT * FROM kiosks ORDER BY kiosk_no, device_id").fetchall()
     return [dict(r) for r in rows]
 
 
@@ -360,10 +356,9 @@ def get_kiosk_cache_enabled(device_id):
     """Shu kioskда lokal kesh yoqilganmi (1/0). Noma'lum kiosk — 1 (yoqiq)."""
     if not device_id:
         return 1
-    conn = connect()
-    row = conn.execute("SELECT cache_enabled FROM kiosks WHERE device_id=?",
-                       [device_id]).fetchone()
-    conn.close()
+    with closing(connect()) as conn:
+        row = conn.execute("SELECT cache_enabled FROM kiosks WHERE device_id=?",
+                           [device_id]).fetchone()
     if row is None or row["cache_enabled"] is None:
         return 1
     return int(row["cache_enabled"])
@@ -380,27 +375,24 @@ def set_kiosk_cache_enabled(device_id, enabled):
 
 def get_ads(active_only=True):
     """Reklamalar. active_only=True — faqat faollari (API), False — barchasi (admin)."""
-    conn = connect()
     sql = "SELECT * FROM ads"
     if active_only:
         sql += " WHERE is_active=1"
     sql += " ORDER BY sort_order, id"
-    rows = conn.execute(sql).fetchall()
-    conn.close()
+    with closing(connect()) as conn:
+        rows = conn.execute(sql).fetchall()
     return [dict(r) for r in rows]
 
 
 def get_ad_by_id(ad_id):
-    conn = connect()
-    row = conn.execute("SELECT * FROM ads WHERE id=?", (ad_id,)).fetchone()
-    conn.close()
+    with closing(connect()) as conn:
+        row = conn.execute("SELECT * FROM ads WHERE id=?", (ad_id,)).fetchone()
     return dict(row) if row else None
 
 
 def get_sites():
-    conn = connect()
-    rows = conn.execute("SELECT * FROM sites ORDER BY sort_order, id").fetchall()
-    conn.close()
+    with closing(connect()) as conn:
+        rows = conn.execute("SELECT * FROM sites ORDER BY sort_order, id").fetchall()
     return [dict(r) for r in rows]
 
 
@@ -429,9 +421,8 @@ def get_route(direction=None):
 
 
 def get_settings():
-    conn = connect()
-    rows = conn.execute("SELECT key,value FROM settings").fetchall()
-    conn.close()
+    with closing(connect()) as conn:
+        rows = conn.execute("SELECT key,value FROM settings").fetchall()
     return {r["key"]: r["value"] for r in rows}
 
 
@@ -522,11 +513,10 @@ def _cleanup_files(item):
 
 def _file_in_use(name):
     """Berilgan fayl nomi content jadvalida hali ham ishlatilyaptimi?"""
-    conn = connect()
-    row = conn.execute(
-        "SELECT 1 FROM content WHERE file_path=? OR cover_path=? OR text_path=? LIMIT 1",
-        (name, name, name)).fetchone()
-    conn.close()
+    with closing(connect()) as conn:
+        row = conn.execute(
+            "SELECT 1 FROM content WHERE file_path=? OR cover_path=? OR text_path=? LIMIT 1",
+            (name, name, name)).fetchone()
     return row is not None
 
 
@@ -635,7 +625,8 @@ def insert_stats(device_id, events):
                      str(ev.get("session") or "")[:32],
                      str(ev.get("ts") or "")[:32],
                      name,
-                     _json.dumps(ev.get("data") or {}, ensure_ascii=False)[:1000]))
+                     _json.dumps(ev.get("data") or {}, ensure_ascii=False,
+                                 default=str)[:1000]))
     if not rows:
         return 0
     with _conn() as c:
@@ -652,53 +643,57 @@ def _stats_since(days):
     return (datetime.now() - timedelta(days=days - 1)).strftime("%Y-%m-%d")
 
 
+# data.<key> bo'yicha TOP so'rovlar uchun ruxsat etilgan kalitlar oq ro'yxati.
+# json_extract yo'liga `key` to'g'ridan-to'g'ri qo'yilgani uchun (parametr
+# bo'lolmaydi) SQL inyeksiyasidan himoya — faqat shu kalitlar ruxsat etiladi.
+STATS_TOP_KEYS = ("title", "screen", "ad_id", "site", "lang", "type",
+                  "content_id", "route", "stop")
+
+
 def stats_daily_sessions(days=7):
     """Kunlik sessiyalar: [{day, sessions, avg_s}] (session_end bo'yicha)."""
-    conn = connect()
-    rows = conn.execute(
-        """SELECT substr(ts,1,10) AS day, COUNT(*) AS sessions,
-                  CAST(AVG(json_extract(data,'$.duration_s')) AS INTEGER) AS avg_s
-           FROM stats_events
-           WHERE event='session_end' AND ts >= ?
-           GROUP BY day ORDER BY day DESC""", (_stats_since(days),)).fetchall()
-    conn.close()
+    with closing(connect()) as conn:
+        rows = conn.execute(
+            """SELECT substr(ts,1,10) AS day, COUNT(*) AS sessions,
+                      CAST(AVG(json_extract(data,'$.duration_s')) AS INTEGER) AS avg_s
+               FROM stats_events
+               WHERE event='session_end' AND ts >= ?
+               GROUP BY day ORDER BY day DESC""", (_stats_since(days),)).fetchall()
     return [dict(r) for r in rows]
 
 
 def stats_top(event, key, days=7, limit=10):
     """Berilgan event ichidagi data.<key> bo'yicha TOP ro'yxat:
     [{name, n}] — masalan content_open/title yoki screen_view/screen."""
-    conn = connect()
-    rows = conn.execute(
-        f"""SELECT json_extract(data,'$.{key}') AS name, COUNT(*) AS n
-            FROM stats_events
-            WHERE event=? AND ts >= ? AND name IS NOT NULL
-            GROUP BY name ORDER BY n DESC LIMIT ?""",
-        (event, _stats_since(days), limit)).fetchall()
-    conn.close()
+    if key not in STATS_TOP_KEYS:
+        raise ValueError(f"stats_top: ruxsat etilmagan key: {key!r}")
+    with closing(connect()) as conn:
+        rows = conn.execute(
+            f"""SELECT json_extract(data,'$.{key}') AS name, COUNT(*) AS n
+                FROM stats_events
+                WHERE event=? AND ts >= ? AND name IS NOT NULL
+                GROUP BY name ORDER BY n DESC LIMIT ?""",
+            (event, _stats_since(days), limit)).fetchall()
     return [dict(r) for r in rows]
 
 
 def stats_totals(days=7):
     """Umumiy hisoblar: {sessions, content_opens, ad_plays, devices}."""
-    conn = connect()
     since = _stats_since(days)
+    with closing(connect()) as conn:
+        def _count(ev):
+            return conn.execute(
+                "SELECT COUNT(*) AS n FROM stats_events WHERE event=? AND ts >= ?",
+                (ev, since)).fetchone()["n"]
 
-    def _count(ev):
-        return conn.execute(
-            "SELECT COUNT(*) AS n FROM stats_events WHERE event=? AND ts >= ?",
-            (ev, since)).fetchone()["n"]
-
-    out = {
-        "sessions": _count("session_end"),
-        "content_opens": _count("content_open"),
-        "ad_plays": _count("ad_play"),
-        "devices": conn.execute(
-            "SELECT COUNT(DISTINCT device_id) AS n FROM stats_events"
-            " WHERE ts >= ?", (since,)).fetchone()["n"],
-    }
-    conn.close()
-    return out
+        return {
+            "sessions": _count("session_end"),
+            "content_opens": _count("content_open"),
+            "ad_plays": _count("ad_play"),
+            "devices": conn.execute(
+                "SELECT COUNT(DISTINCT device_id) AS n FROM stats_events"
+                " WHERE ts >= ?", (since,)).fetchone()["n"],
+        }
 
 
 # --- API kalit (kiosk <-> server autentifikatsiyasi) ---

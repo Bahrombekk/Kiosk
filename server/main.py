@@ -289,6 +289,9 @@ def book_text(content_id: int):
     path = _safe_join(config.BOOKS_DIR, item["text_path"])
     if not path or not os.path.isfile(path):
         raise HTTPException(404, "Matn fayli mavjud emas")
+    # Buzilgan/ulkan fayl xotirani to'ldirmasin (kitob matni odatda < birnecha MB)
+    if os.path.getsize(path) > 25 * 1024 * 1024:
+        raise HTTPException(413, "Matn fayli juda katta")
     try:
         with open(path, encoding="utf-8") as f:
             if path.endswith(".json"):
@@ -504,7 +507,18 @@ async def websocket_endpoint(ws: WebSocket):
     await manager.send_personal(ws, {"type": "status_update", **status_payload()})
     try:
         while True:
-            data = await ws.receive_json()
+            # Xom matnni avval o'qib, hajmini cheklaymiz — buzilgan/zararli kiosk
+            # ulkan freym yuborib serverни xotira bilan bosib qo'ymasin.
+            raw = await ws.receive_text()
+            if len(raw) > 64 * 1024:
+                log.warning("WS: juda katta freym (%d bayt) — e'tiborsiz", len(raw))
+                continue
+            try:
+                data = json.loads(raw)
+            except (ValueError, TypeError):
+                continue
+            if not isinstance(data, dict):
+                continue
             mtype = data.get("type")
             if mtype == "register":
                 manager.register(ws, data.get("device_id"), data.get("platform"))

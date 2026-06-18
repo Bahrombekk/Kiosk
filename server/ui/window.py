@@ -32,6 +32,9 @@ class _DurationFiller(QThread):
         except Exception:
             return
         for c in items:
+            # Oyna yopilsa darhol to'xtaymiz (closeEvent uzoq kutib qolmasin).
+            if self.isInterruptionRequested():
+                return
             if c.get("duration") or not c.get("file_path"):
                 continue
             path = os.path.join(config.MEDIA_DIR, c["file_path"])
@@ -272,8 +275,17 @@ class AdminWindow(DashboardPageMixin, CachePageMixin, ContentPageMixin,
 
     # --- Yopilganda backendni to'xtatamiz ---
     def closeEvent(self, e):
+        # Jonli yangilash timerlarini to'xtatamiz — teardown paytida server
+        # to'xtaganidan keyin yana ishlab DB/holatga tegmasin.
+        for t in ("timer", "stats_timer"):
+            tm = getattr(self, t, None)
+            if tm is not None:
+                tm.stop()
+        if hasattr(self, "_cache_timer"):
+            self._cache_timer.stop()
         self.server.stop()
         self.server.wait(3000)
         if hasattr(self, "_dur_filler") and self._dur_filler.isRunning():
+            self._dur_filler.requestInterruption()
             self._dur_filler.wait(2000)
         super().closeEvent(e)

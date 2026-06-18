@@ -12,7 +12,10 @@ Admin oynasi (boshqa oqimda) bilan ishlash uchun broadcast'ni server
 event-loop'iga xavfsiz uzatadigan yordamchi bor (broadcast_threadsafe).
 """
 import asyncio
+import logging
 import time
+
+log = logging.getLogger("kiosk.ws")
 
 
 class ConnectionManager:
@@ -47,10 +50,21 @@ class ConnectionManager:
         }
 
     def register(self, ws, device_id, platform=None):
-        if ws in self.active:
-            self.active[ws]["device_id"] = device_id
-            if platform:
-                self.active[ws]["platform"] = platform
+        if ws not in self.active:
+            return
+        # Kiritmani sanitizatsiya: soxta/ulkan device_id bilan jadvalni
+        # to'ldirib bo'lmasin (uzunlik cheklanadi, tur tekshiriladi).
+        device_id = str(device_id or "").strip()[:128] or None
+        # Bir device_id'ni boshqa faol socket allaqachon egallaган bo'lsa —
+        # ehtimoliy taqlid/eski ulanish; ogohlantiramiz (reconnect'ni buzmaймiz).
+        if device_id and any(
+                info.get("device_id") == device_id and other is not ws
+                for other, info in self.active.items()):
+            log.warning("WS: takroriy device_id '%s' (eski ulanish yoki taqlid?)",
+                        device_id)
+        self.active[ws]["device_id"] = device_id
+        if platform:
+            self.active[ws]["platform"] = str(platform)[:64]
 
     def disconnect(self, ws):
         self.active.pop(ws, None)
@@ -91,7 +105,13 @@ class ConnectionManager:
             async with lock:
                 await asyncio.wait_for(ws.send_json(message),
                                        timeout=self.SEND_TIMEOUT_S)
+        except (asyncio.TimeoutError, ConnectionError, RuntimeError, OSError):
+            # Kutilgan "o'lik socket" holatlari (uzilish/timeout) — jim o'chiramiz.
+            return ws
         except Exception:
+            # Kutilmagan xato (mas. seriyalanmaydigan xabar) — bu dastur xatosi
+            # bo'lishi mumkin, jim yutmaymiz: logga yozamiz, socketni ham o'chiramiz.
+            log.warning("WS yuborishda kutilmagan xato", exc_info=True)
             return ws
         return None
 
@@ -112,10 +132,22 @@ class ConnectionManager:
             if r is not None:        # _safe_send o'lik socketni qaytardi
                 self.disconnect(r)
 
+    @staticmethod
+    def _log_future_error(fut):
+        """run_coroutine_threadsafe future'i xatosini yutmasdan logga yozadi."""
+        try:
+            exc = fut.exception()
+        except Exception:
+            return
+        if exc is not None:
+            log.warning("WS background korutina xatosi: %r", exc)
+
     def broadcast_threadsafe(self, message: dict):
         """Admin oqimidan (Qt) chaqiriladi — broadcast'ni server loop'iga qo'yadi."""
         if self.loop and self.loop.is_running():
-            asyncio.run_coroutine_threadsafe(self.broadcast(message), self.loop)
+            fut = asyncio.run_coroutine_threadsafe(
+                self.broadcast(message), self.loop)
+            fut.add_done_callback(self._log_future_error)
 
     async def _send_to_device(self, device_id, message: dict):
         targets = [ws for ws, info in list(self.active.items())
@@ -130,8 +162,9 @@ class ConnectionManager:
     def send_to_device_threadsafe(self, device_id, message: dict):
         """Admin oqimidan — buyruqni faqat shu device_id'li kiosk(lar)ga yuboradi."""
         if self.loop and self.loop.is_running():
-            asyncio.run_coroutine_threadsafe(
+            fut = asyncio.run_coroutine_threadsafe(
                 self._send_to_device(device_id, message), self.loop)
+            fut.add_done_callback(self._log_future_error)
 
 
 # Yagona umumiy manager (main.py va admin.py shundan foydalanadi)

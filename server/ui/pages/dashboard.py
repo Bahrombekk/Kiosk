@@ -478,8 +478,9 @@ class DashboardPageMixin:
         foot.addWidget(clear_btn)
         foot.addStretch(1)
         btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        # Close tugmasi "reject" rolida — `rejected` o'zi yetarli. `clicked`'ni
+        # ham accept'ga ulasak bitta bosishda accept+reject ikkalasi otiladi.
         btns.rejected.connect(dlg.reject)
-        btns.clicked.connect(dlg.accept)
         foot.addWidget(btns)
         lay.addLayout(foot)
         dlg.exec()
