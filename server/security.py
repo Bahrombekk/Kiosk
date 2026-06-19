@@ -80,27 +80,61 @@ def _write_private(path, data: bytes):
 
 
 def _local_ipv4s():
-    """Serverning LAN IPv4 manzillari (sertifikat SAN'iga yoziladi — VLC IP
-    orqali ulanganda sertifikatni qabul qilishi uchun). helpers.local_ips bilan
-    bir xil mantiq, lekin bu modul PyQt'ga bog'lanmaydi."""
-    ips = set()
-    try:
-        for info in socket.getaddrinfo(socket.gethostname(), None,
-                                       socket.AF_INET):
-            ips.add(info[4][0])
-    except socket.gaierror:
-        pass
-    # Marshrutga qarab aniqlangan asosiy manzil (getaddrinfo ba'zan o'tkazib
-    # yuboradi) — UDP "ulanishi" hech narsa yubormaydi, faqat manbani aniqlaydi.
+    """Serverning LAN IPv4 manzillari (sertifikat SAN + discovery beacon + admin
+    ekrani). helpers.local_ips ham shuni ishlatadi (PyQt'siz).
+
+    HAQIQIY lokal tarmoq manzilini afzal ko'radi: agar private LAN (192.168/10/
+    172.16) topilsa — FAQAT shularni qaytaradi. CGNAT/Tailscale (100.64/10),
+    APIPA (169.254) va loopback chiqarib tashlanadi — boshqa kompyuterlar
+    ulardan serverga ULANOLMAYDI (faqat real LAN orqali ulanishadi)."""
+    import ipaddress
+    # ASOSIY manzil: internetga/gateway'ga marshrutlangan interfeys IP'si. Bu
+    # AYNAN boshqa kompyuterlar ko'radigan real LAN manzili (WSL/Hyper-V/Docker
+    # virtual adapterlari emas). UDP "ulanish" paket yubormaydi, faqat manbani
+    # aniqlaydi.
+    primary = None
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
-        ips.add(s.getsockname()[0])
+        primary = s.getsockname()[0]
         s.close()
     except OSError:
         pass
-    ips.discard("127.0.0.1")
-    return sorted(ips)
+
+    cands = set()
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None,
+                                       socket.AF_INET):
+            cands.add(info[4][0])
+    except socket.gaierror:
+        pass
+    if primary:
+        cands.add(primary)
+
+    _CGNAT = ipaddress.ip_network("100.64.0.0/10")   # Tailscale/CGNAT
+
+    def _rank(ip):
+        try:
+            a = ipaddress.ip_address(ip)
+        except ValueError:
+            return None
+        if a.is_loopback or a.is_link_local:          # 127.*, 169.254.*
+            return None
+        lan = a.is_private and a not in _CGNAT
+        is_primary = (ip == primary)
+        # 0 = asosiy real LAN (eng afzal); 1 = boshqa private (virtual adapter
+        # bo'lishi mumkin); 3/4 = CGNAT/public. Pastroq daraja — afzalroq.
+        if lan:
+            return (0 if is_primary else 1, ip)
+        return (3 if is_primary else 4, ip)
+
+    ranked = sorted(filter(None, (_rank(ip) for ip in cands)))
+    if not ranked:
+        return []
+    # Faqat ENG YAXSHI darajadagilarni qaytaramiz — asosiy real LAN topilsa,
+    # virtual/CGNAT/public manzillar (boshqa PC ko'rolmaydigan) tashlanadi.
+    best = ranked[0][0]
+    return [ip for tier, ip in ranked if tier == best]
 
 
 # --- Ed25519 imzo kaliti ----------------------------------------------------

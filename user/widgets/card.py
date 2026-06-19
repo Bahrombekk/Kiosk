@@ -41,7 +41,7 @@ def _svg_pixmap(svg, color_hex, size):
 
 # Davomiylik formati endi til-sezgir (i18n) — eski import joylari buzilmasin
 # deb shu nom bilan re-eksport qilinadi.
-from core.i18n import fmt_duration  # noqa: E402,F401
+from core.i18n import fmt_duration, genre_label  # noqa: E402,F401
 
 
 def _set_pressed(widget, on):
@@ -86,7 +86,7 @@ class ContentCard(QFrame):
         self.title.setObjectName("cardTitle")
         self.title.setWordWrap(True)
 
-        sub_parts = [p for p in (item.get("genre"),
+        sub_parts = [p for p in (genre_label(item.get("genre")),
                                  fmt_duration(item.get("duration"))) if p]
         self.sub = QLabel(" • ".join(sub_parts))   # dizayndagi '•' ajratuvchi
         self.sub.setObjectName("cardSub")

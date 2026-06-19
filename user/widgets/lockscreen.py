@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout
 from PyQt6.QtCore import Qt, QTimer
 
 from core import theme as T
+from core.i18n import tr
 from widgets.icons import svg_pixmap
 
 
@@ -53,21 +54,22 @@ class LockScreen(QWidget):
         icon.setPixmap(svg_pixmap("lock", "#EF4444", T.s(88)))
         icon.setStyleSheet("background: transparent;")
 
-        title = QLabel("Dastur vaqtincha ishlamayapti")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet(
+        # Matn ko'rsatilganda joriy tilда o'rnatiladi (UZ/RU/EN) — show_over().
+        self.title = QLabel("")
+        self.title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.title.setStyleSheet(
             f"color: #FFFFFF; font-size: {T.s(40)}px; font-weight: 800;"
             f" background: transparent;")
 
-        sub = QLabel("Iltimos, ma'muriyat bilan bog'laning.")
-        sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        sub.setStyleSheet(
+        self.sub = QLabel("")
+        self.sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.sub.setStyleSheet(
             f"color: #94A3B8; font-size: {T.s(22)}px; background: transparent;")
 
         lay.addStretch(1)
         lay.addWidget(icon)
-        lay.addWidget(title)
-        lay.addWidget(sub)
+        lay.addWidget(self.title)
+        lay.addWidget(self.sub)
         lay.addStretch(1)
         self.hide()
 
@@ -83,6 +85,8 @@ class LockScreen(QWidget):
 
     def show_over(self):
         """Ekranni to'liq qoplab, eng ustki qatlamda ko'rsatadi."""
+        self.title.setText(tr("lock.title"))   # joriy tilда (UZ/RU/EN)
+        self.sub.setText(tr("lock.sub"))
         self._tick()
         self.showFullScreen()
         self._place_clock()

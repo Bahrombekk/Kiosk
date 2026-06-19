@@ -60,6 +60,11 @@ Name: "uz"; MessagesFile: "compiler:Default.isl"
 ; Kiosk qulflash siyosatlari (Task Manager, Win tugmalari, ekran qulfi o'chadi).
 ; Texnik kompyuterga o'rnatishda belgini olib tashlash mumkin.
 Name: "lockdown"; Description: "Kiosk qulflash siyosatlarini yoqish (Task Manager, Win tugmalari, ekran qulfini o'chirish)"
+; Shell almashtirish — explorer (desktop/taskbar) o'rniga kiosk yuklanadi.
+; MUHIM: installerni AYNAN kiosk foydalanuvchisi nomidan ishga tushiring
+; (HKCU shu foydalanuvchiga yoziladi). Faqat shu foydalanuvchiga ta'sir qiladi —
+; admin akkaunt oddiy desktop bilan qoladi (xizmat uchun). Safe Mode ham qutqaradi.
+Name: "kioskshell"; Description: "Chinakam kiosk: yonganda DARHOL kiosk ochilsin, desktop UMUMAN ko'rinmasin (shell almashtirish)"; Flags: unchecked
 
 [Files]
 ; Butun PyInstaller build'i (release\Kiosk\* -> {app})
@@ -79,6 +84,16 @@ Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
     ValueType: string; ValueName: "Kiosk"; ValueData: """{app}\{#WatchdogExe}"""; \
     Flags: uninsdeletevalue
 
+; --- Shell almashtirish (faqat "kioskshell" task tanlansa) ---
+; Joriy (kiosk) foydalanuvchi uchun explorer.exe O'RNIGA watchdog yuklanadi —
+; yonganda desktop/taskbar UMUMAN chiqmaydi, to'g'ridan kiosk. FAQAT HKCU
+; (per-user): boshqa (admin) akkaunt oddiy explorer bilan qoladi. Uninstall'da
+; qiymat o'chadi -> explorer'ga qaytadi. Safe Mode bu qiymatni e'tiborsiz
+; qoldirib explorer yuklaydi (tiklash kafolati).
+Root: HKCU; Subkey: "Software\Microsoft\Windows NT\CurrentVersion\Winlogon"; \
+    ValueType: string; ValueName: "Shell"; ValueData: "{app}\{#WatchdogExe}"; \
+    Flags: uninsdeletevalue; Tasks: kioskshell
+
 ; --- Kiosk qulflash siyosatlari (lockdown vazifasi belgilangan bo'lsa) ---
 ; Ctrl+Alt+Del ni dasturdan bloklab bo'lmaydi (Windows himoyalangan
 ; ketma-ketligi) — buning o'rniga u ochadigan xavfli yo'llarni o'chiramiz:
@@ -97,14 +112,58 @@ Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System";
 Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer"; \
     ValueType: dword; ValueName: "NoWinKeys"; ValueData: 1; \
     Flags: uninsdeletevalue; Tasks: lockdown
+; Ctrl+Alt+Del menyusidan "Chiqish" (Sign out) va "Parolni o'zgartirish"ni o'chirish
+Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer"; \
+    ValueType: dword; ValueName: "NoLogoff"; ValueData: 1; \
+    Flags: uninsdeletevalue; Tasks: lockdown
+Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"; \
+    ValueType: dword; ValueName: "DisableChangePassword"; ValueData: 1; \
+    Flags: uninsdeletevalue; Tasks: lockdown
+; SENSORLI EKRAN: chetdan surish (edge swipe) — Action Center, vazifa ko'rinishi
+; va ilova almashishni ochadi. Kioskда o'chiramiz (klaviatura hook'i buni ko'rmaydi).
+Root: HKLM; Subkey: "SOFTWARE\Policies\Microsoft\Windows\EdgeUI"; \
+    ValueType: dword; ValueName: "AllowEdgeSwipe"; ValueData: 0; \
+    Flags: uninsdeletevalue; Tasks: lockdown
+; Vazifalar panelini qulflash kioskда — pastdan paydo bo'lmasin (mashina bo'ylab)
+Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer"; \
+    ValueType: dword; ValueName: "NoSetTaskbar"; ValueData: 1; \
+    Flags: uninsdeletevalue; Tasks: lockdown
+
+; --- Silliq yuklash (xavfsiz bezak) ---
+; Fast Startup — kompyuter tezroq yonadi (hiberboot)
+Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Power"; \
+    ValueType: dword; ValueName: "HiberbootEnabled"; ValueData: 1; \
+    Flags: uninsdeletevalue; Tasks: lockdown
+; Boot/login orasidagi "miltillash"ni yashirish — desktop foni kiosk brendiga
+; (screensaver rasmi). Shunda qisqa ko'rinadigan desktop ham kioskday tuyuladi.
+Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"; \
+    ValueType: string; ValueName: "Wallpaper"; \
+    ValueData: "{app}\_internal\assets\design\screensaver.png"; \
+    Flags: uninsdeletevalue; Tasks: lockdown
+Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"; \
+    ValueType: string; ValueName: "WallpaperStyle"; ValueData: "10"; \
+    Flags: uninsdeletevalue; Tasks: lockdown
 
 [Run]
+; 0) Silliq yuklash (xavfsiz bezak, faqat lockdown tanlansa):
+;    Fast Startup uchun hibernate yoqilishi kerak
+Filename: "{sys}\powercfg.exe"; Parameters: "/hibernate on"; \
+    Flags: runhidden; Tasks: lockdown
+;    Quiet boot — Windows yuklash logosi/aylanasini yashiradi (qora ekran).
+;    {{current} — Inno {current}ni emas, literal {current}ni bcdedit'ga uzatadi.
+Filename: "{sys}\bcdedit.exe"; Parameters: "/set {{current} quietboot yes"; \
+    Flags: runhidden; Tasks: lockdown
 ; 1) VLC plagin keshini o'rnatilgan yo'lga moslab generatsiya qilamiz
 ;    (video startupida 'stale cache' xatosi bo'lmasin, tez ochilsin)
 Filename: "{app}\_internal\vlc\vlc-cache-gen.exe"; \
     Parameters: """{app}\_internal\vlc\plugins"""; \
     StatusMsg: "Video kutubxonasi sozlanmoqda..."; Flags: runhidden waituntilterminated
-; 2) O'rnatish tugagach kioskni darhol ishga tushirish (watchdog orqali —
+; 2) Windows Firewall: discovery beacon (UDP) va server javoblarini qabul
+;    qilish uchun KIRISH ruxsati — kiosk serverni topib ulansin.
+Filename: "{sys}\netsh.exe"; \
+    Parameters: "advfirewall firewall add rule name=""Kiosk"" dir=in action=allow program=""{app}\{#AppExe}"" enable=yes profile=any"; \
+    Flags: runhidden
+; 3) O'rnatish tugagach kioskni darhol ishga tushirish (watchdog orqali —
 ;    qulasa avtomatik qayta ko'tariladi)
 Filename: "{app}\{#WatchdogExe}"; Description: "Kioskni hozir ishga tushirish"; \
     Flags: nowait postinstall skipifsilent
@@ -126,6 +185,7 @@ Type: dirifempty; Name: "{app}"
 ; qayta ishga tushirib yuboradi), keyin kioskning o'zini
 Filename: "{cmd}"; Parameters: "/C taskkill /IM {#WatchdogExe} /F"; Flags: runhidden; RunOnceId: "StopWatchdog"
 Filename: "{cmd}"; Parameters: "/C taskkill /IM {#AppExe} /F"; Flags: runhidden; RunOnceId: "StopKiosk"
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Kiosk"""; Flags: runhidden; RunOnceId: "DelFwKiosk"
 
 ; ----------------------------------------------------------------------------
 ;  Xavfsiz ulanish: trust.json (tavsiya) yoki qo'lda URL+kalit (eski usul)
@@ -141,6 +201,7 @@ var
   TrustPage: TInputFileWizardPage;
   ServerPage: TInputQueryWizardPage;
   KioskPage: TInputQueryWizardPage;
+  AutoLoginPage: TInputQueryWizardPage;
 
 procedure InitializeWizard();
 begin
@@ -158,10 +219,9 @@ begin
   ServerPage := CreateInputQueryPage(TrustPage.ID,
     'Server manzili (ixtiyoriy)',
     'trust.json tanlamagan bo''lsangiz to''ldiring',
-    'Yuqorida trust.json tanlagan bo''lsangiz, bu sahifani BO''SH qoldiring.' +
-    #13#10 + #13#10 +
-    'Aks holda server IP/port va API kalitni kiriting (eski usul, HTTP).' +
-    #13#10 + 'Masalan: http://192.168.136.69:8765');
+    'Yuqorida trust.json tanlagan bo''lsangiz, bu sahifani BO''SH qoldiring.' + #13#10 + #13#10 +
+    'Aks holda server IP/port va API kalitni kiriting (eski usul, HTTP).' + #13#10 +
+    'Masalan: http://192.168.136.69:8765');
   ServerPage.Add('Server manzili (URL):', False);
   ServerPage.Add('API kalit:', False);
 
@@ -174,6 +234,32 @@ begin
     'qayerdaligini shu orqali bilasiz. (Ixtiyoriy, lekin tavsiya etiladi.)');
   KioskPage.Add('Kiosk raqami (masalan: 12):', False);
   KioskPage.Add('Xona / vagon (masalan: 6-vagon):', False);
+
+  // Avto-login: kompyuter yonganda Windows o'zi kirib, kiosk to'liq ochilsin.
+  // Foydalanuvchi nomi AVTOMATIK aniqlanadi. Parol: akkauntда parol bo'lsa
+  // kiriting; bo'lmasa (parolsiz akkaunt) BO'SH qoldiring — baribir ishlaydi.
+  AutoLoginPage := CreateInputQueryPage(KioskPage.ID,
+    'Avtomatik kirish',
+    'Kompyuter yonganda kiosk PAROLSIZ o''zi ochilishi uchun',
+    'Foydalanuvchi nomi avtomatik aniqlandi (kerak bo''lsa o''zgartiring).' + #13#10 + #13#10 +
+    'Agar bu Windows akkauntида PAROL bo''lsa — uni kiriting. Parol qo''yilmagan ' +
+    'bo''lsa (masalan oddiy uy kompyuteri) — parolni BO''SH qoldiring, baribir ' +
+    'avto-kirish ishlaydi.' + #13#10 + #13#10 +
+    'Avto-kirish KERAK BO''LMASA — foydalanuvchi nomini BO''SH qoldiring ' +
+    '(oddiy login ekrani qoladi). Parol Windows registriga saqlanadi.');
+  AutoLoginPage.Add('Windows foydalanuvchi nomi:', False);
+  AutoLoginPage.Add('Windows paroli (bo''sh = parolsiz):', True);
+  // Joriy Windows foydalanuvchisini avtomatik to'ldiramiz
+  AutoLoginPage.Values[0] := GetUserNameString;
+end;
+
+// trust.json tanlangan bo'lsa — server URL/API sahifasi KERAK EMAS, o'tkazib
+// yuboramiz (kiosk serverni imzolangan beacon orqali o'zi topadi).
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result := False;
+  if PageID = ServerPage.ID then
+    Result := Trim(TrustPage.Values[0]) <> '';
 end;
 
 function NormalizeUrl(S: string): string;
@@ -242,16 +328,55 @@ begin
     // lekin kiosk raqami/xona baribir yoziladi (admin panelда ko'rinsin).
     Txt := '# Kiosk sozlamasi. Tahrirlab qayta ishga tushiring ' +
            '(qayta o''rnatish shart emas).' + #13#10;
-    if Trim(ServerPage.Values[0]) <> '' then
+    // URL/kalit FAQAT trust.json BO'LMAGANDA yoziladi (trust.json bo'lsa
+    // server beacon orqali topiladi va kalit trust.json'da bor).
+    if (TrustSrc = '') and (Trim(ServerPage.Values[0]) <> '') then
       Txt := Txt + NormalizeUrl(ServerPage.Values[0]) + #13#10 +
              'key=' + Trim(ServerPage.Values[1]) + #13#10;
     if Trim(KioskPage.Values[0]) <> '' then
       Txt := Txt + 'kiosk=' + Trim(KioskPage.Values[0]) + #13#10;
     if Trim(KioskPage.Values[1]) <> '' then
       Txt := Txt + 'xona=' + Trim(KioskPage.Values[1]) + #13#10;
-    // URL yoki kiosk/xona kiritilgan bo'lsagina faylni yozamiz
-    if (Trim(ServerPage.Values[0]) <> '') or (Trim(KioskPage.Values[0]) <> '')
-       or (Trim(KioskPage.Values[1]) <> '') then
+    // URL (trust.jsonsiz) yoki kiosk/xona kiritilgan bo'lsagina faylni yozamiz
+    if ((TrustSrc = '') and (Trim(ServerPage.Values[0]) <> '')) or
+       (Trim(KioskPage.Values[0]) <> '') or (Trim(KioskPage.Values[1]) <> '') then
       SaveStringToFile(AppDir + '\server.txt', Txt, False);
+
+    // Avto-login: foydalanuvchi nomi kiritilgan bo'lsa Winlogon registriga
+    // yozamiz — kompyuter yonganda Windows o'zi kiradi va kiosk to'liq ochiladi.
+    if Trim(AutoLoginPage.Values[0]) <> '' then
+    begin
+      RegWriteStringValue(HKLM,
+        'SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon',
+        'AutoAdminLogon', '1');
+      RegWriteStringValue(HKLM,
+        'SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon',
+        'DefaultUserName', Trim(AutoLoginPage.Values[0]));
+      RegWriteStringValue(HKLM,
+        'SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon',
+        'DefaultPassword', AutoLoginPage.Values[1]);
+    end;
+  end;
+end;
+
+// O'chirishda (uninstall) avto-login'ni qaytaramiz — parol registrda qolib
+// ketmasin (xavfsizlik): AutoAdminLogon=0 va saqlangan parolni o'chiramiz.
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  RC: Integer;
+begin
+  if CurUninstallStep = usUninstall then
+  begin
+    // Avto-login'ni qaytaramiz (parol registrda qolmasin)
+    RegWriteStringValue(HKLM,
+      'SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon',
+      'AutoAdminLogon', '0');
+    RegDeleteValue(HKLM,
+      'SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon',
+      'DefaultPassword');
+    // Quiet boot'ni qaytaramiz (Windows yuklash logosi yana ko'rinadi)
+    Exec(ExpandConstant('{sys}\bcdedit.exe'),
+         '/deletevalue {current} quietboot', '', SW_HIDE,
+         ewWaitUntilTerminated, RC);
   end;
 end;

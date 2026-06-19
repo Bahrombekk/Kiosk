@@ -33,6 +33,8 @@ class StatsPageMixin:
         top.addWidget(self._btn("Yangilash", "refresh-cw",
                                 self.refresh_usage_stats, kind="ghost"))
         top.addStretch(1)
+        top.addWidget(self._btn("Statistikani tozalash", "trash-2",
+                                self._reset_stats, kind="danger"))
         lay.addLayout(top)
 
         # Umumiy hisob kartalari
@@ -93,6 +95,20 @@ class StatsPageMixin:
         bottom.addWidget(self.tbl_langs["card"], 1)
         bottom.addWidget(self.tbl_ads["card"], 1)
         lay.addLayout(bottom, 1)
+
+        # Uchinchi qator: soatlik faollik, kiosk bo'yicha, QR/SOS xulosasi
+        row3 = QHBoxLayout()
+        row3.setSpacing(14)
+        self.tbl_hours = self._stats_table(
+            ["Soat", "Kirishlar"], "Soatlik faollik (gavjum vaqtlar)")
+        self.tbl_kiosk = self._stats_table(
+            ["Kiosk", "Sessiyalar"], "Kiosk bo'yicha")
+        self.tbl_qrsos = self._stats_table(
+            ["Amal", "Soni"], "QR va SOS")
+        row3.addWidget(self.tbl_hours["card"], 1)
+        row3.addWidget(self.tbl_kiosk["card"], 1)
+        row3.addWidget(self.tbl_qrsos["card"], 1)
+        lay.addLayout(row3, 1)
         return w
 
     def _stats_table(self, headers, title):
@@ -122,6 +138,11 @@ class StatsPageMixin:
             top_screens = db.stats_top("screen_view", "screen", days)
             langs = db.stats_top("lang_change", "lang", days)
             ads = db.stats_top("ad_play", "title", days, limit=20)
+            hours = db.stats_hourly(days)
+            by_kiosk = db.stats_by_kiosk(days)
+            qr_n = db.stats_event_count("site_qr", days)
+            sos_n = db.stats_event_count("sos_open", days)
+            kiosks = {k["device_id"]: k for k in db.get_kiosks()}
         except Exception:
             # DB hali tayyor bo'lmasa (birinchi ochilish) — bo'sh qoldiramiz
             return
@@ -139,6 +160,39 @@ class StatsPageMixin:
         self._fill(self.tbl_langs["table"],
                    [(str(r["name"]).upper(), r["n"]) for r in langs])
         self._fill(self.tbl_ads["table"], [(r["name"], r["n"]) for r in ads])
+        # Soatlik faollik — "HH:00" ko'rinishida
+        self._fill(self.tbl_hours["table"],
+                   [(f"{r['hr']}:00", r["n"]) for r in hours])
+        # Kiosk bo'yicha — kiosk_no/xona bilan tushunarli yorliq (bo'lmasa ID)
+        def _klabel(dev):
+            k = kiosks.get(dev)
+            if k and (k.get("kiosk_no") or k.get("room")):
+                parts = [p for p in (k.get("kiosk_no"), k.get("room")) if p]
+                return " / ".join(parts)
+            return dev
+        self._fill(self.tbl_kiosk["table"],
+                   [(_klabel(r["dev"]), r["n"]) for r in by_kiosk])
+        # QR va SOS — yagona ko'rsatkichlar
+        self._fill(self.tbl_qrsos["table"],
+                   [("Sayt QR ochildi", qr_n), ("SOS ochildi", sos_n)])
+
+    def _reset_stats(self):
+        """Barcha foydalanish statistikasini 0 ga tushiradi (tasdiqlash bilan)."""
+        from PyQt6.QtWidgets import QMessageBox
+        if QMessageBox.question(
+                self, "Statistikani tozalash",
+                "Barcha foydalanish statistikasi butunlay o'chiriladi va "
+                "hisoblar 0 ga tushadi.\n\nBu amalni QAYTARIB BO'LMAYDI. "
+                "Davom etilsinmi?") != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            db.clear_stats()
+            db.log_action("stats_cleared", "all")
+        except Exception:
+            self.statusBar().showMessage("Statistikani tozalashda xato.", 4000)
+            return
+        self.refresh_usage_stats()
+        self.statusBar().showMessage("Statistika tozalandi (0 ga tushdi).", 4000)
 
     @staticmethod
     def _fill(table, rows):

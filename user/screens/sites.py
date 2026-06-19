@@ -15,6 +15,7 @@ from PyQt6.QtGui import QColor
 from core import theme as T
 from core.i18n import tr
 from core.threads import track
+from services import stats
 from widgets.empty import EmptyState
 from widgets.modal import Modal
 from widgets.qr import QRWidget
@@ -336,6 +337,8 @@ class SitesScreen(QWidget):
             self._render()
 
     def _open_detail(self, item):
+        # Sayt QR sahifasi ochildi — engagement statistikasi (telefoniga olish)
+        stats.event("site_qr", site=item.get("name"))
         self._modal = _SiteDetail(self.window(), item)
         self._modal.show_over(self.theme_name)
 

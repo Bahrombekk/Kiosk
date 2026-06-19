@@ -230,6 +230,7 @@ def _ensure_defaults(conn):
             ("sos_enabled", "0"),
             ("active_route_direction", "0"),   # 0=borish, 1=qaytish (kioskda faol)
             ("weather_auto", "1"),             # 1=internet ob-havo, 0=qo'lda harorat
+            ("speed_auto", "1"),               # 1=jadvaldan tezlik, 0=qo'lda tezlik
             ("trial_enabled", "0"),            # 1=sinov muddati nazorati yoqiq
             ("trial_start", ""),               # topshirish sanasi YYYY-MM-DD
             ("trial_days", "30"),              # necha kunga berilgan
@@ -787,6 +788,42 @@ def stats_top(event, key, days=7, limit=10):
                 GROUP BY name ORDER BY n DESC LIMIT ?""",
             (event, _stats_since(days), limit)).fetchall()
     return [dict(r) for r in rows]
+
+
+def stats_event_count(event, days=7):
+    """Bitta event turining umumiy soni (SOS, QR kabi yagona ko'rsatkichlar)."""
+    with closing(connect()) as conn:
+        return conn.execute(
+            "SELECT COUNT(*) AS n FROM stats_events WHERE event=? AND ts >= ?",
+            (event, _stats_since(days))).fetchone()["n"]
+
+
+def stats_hourly(days=7):
+    """Soatlik faollik (peak hours): [{hr, n}] — eng gavjum soat birinchi.
+    screen_view (ekran navigatsiyasi) bo'yicha hisoblanadi."""
+    with closing(connect()) as conn:
+        rows = conn.execute(
+            "SELECT substr(ts,12,2) AS hr, COUNT(*) AS n FROM stats_events "
+            "WHERE event='screen_view' AND ts >= ? AND length(ts) >= 13 "
+            "GROUP BY hr ORDER BY n DESC", (_stats_since(days),)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def stats_by_kiosk(days=7):
+    """Kiosk bo'yicha sessiyalar: [{dev, n}] — eng faol kiosk birinchi."""
+    with closing(connect()) as conn:
+        rows = conn.execute(
+            "SELECT device_id AS dev, COUNT(*) AS n FROM stats_events "
+            "WHERE event='session_end' AND ts >= ? AND device_id IS NOT NULL "
+            "AND device_id != '' GROUP BY device_id ORDER BY n DESC",
+            (_stats_since(days),)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def clear_stats():
+    """Barcha foydalanish statistikasini o'chiradi (hisoblarni 0 ga tushiradi)."""
+    with _conn() as c:
+        c.execute("DELETE FROM stats_events")
 
 
 def stats_totals(days=7):

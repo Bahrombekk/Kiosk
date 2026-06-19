@@ -429,16 +429,18 @@ def _safe_int(v, default):
 
 
 def _hhmm_to_min(t):
-    """'HH:MM' ni daqiqaga o'giradi; noto'g'ri format — None."""
+    """'HH:MM' ni daqiqaga o'giradi; noto'g'ri format — None.
+    Nuqtali variant ('2.21') ham qabul qilinadi (ba'zi jadval yozuvlari)."""
     try:
-        h, m = str(t).split(":")
+        h, m = str(t).replace(".", ":").split(":")[:2]
         return int(h) * 60 + int(m)
     except (ValueError, AttributeError):
         return None
 
 
-def _current_stop(stops, now_min):
-    """Joriy bekatni aniqlaydi — YARIM TUNDAN O'TADIGAN reyslarda ham to'g'ri.
+def _current_stop_index(stops, now_min):
+    """Joriy bekat INDEKSINI aniqlaydi — YARIM TUNDAN O'TADIGAN reyslarda ham
+    to'g'ri.
 
     Oddiy 'HH:MM <= now' string solishtirish 22:34 da jo'nab 01:01 da keyingi
     bekatga yetadigan poyezdda buziladi. Yechim: bekat vaqtlarini ketma-ket
@@ -446,8 +448,6 @@ def _current_stop(stops, now_min):
     vaqtni shu o'qda joylashtiramiz."""
     if not stops:
         return None
-    # Joriy bekat YOZUVINI (dict) qaytaramiz — chaqiruvchi nom va koordinatani
-    # (ob-havo uchun) oladi.
     seq, prev = [], None
     for st in stops:
         t = _hhmm_to_min(st.get("arrival_time") or st.get("departure_time"))
@@ -458,7 +458,7 @@ def _current_stop(stops, now_min):
             prev = t
     valid = [(i, t) for i, t in enumerate(seq) if t is not None]
     if not valid or now_min is None:
-        return stops[0]
+        return 0
     start, end = valid[0][1], valid[-1][1]
     cand = now_min
     if cand < start and cand + 1440 <= end + 60:
@@ -467,7 +467,37 @@ def _current_stop(stops, now_min):
     for i, t in valid:
         if t <= cand:
             cur_idx = i
-    return stops[cur_idx]
+    return cur_idx
+
+
+def _current_stop(stops, now_min):
+    """Joriy bekat YOZUVI (dict) yoki None — nom va koordinata uchun."""
+    idx = _current_stop_index(stops, now_min)
+    if idx is None:
+        return None
+    return stops[idx]
+
+
+def _segment_speed(stops, now_min):
+    """Joriy segment (joriy bekat -> keyingi bekat) o'rtacha tezligi km/h.
+    Jadvaldagi masofa (distance_km) va vaqt farqidan hisoblanadi. Oxirgi
+    bekatda 0 (yetib keldi); ma'lumot yetarli bo'lmasa None."""
+    idx = _current_stop_index(stops, now_min)
+    if idx is None:
+        return None
+    if idx >= len(stops) - 1:
+        return 0
+    cur, nxt = stops[idx], stops[idx + 1]
+    d0, d1 = cur.get("distance_km"), nxt.get("distance_km")
+    t_dep = _hhmm_to_min(cur.get("departure_time") or cur.get("arrival_time"))
+    t_arr = _hhmm_to_min(nxt.get("arrival_time") or nxt.get("departure_time"))
+    if d0 is None or d1 is None or t_dep is None or t_arr is None:
+        return None
+    dist = d1 - d0
+    mins = (t_arr - t_dep) % 1440
+    if dist <= 0 or mins <= 0:
+        return None
+    return round(dist / (mins / 60.0))
 
 
 def status_payload():
@@ -479,8 +509,15 @@ def status_payload():
     s = db.get_settings()
     stops = db.get_route()
     now = datetime.now()
-    cur_stop = _current_stop(stops, now.hour * 60 + now.minute)
+    now_min = now.hour * 60 + now.minute
+    cur_stop = _current_stop(stops, now_min)
     current = cur_stop["name"] if cur_stop else None
+    # Tezlik: avto (jadvaldan segment o'rtacha) yoki qo'lda kiritilgan qiymat.
+    speed = _safe_int(s.get("speed"), 210)
+    if s.get("speed_auto", "1") != "0":
+        sp = _segment_speed(stops, now_min)
+        if sp is not None:
+            speed = sp
     # Harorat: internet ob-havo yoqilgan bo'lsa joriy bekat hududi + joriy vaqt
     # bo'yicha keshdan; topilmasa (kesh yo'q/eskirgan) qo'lda kiritilgan qiymat.
     temperature = _safe_int(s.get("temperature"), 22)
@@ -490,7 +527,7 @@ def status_payload():
         if wt is not None:
             temperature = wt
     return {
-        "speed": _safe_int(s.get("speed"), 210),
+        "speed": speed,
         "temperature": temperature,
         "wagon": s.get("wagon_number"),
         "wagon_note": s.get("wagon_note"),

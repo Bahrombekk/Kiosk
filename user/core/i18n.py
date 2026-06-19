@@ -61,6 +61,45 @@ def tr(key, **kw):
         return txt
 
 
+# Janr/bo'lim nomlari odatda admin tilida (o'zbekcha) kiritiladi. RU/EN tanlanса
+# tab/bo'lim sarlavhalari aralash ko'rinmasin — KENG TARQALGAN janrlarni
+# tarjima qilamiz; ro'yxatda yo'q (maxsus) janr xom holicha qoladi.
+_GENRE_MAP = {
+    "badiiy": ("Художественная", "Fiction"),
+    "tarixiy": ("Историческая", "Historical"),
+    "bolalar adabiyoti": ("Детская литература", "Children's"),
+    "bolalar": ("Детская", "Children's"),
+    "biznes": ("Бизнес", "Business"),
+    "ilmiy": ("Научная", "Science"),
+    "ilmiy-fantastika": ("Научная фантастика", "Sci-Fi"),
+    "fantastika": ("Фантастика", "Fantasy"),
+    "detektiv": ("Детектив", "Detective"),
+    "komediya": ("Комедия", "Comedy"),
+    "drama": ("Драма", "Drama"),
+    "melodrama": ("Мелодрама", "Melodrama"),
+    "jangari": ("Боевик", "Action"),
+    "triller": ("Триллер", "Thriller"),
+    "multfilm": ("Мультфильм", "Cartoon"),
+    "hujjatli": ("Документальная", "Documentary"),
+    "zamonaviy": ("Современная", "Modern"),
+    "instrumental": ("Инструментальная", "Instrumental"),
+    "saundtrek": ("Саундтрек", "Soundtrack"),
+    "audiokitob": ("Аудиокнига", "Audiobook"),
+    "namuna": ("Образец", "Sample"),
+}
+
+
+def genre_label(name):
+    """Janr/bo'lim nomini joriy tilда qaytaradi. Ma'lum janr tarjima qilinadi,
+    noma'lumi — xom holicha (admin kiritgan tilда)."""
+    if not name:
+        return name
+    pair = _GENRE_MAP.get(name.strip().lower())
+    if pair is None or _lang == "uz":
+        return name
+    return pair[0] if _lang == "ru" else pair[1]
+
+
 def month_name(m):
     """Oy nomi (m = 1..12), joriy tilda. RU — roditelniy kelishik (sana uchun)."""
     return MONTHS[_lang][m - 1]
@@ -79,7 +118,10 @@ def fmt_duration(seconds):
         return tr("dur.hour_min", h=h, m=m)
     if h:
         return tr("dur.hour", h=h)
-    return tr("dur.min", m=m)
+    if m:
+        return tr("dur.min", m=m)
+    # 1 daqiqadan kam (qisqa klip) — "0 daqiqa" emas, soniya ko'rsatamiz
+    return tr("dur.sec", s=seconds)
 
 
 # Har kalit: (uz, ru, en)
@@ -247,6 +289,15 @@ STRINGS = {
     "dur.hour_min": ("{h} soat {m} daqiqa", "{h} ч {m} мин", "{h} h {m} min"),
     "dur.hour":     ("{h} soat",            "{h} ч",         "{h} h"),
     "dur.min":      ("{m} daqiqa",          "{m} мин",       "{m} min"),
+    "dur.sec":      ("{s} soniya",          "{s} сек",       "{s} sec"),
+
+    # --- Qulf ekrani (sinov muddati / litsenziya bloki) ---
+    "lock.title": ("Dastur vaqtincha ishlamayapti",
+                   "Программа временно недоступна",
+                   "Service temporarily unavailable"),
+    "lock.sub":   ("Iltimos, ma'muriyat bilan bog'laning.",
+                   "Пожалуйста, обратитесь к администрации.",
+                   "Please contact the administration."),
 }
 
 MONTHS = {

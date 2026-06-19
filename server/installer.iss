@@ -72,11 +72,21 @@ Type: filesandordirs; Name: "{app}\content\covers"
 Type: filesandordirs; Name: "{app}\content\media"
 
 [Run]
+; Windows Firewall: kiosklar serverga ulana olishi uchun KIRISH ruxsati
+; (TCP 8765 API/WS + UDP 8766 discovery). Aks holda kiosklar "ulanib bo'lmadi".
+Filename: "{sys}\netsh.exe"; \
+    Parameters: "advfirewall firewall add rule name=""KioskServer"" dir=in action=allow program=""{app}\{#AppExe}"" enable=yes profile=any"; \
+    Flags: runhidden
+Filename: "{sys}\netsh.exe"; \
+    Parameters: "advfirewall firewall add rule name=""KioskServer-8765"" dir=in action=allow protocol=TCP localport=8765 enable=yes profile=any"; \
+    Flags: runhidden
 Filename: "{app}\{#AppExe}"; Description: "Kiosk Serverni hozir ishga tushirish"; \
     Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
 Filename: "{cmd}"; Parameters: "/C taskkill /IM {#AppExe} /F"; Flags: runhidden; RunOnceId: "StopKioskServer"
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""KioskServer"""; Flags: runhidden; RunOnceId: "DelFwKioskServer"
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""KioskServer-8765"""; Flags: runhidden; RunOnceId: "DelFwKioskServer8765"
 
 [UninstallDelete]
 Type: files; Name: "{app}\data.db-wal"

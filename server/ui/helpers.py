@@ -107,12 +107,8 @@ def port_in_use(port, host="127.0.0.1"):
 
 
 def local_ips():
-    """Tarmoqdagi mahalliy IP manzillarni qaytaradi (user qurilmalar shunga ulanadi)."""
-    ips = set()
-    try:
-        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
-            ips.add(info[4][0])
-    except socket.gaierror:
-        pass
-    ips.discard("127.0.0.1")
-    return sorted(ips) or ["127.0.0.1"]
+    """Tarmoqdagi mahalliy IP manzillar (user qurilmalar shunga ulanadi).
+    security._local_ipv4s bilan bitta mantiq: haqiqiy LAN afzal, CGNAT/Tailscale
+    chiqarib tashlanadi (aks holda admin ekrani noto'g'ri IP ko'rsatardi)."""
+    import security
+    return security._local_ipv4s() or ["127.0.0.1"]

@@ -34,6 +34,9 @@ VK_ESCAPE = 0x1B
 VK_F4 = 0x73
 VK_LWIN = 0x5B
 VK_RWIN = 0x5C
+VK_APPS = 0x5D       # kontekst-menyu (o'ng tugma) klavishi
+VK_CONTROL = 0x11
+VK_SHIFT = 0x10
 LLKHF_ALTDOWN = 0x20
 
 _user32 = ctypes.windll.user32
@@ -51,19 +54,41 @@ class KBDLLHOOKSTRUCT(ctypes.Structure):
                 ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong))]
 
 
-_HOOKPROC = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_int,
+_HOOKPROC = ctypes.WINFUNCTYPE(ctypes.c_ssize_t, ctypes.c_int,
                                wintypes.WPARAM, wintypes.LPARAM)
+
+# MUHIM (64-bit): funksiya imzolarini ANIQ belgilaymiz. Aks holda ctypes
+# qaytar qiymatni c_int (32-bit) deb hisoblaydi va GetModuleHandleW/
+# SetWindowsHookExW qaytargan 64-bitli HANDLE kesiladi -> yaroqsiz modul
+# handle -> SetWindowsHookExW XATO 126 (ERROR_MOD_NOT_FOUND), hook o'rnatilmaydi.
+_kernel32.GetModuleHandleW.restype = ctypes.c_void_p
+_kernel32.GetModuleHandleW.argtypes = [wintypes.LPCWSTR]
+_user32.SetWindowsHookExW.restype = ctypes.c_void_p
+_user32.SetWindowsHookExW.argtypes = [
+    ctypes.c_int, _HOOKPROC, ctypes.c_void_p, wintypes.DWORD]
+_user32.CallNextHookEx.restype = ctypes.c_ssize_t
+_user32.CallNextHookEx.argtypes = [
+    ctypes.c_void_p, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM]
+_user32.UnhookWindowsHookEx.restype = wintypes.BOOL
+_user32.UnhookWindowsHookEx.argtypes = [ctypes.c_void_p]
 
 
 def _should_block(vk, flags):
+    # Win tugmasi (Start, Win+R/D/E/Tab/L...) — keydown'ni yutamiz, demak Win
+    # bilan boshlanadigan HAR QANDAY kombinatsiya tuzilmaydi.
     if vk in (VK_LWIN, VK_RWIN):
-        return True                      # Win tugmasi (Start, Win+R, Win+D...)
+        return True
+    if vk == VK_APPS:
+        return True                      # kontekst-menyu (o'ng tugma) klavishi
     alt = bool(flags & LLKHF_ALTDOWN)
     if alt and vk in (VK_TAB, VK_ESCAPE, VK_F4):
         return True                      # Alt+Tab, Alt+Esc, Alt+F4 (oynani yopish)
-    ctrl = _user32.GetAsyncKeyState(0x11) & 0x8000   # VK_CONTROL
+    ctrl = bool(_user32.GetAsyncKeyState(VK_CONTROL) & 0x8000)
     if ctrl and vk == VK_ESCAPE:
-        return True                      # Ctrl+Esc (Start menyu)
+        # Ctrl+Esc (Start) VA Ctrl+Shift+Esc (Vazifa menejeri) — ikkalasi ham
+        # shu shartga tushadi (Ctrl bosilgan + Esc), shuning uchun Dispetcher
+        # zadach to'g'ridan-to'g'ri ochilmaydi.
+        return True
     return False
 
 
@@ -98,7 +123,8 @@ def install():
         log.error("Klaviatura qulfini o'rnatib bo'lmadi (xato %d)",
                   _kernel32.GetLastError())
         return False
-    log.info("Klaviatura qulfi yoqildi (Win/Alt+Tab/Ctrl+Esc bloklanadi)")
+    log.info("Klaviatura qulfi yoqildi (Win/Alt+Tab/Alt+F4/Ctrl+Esc/"
+             "Ctrl+Shift+Esc/kontekst-menyu bloklanadi)")
     return True
 
 

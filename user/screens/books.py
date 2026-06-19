@@ -13,7 +13,7 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QTimer
 from PyQt6.QtGui import QIcon
 
 from core import theme as T
-from core.i18n import tr
+from core.i18n import tr, genre_label
 from core.threads import track
 from services import stats
 from widgets.card import BookCard, can_read, can_listen, _svg_pixmap
@@ -151,7 +151,9 @@ class BooksScreen(QWidget):
                 w.deleteLater()
         self.tab_btns = []
         for i, (match, label, _svg) in enumerate(self._tabs):
-            text = tr(label) if match is None else label   # Barchasi tarjima qilinadi
+            # "Barchasi" — i18n kaliti; janr nomi — genre_label (ma'lum janr
+            # joriy tilда, noma'lumi xom). Aralash til ko'rinmasin.
+            text = tr(label) if match is None else genre_label(label)
             b = QPushButton(" " + text)
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             b.setCheckable(True)

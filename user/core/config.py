@@ -145,12 +145,14 @@ RECONNECT_INTERVAL_MS = 5000
 # Boshlang'ich mavzu: "light" yoki "dark"
 DEFAULT_THEME = "light"
 
-# --- VAQTINCHALIK: kiosk rejimni o'chirish (oddiy ramkali oyna) ---
-# WINDOWED=True bo'lsa: oyna ramkali (minimize/maximize/close tugmalari),
-# fullscreen emas, OS klaviatura qulfi (Win/Alt+Tab) o'rnatilmaydi — ishlab
-# chiqish/sozlash payti chiqib-kirishni osonlashtiradi.
-# Kiosk rejimga qaytarish: KIOSK_WINDOWED=0 env yoki bu qiymatni False qiling.
-WINDOWED = os.environ.get("KIOSK_WINDOWED", "1") != "0"
+# --- Oyna rejimi: kiosk (fullscreen, qulfli) yoki oddiy ramkali oyna ---
+# WINDOWED=True: ramkali oyna (min/max/close), fullscreen emas, OS qulfi yo'q —
+# ishlab chiqish/sozlash uchun qulay.
+# STANDART: frozen (build qilingan Kiosk.exe) -> KIOSK REJIM (fullscreen);
+# manbadan (python main.py) -> oddiy oyna. Ya'ni o'rnatilgan kiosk avtomatik
+# to'liq ekran bo'ladi. Aniq boshqarish: KIOSK_WINDOWED=1 (oddiy) / =0 (kiosk).
+WINDOWED = os.environ.get(
+    "KIOSK_WINDOWED", "0" if getattr(sys, "frozen", False) else "1") != "0"
 
 # --- Maxfiy texnik chiqish (kiosk qulflangan bo'lsa ham ishlaydi) ---
 # Navbar'dagi SOAT ustiga EXIT_TAPS marta tez-tez tegilsa PIN klaviatura

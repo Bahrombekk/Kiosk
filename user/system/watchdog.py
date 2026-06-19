@@ -93,6 +93,22 @@ def _kiosk_cmd():
     return [sys.executable, os.path.join(_base_dir(), "main.py")]
 
 
+def _ensure_desktop_shell():
+    """Toza chiqishda: agar BIZ Windows shell bo'lsak (explorer ishlamayapti —
+    ya'ni shell almashtirilgan kiosk), texnik xizmat uchun explorer.exe ni
+    ishga tushiramiz. Aks holda (oddiy rejim, explorer allaqachon ishlayapti)
+    hech narsa qilmaymiz — ortiqcha oyna ochilmasin."""
+    try:
+        out = subprocess.run(
+            ["tasklist", "/FI", "IMAGENAME eq explorer.exe", "/NH"],
+            capture_output=True, text=True, timeout=10,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        if "explorer.exe" not in (out.stdout or "").lower():
+            subprocess.Popen(["explorer.exe"])
+    except Exception:                                # noqa: BLE001
+        pass
+
+
 def main():
     if os.name != "nt":
         sys.exit("Bu watchdog faqat Windows uchun.")
@@ -114,12 +130,14 @@ def main():
         rc = proc.wait()
         if rc == 0:
             log.info("Kiosk toza yopildi (admin chiqishi) — watchdog tugaydi")
+            _ensure_desktop_shell()   # shell bo'lsak — explorer ochamiz (xizmat)
             return
         # Texnik xizmat: admin/operator stop-sentinel qoldirgan bo'lsa, ilova
         # tashqaridan o'ldirilgan bo'lsa ham qayta tirkamaymiz.
         if _stop_requested():
             log.info("Stop-sentinel topildi — watchdog qayta tushirmaydi")
             _clear_stop()
+            _ensure_desktop_shell()
             return
         log.warning("Kiosk quladi (chiqish kodi %s) — qayta ishga tushiriladi", rc)
 

@@ -231,13 +231,37 @@ class CoverLabel(QLabel):
         except RuntimeError:
             pass  # karta ro'yxat qayta renderida o'chirilgan bo'lishi mumkin
 
+    def _compose(self, src):
+        """Rasmni qutiga KESMASDAN joylaydi: butun rasm (fit) markazda sharp
+        ko'rinadi; nisbat mos kelmasa (portret poster 16:9 kartaga) bo'sh yonlar
+        o'sha rasmning XIRA (blur) nusxasi bilan to'ladi. Landshaft rasmlar
+        qutini to'liq qoplaydi — blur ko'rinmaydi (avvalgidek)."""
+        w, h = self._w, self._h
+        canvas = QPixmap(w, h)
+        canvas.fill(Qt.GlobalColor.transparent)
+        p = QPainter(canvas)
+        p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        fit = src.scaled(w, h, Qt.AspectRatioMode.KeepAspectRatio,
+                         Qt.TransformationMode.SmoothTransformation)
+        if fit.width() < w - 1 or fit.height() < h - 1:
+            # Bo'sh joy bor — orqaga blurli to'ldirish (arzon: kichraytir-kattalashtir)
+            fill = src.scaled(w, h, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                              Qt.TransformationMode.SmoothTransformation)
+            small = fill.scaled(max(1, w // 12), max(1, h // 12),
+                                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                                Qt.TransformationMode.SmoothTransformation)
+            blur = small.scaled(w, h, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                                Qt.TransformationMode.SmoothTransformation)
+            p.drawPixmap((w - blur.width()) // 2, (h - blur.height()) // 2, blur)
+            p.fillRect(0, 0, w, h, QColor(8, 12, 24, 90))   # yengil qoraytirish
+        p.drawPixmap((w - fit.width()) // 2, (h - fit.height()) // 2, fit)
+        p.end()
+        return canvas
+
     def _render_scaled(self):
         if self._orig is None or self._w < 2 or self._h < 2:
             return
-        scaled = self._orig.scaled(
-            self._w, self._h, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-            Qt.TransformationMode.SmoothTransformation)
-        out = self._rounded(scaled)
+        out = self._rounded(self._compose(self._orig))
         old = self.pixmap()
         # fade_on_next: eski rasm yangisiga ERIYDI (crossfade) — opacity
         # "blink"isiz, zamonaviy almashinish (aylanma tavsiya uchun).

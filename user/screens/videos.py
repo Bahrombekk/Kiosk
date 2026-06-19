@@ -16,7 +16,7 @@ from PyQt6.QtGui import QPixmap, QPainter, QColor, QIcon
 from PyQt6.QtSvg import QSvgRenderer
 
 from core import theme as T
-from core.i18n import tr
+from core.i18n import tr, genre_label
 from core.threads import track
 from services import stats
 from widgets.card import ContentCard, fmt_duration
@@ -318,7 +318,8 @@ class VideosScreen(QWidget):
         for gname, gitems in groups:
             if show_headers:
                 self.vbox.addWidget(self._genre_header(
-                    gname or tr("common.other"), len(gitems)))
+                    genre_label(gname) if gname else tr("common.other"),
+                    len(gitems)))
             host = QWidget()
             host.setStyleSheet("background: transparent;")
             grid = QGridLayout(host)

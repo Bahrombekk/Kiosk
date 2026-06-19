@@ -165,6 +165,43 @@ class SettingsPageMixin:
         w_hint.setObjectName("hint")
         w_hint.setWordWrap(True)
         clay.addWidget(w_hint)
+
+        # Tezlik: avto (jadvaldan segment o'rtacha) yoki qo'lda kiritilgan son.
+        self.s_speed_auto = ToggleSwitch()
+        self.s_speed_auto_lbl = QLabel()
+        self.s_speed = QSpinBox()
+        self.s_speed.setRange(0, 400)
+        self.s_speed.setSuffix(" km/h")
+        no_wheel(self.s_speed)
+
+        def _upd_speed(_c=None):
+            on = self.s_speed_auto.isChecked()
+            self.s_speed_auto_lbl.setText(
+                "Jadvaldan (avtomatik)" if on else "Qo'lda kiritilgan tezlik")
+            self.s_speed.setEnabled(not on)
+        self.s_speed_auto.toggled.connect(_upd_speed)
+        self._upd_speed = _upd_speed
+        sp_row = QHBoxLayout()
+        sp_row.setContentsMargins(0, 0, 0, 0)
+        sp_row.setSpacing(12)
+        sp_row.addWidget(self.s_speed_auto)
+        sp_row.addWidget(self.s_speed_auto_lbl)
+        sp_row.addStretch(1)
+        sp_holder = QWidget()
+        sp_holder.setLayout(sp_row)
+        sg = QGridLayout()
+        sg.setHorizontalSpacing(14)
+        sg.addLayout(self._field("Tezlik manbai", sp_holder), 0, 0)
+        sg.addLayout(self._field("Qo'lda tezlik", self.s_speed), 0, 1)
+        sg.setColumnStretch(0, 1)
+        clay.addLayout(sg)
+        sp_hint = QLabel(
+            "Avtomatik yoqilganda tezlik jadvaldan hisoblanadi — joriy bekat va "
+            "keyingi bekat oralig'idagi masofa/vaqt bo'yicha o'rtacha (poyezd "
+            "yurgani sayin o'zgaradi). O'chirilsa — yuqoridagi qo'lda qiymat.")
+        sp_hint.setObjectName("hint")
+        sp_hint.setWordWrap(True)
+        clay.addWidget(sp_hint)
         ilay.addWidget(card)
 
         # === 2) Reklama ===
@@ -415,6 +452,12 @@ class SettingsPageMixin:
         except (TypeError, ValueError):
             self.s_temp.setValue(22)
         self._upd_weather()
+        self.s_speed_auto.setChecked(str(s.get("speed_auto") or "1") != "0")
+        try:
+            self.s_speed.setValue(int(float(s.get("speed") or 210)))
+        except (TypeError, ValueError):
+            self.s_speed.setValue(210)
+        self._upd_speed()
         # Sinov muddati
         self.s_trial_on.setChecked((s.get("trial_enabled") or "0") == "1")
         self.s_trial_on_lbl.setText(
@@ -474,6 +517,8 @@ class SettingsPageMixin:
         db.set_setting("depart_time", depart)
         db.set_setting("weather_auto", "1" if self.s_weather.isChecked() else "0")
         db.set_setting("temperature", str(self.s_temp.value()))
+        db.set_setting("speed_auto", "1" if self.s_speed_auto.isChecked() else "0")
+        db.set_setting("speed", str(self.s_speed.value()))
         db.set_setting("trial_enabled", "1" if self.s_trial_on.isChecked() else "0")
         db.set_setting("trial_start", self.s_trial_start.date().toString("yyyy-MM-dd"))
         db.set_setting("trial_days", str(self.s_trial_days.value()))
