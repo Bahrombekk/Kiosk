@@ -19,6 +19,7 @@ Ishga tushirish:
 """
 import os
 import json
+import time
 import hashlib
 import asyncio
 import logging
@@ -78,6 +79,7 @@ async def lifespan(app: FastAPI):
 
 async def _status_loop():
     """Har 3 soniyada barcha userlarga status_update yuboradi (TZ FR-HOME-01)."""
+    last_err = None
     while True:
         await asyncio.sleep(3)
         # Bitta xato (masalan sozlamadagi noto'g'ri qiymat) butun sikilni
@@ -85,8 +87,14 @@ async def _status_loop():
         try:
             if manager.count():
                 await manager.broadcast({"type": "status_update", **status_payload()})
-        except Exception:
-            log.exception("status sikilida xato — keyingi iteratsiyada davom etamiz")
+            last_err = None
+        except Exception as e:                           # noqa: BLE001
+            # Bir xil xato har 3 soniyada logni to'ldirmasin — faqat xato
+            # O'ZGARGANDA to'liq traceback yozamiz.
+            msg = f"{type(e).__name__}: {e}"
+            if msg != last_err:
+                last_err = msg
+                log.exception("status sikilida xato — keyingi iteratsiyada davom etamiz")
 
 
 def _safe_join(base, name):
@@ -409,15 +417,31 @@ def route():
     return db.get_route()
 
 
-# Kioskka berilmaydigan maxfiy sozlamalar (himoya qatlami — endpoint kalit
-# bilan yopiq bo'lsa ham, sirlar javobda ko'rinmasin).
-_PRIVATE_SETTINGS = {"api_key", "admin_password_hash"}
+# Kiosk klientlarga beriladigan sozlamalar OQ RO'YXATI. Qora ro'yxat o'rniga
+# oq ro'yxat: keyinchalik qo'shiladigan istalgan maxfiy kalit (api_key,
+# parol xeshlari, trial_*, ...) javobga avtomatik TUSHMAYDI.
+#
+# `exit_pin_hash` ATAYLAB beriladi: kiosk chiqish PIN'ini oflayn (keshdan)
+# tekshiradi; endpoint API kalit bilan yopiq — bu xesh faqat ishonchli
+# (kalitli) klientlarga ketadi. Uni kalitsiz kanalga (masalan, veb-proksi)
+# uzatish TAQIQLANADI — kiosk/server/api/settings.ts o'z, yanada tor oq
+# ro'yxatini qo'llaydi.
+_KIOSK_SETTINGS = {
+    "train_name", "route", "depart_time",
+    "wagon_number", "wagon_note",
+    "default_theme",
+    "ad_interval_min", "ad_algorithm", "media_ad_slots",
+    "media_cache", "cache_limit_gb",
+    "sos_enabled", "sos_numbers", "kiosk_location",
+    "saver_facts", "active_route_direction",
+    "exit_pin_hash",
+}
 
 
 @app.get("/api/settings")
 def settings():
     s = db.get_settings()
-    return {k: v for k, v in s.items() if k not in _PRIVATE_SETTINGS}
+    return {k: v for k, v in s.items() if k in _KIOSK_SETTINGS}
 
 
 def _safe_int(v, default):
@@ -500,12 +524,25 @@ def _segment_speed(stops, now_min):
     return round(dist / (mins / 60.0))
 
 
+# status_payload uchun qisqa TTL kesh: har 3s broadcast + har WS-connect +
+# /api/status hammasi DB'ni (settings+route) qayta o'qimasin. 2s — broadcast
+# oralig'idan (3s) kichik: reconnect bo'roni DB'ni bombardimon qilmaydi, admin
+# o'zgarishi esa baribir keyingi broadcast'da yetadi.
+_STATUS_TTL_S = 2.0
+_status_cache = {"ts": 0.0, "data": None}
+
+
 def status_payload():
     """Poyezd holati dict'i (REST va WebSocket ikkalasi ishlatadi).
 
     Tezlik/harorat sozlamadan olinadi (sensor ulanmaguncha — TZ 6.5).
     Joriy bekat joriy vaqtni bekatlar jadvali bilan solishtirib aniqlanadi.
+    Natija ~2 soniya keshlanadi (yuqoridagi izohga qarang).
     """
+    now_mono = time.monotonic()
+    cached = _status_cache["data"]
+    if cached is not None and now_mono - _status_cache["ts"] < _STATUS_TTL_S:
+        return cached
     s = db.get_settings()
     stops = db.get_route()
     now = datetime.now()
@@ -526,7 +563,7 @@ def status_payload():
                               cur_stop.get("longitude"), now)
         if wt is not None:
             temperature = wt
-    return {
+    payload = {
         "speed": speed,
         "temperature": temperature,
         "wagon": s.get("wagon_number"),
@@ -537,6 +574,9 @@ def status_payload():
         # Sinov muddati/litsenziya bloki — kiosk True bo'lsa qulf ekranini ko'rsatadi
         "blocked": db.trial_state(s)["blocked"],
     }
+    _status_cache["data"] = payload
+    _status_cache["ts"] = now_mono
+    return payload
 
 
 @app.get("/api/status")

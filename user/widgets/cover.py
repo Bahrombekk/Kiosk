@@ -6,11 +6,13 @@ Yuklash tarmoq orqali bo'lgani uchun alohida oqimda (UI qotmaydi);
 rasm baytlari kelgach, asosiy oqimda QPixmap'ga aylantiriladi.
 """
 import logging
+import threading
 from collections import OrderedDict
 
 import requests
 from PyQt6.QtWidgets import QLabel, QSizePolicy, QGraphicsOpacityEffect
-from PyQt6.QtCore import (Qt, QThread, pyqtSignal, QByteArray, QRectF, QSize,
+from PyQt6.QtCore import (Qt, QObject, QRunnable, QThreadPool, pyqtSignal,
+                          QByteArray, QRectF, QSize,
                           QPropertyAnimation, QEasingCurve, QVariantAnimation)
 from PyQt6.QtGui import (QPixmap, QPainter, QColor, QLinearGradient, QBrush,
                          QFont, QPainterPath)
@@ -18,7 +20,6 @@ from PyQt6.QtSvg import QSvgRenderer
 from core import cache
 from core import netpin
 from core import theme as T
-from core.threads import track
 
 log = logging.getLogger(__name__)
 
@@ -42,27 +43,94 @@ def _mem_put(url, pm):
         _MEM_CACHE.popitem(last=False)
 
 
-class _Fetcher(QThread):
-    done = pyqtSignal(bytes, str)   # (data, content_type)
-    fail = pyqtSignal()
+# --- Chegaralangan yuklash pooli -------------------------------------------
+# Avval har CoverLabel.load() o'z QThread'ini ochardi: grid qayta chizilganda
+# har plitka uchun bitta thread — cheksiz parallel Session ochilishi native
+# crash (access violation) va soket tugashiga hissa qo'shar edi. Endi barcha
+# rasm yuklashlar BITTA QThreadPool (maks 4 oqim) orqali; natija main-thread'da
+# yashaydigan bitta dispetcher signali bilan tarqatiladi. Label o'chirilgan
+# bo'lsa Qt ulanishni o'zi uzadi — RuntimeError yo'q.
+
+class _Dispatcher(QObject):
+    # (url, data, content_type) — data bo'sh bytes bo'lsa yuklash muvaffaqiyatsiz
+    fetched = pyqtSignal(str, bytes, str)
+
+
+_dispatcher = _Dispatcher()
+_pool = QThreadPool()
+_pool.setMaxThreadCount(4)
+_inflight = set()            # hozir yuklanayotgan url'lar (dublikat so'rovsiz)
+_inflight_lock = threading.Lock()
+
+
+class _FetchTask(QRunnable):
+    """Pool oqimida bitta muqovani yuklaydi; netpin per-thread sessiyasi
+    tufayli 4 ta pool oqimi jami 4 ta uzoq yashovchi Session ishlatadi."""
 
     def __init__(self, url):
         super().__init__()
         self.url = url
 
     def run(self):
+        data, ctype = b"", ""
         try:
             r = netpin.get(self.url, timeout=8)
             r.raise_for_status()
             cache.save_cover(self.url, r.content)   # oflayn uchun diskka
-            self.done.emit(r.content, r.headers.get("content-type", ""))
+            data, ctype = r.content, r.headers.get("content-type", "")
         except requests.RequestException:
             # Server o'chiq — disk keshidan urinamiz (oflayn rejim)
-            data = cache.load_cover(self.url)
-            if data is not None:
-                self.done.emit(data, "")
-                return
-            log.debug("Muqova yuklanmadi: %s", self.url)
+            hit = cache.load_cover(self.url)
+            if hit is not None:
+                data = hit
+            else:
+                log.debug("Muqova yuklanmadi: %s", self.url)
+        except Exception:                            # noqa: BLE001
+            log.debug("Muqova yuklashda kutilmagan xato: %s",
+                      self.url, exc_info=True)
+        finally:
+            with _inflight_lock:
+                _inflight.discard(self.url)
+            # Signal emissiyasi thread-safe; qabul qiluvchilar (QLabel'lar)
+            # main thread'da — Qt yetkazishni queued qiladi.
+            _dispatcher.fetched.emit(self.url, data, ctype)
+
+
+def _fetch(url):
+    """URL'ni poolga qo'yadi (agar allaqachon yuklanayotgan bo'lmasa)."""
+    with _inflight_lock:
+        if url in _inflight:
+            return
+        _inflight.add(url)
+    _pool.start(_FetchTask(url))
+
+
+class ImageFetch(QObject):
+    """Bitta rasmni umumiy pool orqali yuklash (avvalgi _Fetcher o'rnini bosadi
+    — QThread EMAS, thread ochmaydi). done(bytes, ctype) yoki fail() bir marta
+    otiladi. Chaqiruvchi havolani saqlashi kerak (self._x = ImageFetch(...)),
+    aks holda GC natijadan oldin yig'ishi mumkin."""
+    done = pyqtSignal(bytes, str)
+    fail = pyqtSignal()
+
+    def __init__(self, url, parent=None):
+        super().__init__(parent)
+        self._url = url
+        _dispatcher.fetched.connect(self._relay)
+
+    def start(self):
+        _fetch(self._url)
+
+    def _relay(self, url, data, ctype):
+        if url != self._url:
+            return
+        try:
+            _dispatcher.fetched.disconnect(self._relay)
+        except TypeError:
+            pass   # allaqachon uzilgan
+        if data:
+            self.done.emit(data, ctype)
+        else:
             self.fail.emit()
 
 
@@ -83,10 +151,12 @@ class CoverLabel(QLabel):
         self._aspect = aspect
         self._round_top_only = round_top_only   # faqat tepa burchaklar (modal header)
         self._orig = None          # yuklangan asl pixmap (qayta miqyoslash uchun)
-        self._fetcher = None
+        self._url = None           # hozir kutilayotgan url (eski natijani filtrlash)
         self._music_ph = False     # muqovasiz musiqa: gradient + nota placeholder
         self.fade_on_next = False  # keyingi load() mem-keshdan ham fade bilan
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Umumiy dispetcher — label o'chirilsa Qt ulanishni o'zi uzadi
+        _dispatcher.fetched.connect(self._on_fetched)
         if aspect is None:
             self._w, self._h = width, height
             self.setFixedSize(width, height)
@@ -130,6 +200,7 @@ class CoverLabel(QLabel):
 
     def load(self, url):
         self._music_ph = False
+        self._url = url
         # Avval xotira keshi — bor bo'lsa tarmoqsiz, oqimsiz darhol chizamiz
         # (_render_scaled fade_on_next bo'lsa crossfade'ni o'zi bajaradi)
         pm = _mem_get(url)
@@ -137,24 +208,9 @@ class CoverLabel(QLabel):
             self._orig = pm
             self._render_scaled()
             return
-        self._url = url
-        # Eski fetcher hali ishlayotgan bo'lsa, uni majburan to'xtatmaymiz
-        # (terminate xavfli) — track() uni tugagunicha tirik saqlaydi; oxirgi
-        # boshlangan so'rov natijasi ko'rsatiladi.
-        fetcher = track(_Fetcher(url))
-        fetcher._url = url   # natijani O'Z url'iga bog'laymiz (kesh poisoning'siz)
-        self._fetcher = fetcher
-        self._fetcher.done.connect(self._on_data)
-        self._fetcher.fail.connect(self._on_fail)
-        self._fetcher.start()
-
-    def _on_fail(self):
-        # Karta allaqachon o'chirilgan bo'lishi mumkin (ro'yxat qayta render
-        # bo'lganda) — C++ obyektga chaqiruv RuntimeError beradi, e'tiborsiz.
-        try:
-            self._show_placeholder("?")
-        except RuntimeError:
-            pass
+        # Chegaralangan umumiy pool — har label uchun alohida thread ochilmaydi;
+        # natija _dispatcher.fetched orqali keladi, url bo'yicha filtrlanadi.
+        _fetch(url)
 
     def resizeEvent(self, e):
         # Moslashuvchan rejimda kenglik o'zgarsa — balandlikni 16:9 saqlab,
@@ -173,9 +229,14 @@ class CoverLabel(QLabel):
                 self._show_placeholder("...")
         super().resizeEvent(e)
 
-    def _on_data(self, data, ctype):
+    def _on_fetched(self, url, data, ctype):
+        # Dispetcher HAMMA natijalarni broadcast qiladi — faqat o'zimiz
+        # kutayotgan url'ni qabul qilamiz (eski so'rov natijasi ham shu yerda
+        # tabiiy filtrlanadi — kesh poisoning yo'q).
+        if url != self._url:
+            return
         # Karta ro'yxat qayta render bo'lganda o'chirilgan bo'lishi mumkin —
-        # C++ obyektga chaqiruv RuntimeError beradi, butun ilovani crash qilmasin.
+        # Qt ulanishni o'zi uzadi, lekin ehtiyot uchun RuntimeError'ni yutamiz.
         try:
             if not data:
                 self._show_placeholder("?")
@@ -199,12 +260,7 @@ class CoverLabel(QLabel):
                     self._show_placeholder("?")
                     return
                 self._orig = raw
-            # Kesh kalitini fetcher'ning O'Z url'idan olamiz — tez qayta yuklashda
-            # eski fetcher natijasi yangi url ostiga yozilib qolmasin.
-            src = self.sender()
-            key = getattr(src, "_url", None) or getattr(self, "_url", None)
-            if key:
-                _mem_put(key, self._orig)
+            _mem_put(url, self._orig)
             want_cross = self.fade_on_next   # crossfade _render_scaled ichida
             self._render_scaled()
             if not want_cross:

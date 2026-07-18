@@ -8,7 +8,7 @@ Bekatlarni geografik joylashuviga (lon/lat) qarab silliq fon ustida chizadi:
   - joriy bekatda PULSlanuvchi halqa va keyingi bekat sari harakatlanuvchi
     poyezd nuqtasi (animatsiya).
 
-Interfeys SlippyMap bilan bir xil: set_route(stops, current, theme_name).
+Interfeys: set_route(stops, current, theme_name).
 Geografik koordinatasi noma'lum bekatlar qo'shnilari orasida interpolatsiya
 qilinadi; hech biri tanilmasa diagonal bo'ylab teng joylashtiriladi.
 """

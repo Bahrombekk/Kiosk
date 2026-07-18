@@ -643,7 +643,28 @@ def update_ad(ad_id, data):
 
 
 def delete_ad(ad_id):
+    """Reklamani o'chiradi va boshqa reklama ishlatmaydigan media faylini ham
+    diskdan tozalaydi (delete_content bilan bir xil — content/ads/ papkasida
+    yetim fayllar cheksiz to'planib qolmasin)."""
+    item = get_ad_by_id(ad_id)
     _delete("ads", ad_id)
+    if not item:
+        return
+    name = item.get("media_path")
+    if not name:
+        return
+    with closing(connect()) as conn:
+        in_use = conn.execute(
+            "SELECT 1 FROM ads WHERE media_path=? LIMIT 1", (name,)).fetchone()
+    if in_use:
+        return   # boshqa reklama shu faylga ishora qiladi — qoldiramiz
+    path = os.path.join(config.ADS_DIR, name)
+    try:
+        if os.path.isfile(path):
+            os.remove(path)
+            log.info("Yetim reklama fayli o'chirildi: %s", path)
+    except OSError as e:
+        log.warning("Reklama faylini o'chirib bo'lmadi (%s): %s", path, e)
 
 
 # --- Saytlar (sites) ---

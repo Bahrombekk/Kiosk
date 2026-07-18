@@ -237,7 +237,7 @@ Ulanish manbasi ustuvorligi: `KIOSK_SERVER` env → `server.txt` → `trust.json
 | `KIOSK_API_KEY` | kiosk | API kalit | `server.txt` |
 | `KIOSK_WINDOWED` | kiosk | `1` oddiy oyna / `0` kiosk fullscreen | frozen→`0` |
 | `KIOSK_EXIT_PIN` | kiosk | chiqish PINi | `7777` |
-| `KIOSK_DEV_PIN` | kiosk | vendor master PIN (mijozdan mustaqil) | build oldidan o'zgartiring |
+| `KIOSK_DEV_PIN_HASH` | kiosk | vendor master PIN (PBKDF2 xesh, mijozdan mustaqil) | o'rnatilmasa o'chiq (fail-closed) |
 
 ---
 
@@ -332,4 +332,6 @@ Tiklanish: `Ctrl+Alt+Del → Chiqish` → admin hisobiga kiring; kerak bo'lsa
 Serverda sinov muddati / litsenziya holati saqlanadi. Muddat tugasa server
 `status.blocked=True` yuboradi va kiosk butun ekranni **qulf ekrani** bilan qoplaydi.
 Holat kioskda keshlanadi — server o'chsa ham qulf saqlanadi. Vendor **master PIN**
-(`KIOSK_DEV_PIN`) bloklangan holatda ham dasturni yopa oladi (mijozdan mustaqil).
+(`KIOSK_DEV_PIN_HASH` — PBKDF2 xesh, ochiq matn kodda saqlanmaydi) bloklangan
+holatda ham dasturni yopa oladi (mijozdan mustaqil). Xesh yaratish:
+`python -c "from core import pinhash; print(pinhash.hash_secret('PIN'))"`.

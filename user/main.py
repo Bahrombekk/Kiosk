@@ -225,6 +225,16 @@ class MainWindow(QWidget):
         self.idle_timer.setInterval(config.SCREENSAVER_IDLE_MIN * 60_000)
         self.idle_timer.timeout.connect(self._maybe_screensaver)
 
+        # GUI-thread liveness heartbeat: har 10s `alive.beat` fayliga yozamiz.
+        # QTimer AYNAN GUI oqimida ishlaydi — Qt deadlock/VLC hang bo'lsa yozuv
+        # to'xtaydi va watchdog (fayl eskirganini ko'rib) ilovani qayta ochadi.
+        # Protsess exit-code'iga qaramaydigan yagona "muzlagan ekran" himoyasi.
+        self._beat_path = os.path.join(config.APP_DIR, "alive.beat")
+        self._beat_timer = QTimer(self)
+        self._beat_timer.timeout.connect(self._write_beat)
+        self._beat_timer.start(10_000)
+        self._write_beat()
+
         # Qalqib chiquvchi reklamalar: qaysi bo'lim ochiq bo'lishidan qat'i
         # nazar global kadans bilan popup chiqaradi (services/ads.py).
         # last_activity — oxirgi teginish vaqti (eventFilter yangilaydi);
@@ -566,6 +576,14 @@ class MainWindow(QWidget):
             # Yangi odamga darhol reklama urilmasin (SESSION_GRACE_S)
             if hasattr(self, "ad_manager"):
                 self.ad_manager.on_session_start()
+
+    def _write_beat(self):
+        """Liveness heartbeat faylini yangilaydi (GUI oqimida — watchdog uchun)."""
+        try:
+            with open(self._beat_path, "w", encoding="ascii") as f:
+                f.write(str(time.time()))
+        except OSError:
+            pass   # disk to'la/ruxsat yo'q — heartbeat majburiy emas
 
     def _exit_app(self):
         """Yagona chiqish nuqtasi: fon oqimlarini to'xtatib, ilovani yopadi."""

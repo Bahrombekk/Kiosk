@@ -8,11 +8,15 @@ ishonch fingerprint orqali, IP o'zgarsa ham buzilmaydi.
 
 http (eski rejim) bo'lsa — oddiy requests (pin yo'q).
 
-DIQQAT: har chaqiruvда YANGI Session — bir nechta QThread parallel ishlatsa
-ham xavfsiz (requests.Session thread-safe emas; api.py shu sababli Session'dan
-qochadi)."""
+DIQQAT (thread xavfsizligi): requests.Session thread-safe emas, shuning uchun
+har CHAQIRUVCHI THREAD o'zining bitta UZOQ YASHOVCHI Session'iga ega
+(`thread_session()`, threading.local). Avvalgi "har chaqiruvda yangi Session"
+yondashuvi parallel QThread'larda Session/PoolManager obyektlarining tinimsiz
+yaratilib-GC qilinishiga olib kelar va native crash (access violation,
+crash.log) manbai edi — endi sessiyalar qayta ishlatiladi."""
 import ssl
 import logging
+import threading
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -63,8 +67,10 @@ def _pin_fp():
 
 
 def session():
-    """Pinned requests.Session (https bo'lsa). Foydalangach yoping
-    (`with netpin.session() as s: ...`)."""
+    """YANGI pinned requests.Session (https bo'lsa). Hayot tsiklini chaqiruvchi
+    boshqaradi (`with netpin.session() as s: ...`). Ko'p martalik oddiy
+    so'rovlar uchun `thread_session()` / `get()` / `post()` afzal — ular
+    sessiyani qayta ishlatadi."""
     s = requests.Session()
     fp = _pin_fp()
     if config.is_tls():
@@ -86,14 +92,39 @@ def session():
     return s
 
 
+# Har thread uchun bitta sessiya (threading.local). Thread tugasa sessiya u
+# bilan birga yig'iladi; fingerprint (trust.json rotatsiyasi) o'zgarsa qayta
+# quriladi.
+_local = threading.local()
+
+
+def thread_session():
+    """Joriy thread uchun KESHLANGAN uzoq yashovchi pinned Session.
+
+    YOPMANG (`with` bilan o'ramang) — sessiya thread hayoti davomida qayta
+    ishlatiladi. stream=True javoblarda faqat javobni yoping
+    (`with s.get(url, stream=True) as r: ...`) — sessiya ochiq qolaveradi."""
+    fp = _pin_fp()
+    s = getattr(_local, "session", None)
+    if s is not None and getattr(_local, "fp", None) == fp:
+        return s
+    if s is not None:
+        try:
+            s.close()   # sert rotatsiyasi — eski pin bilan ulanishlar yopiladi
+        except Exception:                    # noqa: BLE001
+            pass
+    s = session()
+    _local.session = s
+    _local.fp = fp
+    return s
+
+
 def get(url, **kw):
-    """Pinned GET. stream=True KERAK bo'lsa session()'ni o'zingiz boshqaring
-    (javob o'qilgunicha session ochiq tursin)."""
-    with session() as s:
-        return s.get(url, **kw)
+    """Pinned GET (per-thread sessiya orqali). stream=True bo'lsa javobni
+    o'zingiz yoping — sessiya ochiq qoladi."""
+    return thread_session().get(url, **kw)
 
 
 def post(url, **kw):
-    """Pinned POST."""
-    with session() as s:
-        return s.post(url, **kw)
+    """Pinned POST (per-thread sessiya orqali)."""
+    return thread_session().post(url, **kw)

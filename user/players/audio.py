@@ -675,7 +675,11 @@ class AudioPlayer(QWidget):
         right.addWidget(self.author)
         right.addSpacing(T.s(22))
         meta = QHBoxLayout(); meta.setSpacing(T.s(12))
-        meta.addWidget(self._pill(self.item.get("genre") or "Roman"))
+        from core.i18n import genre_label
+        # Janr tarjima bilan; janrsizga hardcode "Roman" o'rniga hech narsa
+        genre = genre_label(self.item.get("genre") or "")
+        if genre:
+            meta.addWidget(self._pill(genre))
         dur = self.item.get("duration") or 0
         meta.addWidget(self._pill(_fmt(int(dur) * 1000) if dur else "00:00", _SVG_CLOCK))
         meta.addStretch(1)

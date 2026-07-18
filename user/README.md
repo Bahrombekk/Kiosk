@@ -58,7 +58,7 @@ Ulanish manbasi ustuvorligi: `KIOSK_SERVER` env → `server.txt` → `trust.json
   - `discovery.py` — imzolangan UDP beaconni tutib serverni topadi.
   - `health.py` — ulanishni davriy tekshiradi; `media_cache.py` — media fonda diskka keshlash.
   - `ads.py` — reklama kadansi; `stats.py` — foydalanish eventlari navbati.
-  - `maptiles.py` — xarita tayllari; `stream_proxy.py` — self-signed HTTPSni VLC uchun lokal HTTP orqali ochish.
+  - `stream_proxy.py` — self-signed HTTPSni VLC uchun lokal HTTP orqali ochish.
 - `players/` — `video.py` (VLC), `audio.py` (audiokitob/musiqa: to'lqin, playlist, tezlik), `reader.py` (matn o'quvchi: boblar, sahifalash).
 - `widgets/` — navbar, card, cover, banner, screensaver, lockscreen, pinpad, qr, routemap, emergency (SOS), modal, spinner, empty va b.
 - `system/` — `lockdown.py` (OS qulf: Win/Alt+Tab/Task Manager), `vlcsetup.py` (bundle VLCni ulash), `watchdog.py` (ilova qulasa qayta ochish).

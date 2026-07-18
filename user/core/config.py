@@ -165,12 +165,14 @@ EXIT_TAPS = 10             # nechta teginish kerak
 EXIT_TAP_WINDOW_S = 4.0    # shu soniya ichida (sekin bosilsa hisob qaytadan)
 EXIT_CORNER_PX = 90        # zaxira burchak zonasi (bazaviy px, miqyoslanadi)
 
-# DASTURCHI (vendor) master PIN — FAQAT SIZ uchun maxfiy chiqish.
-# Mijozning chiqish PINidan MUSTAQIL ishlaydi: mijoz PINni o'zgartirsa,
-# bilmasangiz, hatto sinov muddati bloklangan/frozen bo'lsa ham — bu PIN
-# DOIM dasturni yopadi. Mijozga bermang. Build oldidan O'ZGARTIRING
-# (yoki KIOSK_DEV_PIN muhit o'zgaruvchisi bilan bering).
-DEV_EXIT_PIN = os.environ.get("KIOSK_DEV_PIN", "735519")
+# DASTURCHI (vendor) master PIN — mijoz PINidan mustaqil maxfiy chiqish.
+# Endi kodda OCHIQ MATN sifatida saqlanmaydi (exe'dan `strings` bilan
+# chiqarib olinardi — har bir kiosk lockdown'ini ochib berardi). Faqat
+# PBKDF2 xesh ko'rinishida beriladi: KIOSK_DEV_PIN_HASH muhit o'zgaruvchisi
+# (server bilan bir xil `pbkdf2$iter$salt$hash` format). O'rnatilmagan
+# bo'lsa master PIN BUTUNLAY O'CHIQ (fail-closed). Xesh yaratish:
+#   python -c "from core import pinhash; print(pinhash.hash_secret('PIN'))"
+DEV_EXIT_PIN_HASH = os.environ.get("KIOSK_DEV_PIN_HASH", "")
 
 # --- Zastavka (splash + screensaver, logotipli ekran) ---
 # Dastur ochilganda SPLASH_SECONDS soniya logotip ko'rinadi. Keyin foydalanuvchi

@@ -294,19 +294,28 @@ class BooksScreen(QWidget):
         self._modal = _BookDetail(self.window(), item, self.api)
         self._modal.read.connect(self._read)
         self._modal.listen.connect(self._listen)
+        # Modal yopilganda (deleteLater) havolani tozalaymiz — aks holda keyingi
+        # murojaat o'chirilgan C++ obyektga tegib RuntimeError -> crash berardi.
+        self._modal.closed.connect(lambda: setattr(self, "_modal", None))
         self._modal.show_over(self.theme_name)
 
-    def _read(self, item):
+    def _close_detail(self):
         if self._modal:
-            self._modal.close_modal()
+            try:
+                self._modal.close_modal()
+            except RuntimeError:
+                pass   # modal allaqachon o'chirilgan (deleteLater)
+            self._modal = None
+
+    def _read(self, item):
+        self._close_detail()
         stats.event("content_open", id=item.get("id"),
                     title=item.get("title"), type=item.get("type"))
         self._reader = Reader(self.api, item, self.theme_name, host=self.window())
         self._reader.start()
 
     def _listen(self, item):
-        if self._modal:
-            self._modal.close_modal()
+        self._close_detail()
         # Oflaynda striming ishlamaydi — pleyerni ochib qotirmaymiz
         if self.api.offline:
             self.status.text(tr("audio.offline"))

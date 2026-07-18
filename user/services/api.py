@@ -202,7 +202,7 @@ class ApiClient:
         return self._cached("ads", lambda: self._get("/api/ads").json())
 
     def ad_media_url(self, ad_id):
-        """Reklama media manzili (rasm uchun — _Fetcher netpin bilan oladi)."""
+        """Reklama media manzili (rasm uchun — ImageFetch netpin bilan oladi)."""
         return f"{self.base_url}/api/ads/{ad_id}/media{self._url_key}"
 
     def ad_media_play_url(self, ad_id):

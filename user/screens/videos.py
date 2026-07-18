@@ -375,11 +375,18 @@ class VideosScreen(QWidget):
     def _open_detail(self, item):
         self._modal = _VideoDetail(self.window(), item, self.api)
         self._modal.play.connect(self._play)
+        # Modal yopilganda (deleteLater) havolani tozalaymiz — aks holda keyingi
+        # murojaat o'chirilgan C++ obyektga tegib RuntimeError -> crash berardi.
+        self._modal.closed.connect(lambda: setattr(self, "_modal", None))
         self._modal.show_over(self.theme_name)
 
     def _play(self, item):
         if self._modal:
-            self._modal.close_modal()
+            try:
+                self._modal.close_modal()
+            except RuntimeError:
+                pass   # modal allaqachon o'chirilgan (deleteLater)
+            self._modal = None
         # Audio musiqa — alohida (muqova + to'lqin + playlist) pleyer
         if _is_audio_music(item):
             self._play_music(item)

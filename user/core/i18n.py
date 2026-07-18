@@ -185,6 +185,7 @@ STRINGS = {
 
     # --- Asosiy ekran ---
     "home.speed":    ("Tezlik",  "Скорость",    "Speed"),
+    "home.kmh":      ("km/soat", "км/ч",        "km/h"),
     "home.temp":     ("Harorat", "Температура", "Temperature"),
     "home.location": ("Joylashuv", "Расположение", "Location"),
     "home.location_wagon": ("Joylashuv: {wagon}-vagon",

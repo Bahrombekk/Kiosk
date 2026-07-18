@@ -1,4 +1,5 @@
 """ui/dialogs.py — Kontent, reklama va umumiy yozuv dialoglari."""
+import filecmp
 import os
 import shutil
 
@@ -38,6 +39,34 @@ DEFAULT_TABS = {
     "book":      ("Badiiy", "She'riyat", "Bolalarga", "Tarixiy"),
     "audiobook": ("Badiiy", "She'riyat", "Bolalarga", "Tarixiy"),
 }
+
+
+def _copy_unique(src, dst_dir):
+    """Faylni dst_dir'ga ko'chirib, ishlatilgan nomni qaytaradi.
+
+    Nom band bo'lsa "nom (2).ext" ko'rinishida unikallashtiradi — bir xil
+    basename'li BOSHQA fayl mavjud kontentni ustidan yozib yubormasin
+    (masalan, ikkita turli manbadan kelgan `movie.mp4`). Aynan o'sha fayl
+    allaqachon nusxalangan bo'lsa (o'lcham+mtime mos) — qayta nusxalamay,
+    mavjud nomni qaytaradi (tahrirlashda dublikat yaralmaydi)."""
+    os.makedirs(dst_dir, exist_ok=True)
+    base = os.path.basename(src)
+    stem, ext = os.path.splitext(base)
+    dst_name, n = base, 2
+    while True:
+        dst = os.path.join(dst_dir, dst_name)
+        if not os.path.exists(dst):
+            shutil.copy2(src, dst)
+            return dst_name
+        try:
+            # shallow=True: o'lcham+mtime (copy2 mtime'ni saqlaydi) — katta
+            # video fayllarni bayt-ma-bayt solishtirmasdan tez aniqlaymiz.
+            if filecmp.cmp(src, dst, shallow=True):
+                return dst_name
+        except OSError:
+            pass
+        dst_name = f"{stem} ({n}){ext}"
+        n += 1
 
 
 # ----------------------------------------------------------------------------
@@ -388,15 +417,13 @@ class ContentDialog(QDialog):
             "visible": 1 if self.visible.isChecked() else 0,
         }
         # Tanlangan fayllarni content/ ostidagi papkalarga ko'chiramiz
+        # (_copy_unique — bir xil nomli boshqa fayl ustiga yozilmaydi)
         for src, dst_dir, key in (
                 (self.media_src, config.MEDIA_DIR, "file_path"),
                 (self.cover_src, config.COVERS_DIR, "cover_path"),
                 (self.text_src, config.BOOKS_DIR, "text_path")):
             if src:
-                os.makedirs(dst_dir, exist_ok=True)
-                dst_name = os.path.basename(src)
-                shutil.copy2(src, os.path.join(dst_dir, dst_name))
-                data[key] = dst_name
+                data[key] = _copy_unique(src, dst_dir)
         return data
 
 
@@ -664,10 +691,8 @@ class AdDialog(QDialog):
             "is_active": 1 if self.active.isChecked() else 0,
         }
         if self.media_src:
-            os.makedirs(config.ADS_DIR, exist_ok=True)
-            dst_name = os.path.basename(self.media_src)
-            shutil.copy2(self.media_src, os.path.join(config.ADS_DIR, dst_name))
-            data["media_path"] = dst_name
+            # _copy_unique — bir xil nomli boshqa reklama fayli ustiga yozilmaydi
+            data["media_path"] = _copy_unique(self.media_src, config.ADS_DIR)
         return data
 
 

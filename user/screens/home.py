@@ -28,7 +28,8 @@ from core import theme as T
 from core.i18n import tr
 from core.threads import track
 from services import stats
-from widgets.cover import CoverLabel, _Fetcher
+from widgets.cover import CoverLabel, ImageFetch
+from widgets import cover as _cover
 from widgets.card import fmt_duration
 from widgets.icons import svg_icon
 from players.reader import Reader
@@ -108,8 +109,11 @@ class BannerImage(QLabel):
         self._radius = radius
         self._mode = mode      # fill | fit | box
         self._maxh = maxh
-        self._fetcher = None
+        self._url = None       # hozir kutilayotgan url (eski natijani filtrlash)
         self._fade_anim = None
+        # Umumiy chegaralangan pool dispetcheri — alohida thread ochilmaydi;
+        # widget o'chirilsa Qt ulanishni o'zi uzadi.
+        _cover._dispatcher.fetched.connect(self._on_fetched)
         self.fade_on_next = False   # keyingi rasm crossfade bilan chiqsin
         if mode == "fill":
             self.setFixedHeight(height)
@@ -128,13 +132,12 @@ class BannerImage(QLabel):
         return False
 
     def load_url(self, url):
-        # terminate() o'rniga track() — eski fetcher tugagunicha tirik qoladi.
-        self._fetcher = track(_Fetcher(url))
-        self._fetcher.done.connect(self._on_data)
-        self._fetcher.start()
+        # Umumiy pool orqali — natija _on_fetched'ga broadcast bilan keladi.
+        self._url = url
+        _cover._fetch(url)
 
-    def _on_data(self, data, ctype):
-        if not data:
+    def _on_fetched(self, url, data, ctype):
+        if url != self._url or not data:
             return
         if "svg" in ctype or data[:5] == b"<svg " or data[:6] == b"<?xml ":
             renderer = QSvgRenderer(QByteArray(data))
@@ -618,7 +621,7 @@ class _HomeCanvas(QWidget):
             # vaqt oralig'i tugashini kuzatib turamiz
             self.banner_timer.start(60_000)
             return
-        f = track(_Fetcher(self.api.ad_media_url(ad["id"])))
+        f = ImageFetch(self.api.ad_media_url(ad["id"]), self)
         self._banner_fetch = f
         f.done.connect(lambda data, _c, ad=ad: self._on_banner_media(ad, data))
         f.fail.connect(lambda: self.banner_timer.start(30_000))  # oflayn/xato
@@ -643,7 +646,7 @@ class _HomeCanvas(QWidget):
         self.banner_timer.start(max(5, int(dur) if dur else 10) * 1000)
 
     def _apply_status(self, s):
-        self.speed_val.setText(f"{s.get('speed', '—')} km/h")
+        self.speed_val.setText(f"{s.get('speed', '—')} {tr('home.kmh')}")
         # Harorat manfiy ham bo'lishi mumkin (qish) — belgi to'g'ri qo'yiladi:
         # musbatga '+', manfiyga '−', noma'lumga '—'.
         t = s.get("temperature")
@@ -673,7 +676,8 @@ class _HomeCanvas(QWidget):
             self.poster.cover.fade_on_next = True   # yumshoq crossfade
             self.poster.cover.load_url(self.api.cover_url(movie["id"]))
             self.poster.name.setText(movie.get("title", ""))
-            parts = [p for p in (movie.get("genre"),
+            from core.i18n import genre_label
+            parts = [p for p in (genre_label(movie.get("genre") or ""),
                                  fmt_duration(movie.get("duration"))) if p]
             self.poster.meta.setText(" • ".join(parts))
             multi = len(self.rec_movies) > 1
@@ -694,7 +698,8 @@ class _HomeCanvas(QWidget):
             self.book_title.setText(self.rec_book.get("title", ""))
             self.book_author.setText(self.rec_book.get("author") or "")
             genre = self.rec_book.get("genre") or ""
-            self.book_genre.setText(genre)
+            from core.i18n import genre_label
+            self.book_genre.setText(genre_label(genre))   # RU/EN'da tarjima
             self.book_genre.setVisible(bool(genre))
             # Tugmalar faqat mavjud bo'lsa: audio bo'lsa Tinglash, matn bo'lsa O'qish
             from widgets.card import can_listen, can_read
@@ -711,6 +716,9 @@ class _HomeCanvas(QWidget):
         from screens.videos import _VideoDetail
         self._modal = _VideoDetail(self.host, movie, self.api)
         self._modal.play.connect(self._play_movie)
+        # Modal yopilganda (deleteLater) havolani tozalaymiz — aks holda keyingi
+        # murojaat o'chirilgan C++ obyektga tegib RuntimeError -> crash berardi.
+        self._modal.closed.connect(lambda: setattr(self, "_modal", None))
         self._modal.show_over(self.theme_name)
 
     def _play_current(self):
@@ -720,7 +728,11 @@ class _HomeCanvas(QWidget):
 
     def _play_movie(self, item):
         if self._modal:
-            self._modal.close_modal()
+            try:
+                self._modal.close_modal()
+            except RuntimeError:
+                pass   # modal allaqachon o'chirilgan (deleteLater)
+            self._modal = None
         # Tavsiyadan ochilsa ham — avval "o'z bo'limi" (Videolar)ga o'tamiz,
         # pleyer yopilganda foydalanuvchi Videolarда qoladi (Asosiyда emas).
         if hasattr(self.host, "go"):

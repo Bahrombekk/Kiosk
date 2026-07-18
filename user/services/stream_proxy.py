@@ -61,7 +61,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if rng:
             headers["Range"] = rng
         try:
-            with netpin.session() as s, s.get(
+            # Per-thread sessiya (ThreadingHTTPServer har ulanishga alohida
+            # thread ochadi) — javob yopiladi, sessiya qayta ishlatiladi.
+            with netpin.thread_session().get(
                     upstream, headers=headers, stream=True, timeout=20) as r:
                 self.send_response(r.status_code)
                 # Content-Type: kino/musiqa (LibVLC) uchun MAJBURAN
@@ -75,6 +77,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 for h in ("Content-Length", "Content-Range"):
                     if h in r.headers:
                         self.send_header(h, r.headers[h])
+                if "Content-Length" not in r.headers:
+                    # Upstream chunked/uzunliksiz — framing yo'q: keep-alive
+                    # klient (VLC/Qt) javob tugaganini bilmay osilib qolmasin,
+                    # ulanish yopilishi bilan "tugadi" signali beriladi.
+                    self.send_header("Connection", "close")
+                    self.close_connection = True
                 self.send_header("Accept-Ranges", "bytes")
                 self.end_headers()
                 for chunk in r.iter_content(64 * 1024):

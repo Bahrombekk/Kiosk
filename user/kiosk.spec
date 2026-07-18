@@ -23,7 +23,8 @@ if _missing or not os.path.isdir(os.path.join(VLC_DIR, "plugins")):
 
 datas = [
     ("assets", "assets"),
-    ("map_tiles", "map_tiles"),
+    # map_tiles OLIB TASHLANDI: RouteMap vektor (QPainter) — rastr tayllar
+    # runtime'da ishlatilmasdi, faqat installer hajmini oshirardi.
     # VLC plaginlari (dekoderlar) — video/audio o'ynatish uchun
     (os.path.join(VLC_DIR, "plugins"), os.path.join("vlc", "plugins")),
 ]

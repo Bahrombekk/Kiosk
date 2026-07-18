@@ -91,11 +91,12 @@ class ExitGuard:
           1) KIOSK_EXIT_PIN muhit o'zgaruvchisi (faqat ishlab chiqish)
           2) serverda admin o'rnatgan xesh (settings keshi — oflaynda ham bor)
           3) default PIN (config.EXIT_PIN)"""
-        # DASTURCHI master PIN — DOIM birinchi tekshiriladi va DOIM ishlaydi
-        # (mijoz PINidan, blokdan, frozen holatdan mustaqil). Mos kelmasa —
-        # quyidagi oddiy (mijoz) usullariga o'tamiz.
-        dev = getattr(config, "DEV_EXIT_PIN", "")
-        if dev and hmac.compare_digest(entered.encode(), dev.encode()):
+        # DASTURCHI master PIN — birinchi tekshiriladi (mijoz PINidan, blokdan,
+        # frozen holatdan mustaqil), lekin faqat PBKDF2 xesh (KIOSK_DEV_PIN_HASH)
+        # berilgan bo'lsa. Ochiq matnli literal olib tashlangan — exe ichidan
+        # chiqarib olib bo'lmaydi. Xesh yo'q — master PIN o'chiq (fail-closed).
+        dev_hash = getattr(config, "DEV_EXIT_PIN_HASH", "")
+        if dev_hash and pinhash.verify_secret(entered, dev_hash):
             return True
         env_pin = os.environ.get("KIOSK_EXIT_PIN")
         if env_pin:

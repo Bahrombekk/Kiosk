@@ -319,8 +319,8 @@ class MediaCacheSync(QThread):
         try:
             if url is None:
                 url = self.api.stream_url(it["id"])
-            # stream=True — javob o'qilgunicha session ochiq tursin (pin bilan)
-            with netpin.session() as _s, _s.get(url, stream=True, timeout=15) as r:
+            # stream=True — javobni yopamiz, per-thread sessiya ochiq qoladi
+            with netpin.thread_session().get(url, stream=True, timeout=15) as r:
                 r.raise_for_status()
                 size = int(r.headers.get("content-length") or 0)
                 du = shutil.disk_usage(MEDIA_DIR)

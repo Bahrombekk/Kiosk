@@ -31,6 +31,15 @@ LOOP_WINDOW_S = 120     # shu oynada...
 LOOP_MAX_RESTARTS = 5   # ...shuncha restart bo'lsa -> uzun tanaffus
 LOOP_COOLDOWN_S = 60
 
+# UI liveness: Kiosk GUI oqimi har 10s `alive.beat`ni yangilaydi (main.py).
+# Fayl shu seansda kamida bir marta yozilgan bo'lib, keyin STALL_S dan uzoq
+# yangilanmasa — protsess tirik, lekin UI muzlagan (Qt deadlock / VLC hang):
+# watchdog uni majburan o'ldirib qayta ochadi. 3 daqiqa — soat sinxronidagi
+# kichik sakrashlar yolg'on-musbat bermasligi uchun ataylab keng olingan.
+HEARTBEAT_FILE = "alive.beat"
+STALL_S = 180
+POLL_S = 10
+
 ERROR_ALREADY_EXISTS = 183
 
 # Operator/admin chiqishi shu faylni yaratsa, watchdog qayta ishga tushirmaydi
@@ -127,7 +136,33 @@ def main():
             log.error("Kioskni ishga tushirib bo'lmadi: %s", e)
             time.sleep(LOOP_COOLDOWN_S)
             continue
-        rc = proc.wait()
+        # Blokirovkali wait() o'rniga poll — protsess tirik bo'lsa ham UI
+        # muzlagan bo'lishi mumkin (exit-code buni hech qachon ko'rsatmaydi).
+        spawn_t = time.time()
+        beat = os.path.join(_base_dir(), HEARTBEAT_FILE)
+        while True:
+            try:
+                rc = proc.wait(timeout=POLL_S)
+                break
+            except subprocess.TimeoutExpired:
+                pass
+            try:
+                mt = os.path.getmtime(beat)
+            except OSError:
+                continue   # heartbeat fayli hali yo'q (eski build) — kuzatmaymiz
+            if mt <= spawn_t:
+                continue   # bu seansda hali yozilmagan (ilova ochilmoqda)
+            if time.time() - mt > STALL_S:
+                log.error("UI muzladi (heartbeat %.0fs yangilanmadi) — "
+                          "majburan qayta ochiladi", time.time() - mt)
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                    capture_output=True,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                rc = proc.wait()
+                if rc == 0:
+                    rc = 1   # majburiy o'ldirish toza chiqish emas — restart
+                break
         if rc == 0:
             log.info("Kiosk toza yopildi (admin chiqishi) — watchdog tugaydi")
             _ensure_desktop_shell()   # shell bo'lsak — explorer ochamiz (xizmat)

@@ -67,7 +67,7 @@ from core import theme as T
 from core.threads import track
 from services import stats
 from widgets.modal import Modal
-from widgets.cover import _Fetcher
+from widgets.cover import ImageFetch
 
 # Video reklamalar uchun (kadrlar QLabel'ga chiziladi). Modul bo'lmasa video
 # reklamalar shunchaki o'tkazib yuboriladi.
@@ -685,7 +685,7 @@ class AdManager(QObject):
                     return
                 except OSError:
                     pass
-            f = track(_Fetcher(self.api.ad_media_url(ad["id"])))
+            f = ImageFetch(self.api.ad_media_url(ad["id"]))
             self._fetch = f
             f.done.connect(lambda data, _c, ad=ad, rest=rest:
                            self._on_image(ad, rest, data))

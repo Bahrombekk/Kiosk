@@ -32,6 +32,7 @@ from ui.styles import STYLE
 from ui.helpers import port_in_use
 from ui.login import LoginDialog
 from ui.server_thread import ServerThread
+from ui.web_server import WebServer
 from ui.window import AdminWindow
 
 
@@ -86,11 +87,19 @@ def main():
     server = ServerThread()
     server.start()
 
+    # Veb kiosk (Nuxt) ilovasini SERVER BILAN BIRGA ko'taramiz — server
+    # ochilishi bilanoq veb ham ishga tushadi (ui/web_server.py). Node yo'q
+    # bo'lsa jim o'tadi. Ilova yopilganda web.stop() bilan birga to'xtaydi.
+    web = WebServer()
+    web.start()
+    app.aboutToQuit.connect(web.stop)
+
     # Admin parol darvozasi — login oynasi ko'rinib turganda ham backend
     # ishlaydi (kiosklar onlayn). Parol kiritilsa — admin oynasi ochiladi.
     login = LoginDialog()
     if not login.exec():
-        # Admin kirmadi/bekor qildi — backendni to'xtatib chiqamiz.
+        # Admin kirmadi/bekor qildi — veb va backendni to'xtatib chiqamiz.
+        web.stop()
         server.stop()
         server.wait(3000)
         sys.exit(1)

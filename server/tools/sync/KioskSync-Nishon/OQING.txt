@@ -1,0 +1,38 @@
+====================================================================
+  KIOSK KONTENT QABULCHISI  —  Nishon kompyuter uchun
+====================================================================
+
+Bu papkani kontent BORADIGAN kompyuterga (Kiosk Server o'rnatilgan)
+ko'chiring. Python yoki administrator kerak EMAS.
+
+--------------------------------------------------------------------
+QANDAY ISHLATILADI
+--------------------------------------------------------------------
+
+1) "Ishga-tushirish.bat" faylini ikki marta bosing (double-click).
+
+2) Agar Windows Firewall ruxsat so'rasa — "Ruxsat berish" (Allow) bosing.
+
+3) Oynada shunga o'xshash qatorlar chiqadi:
+
+      --host 192.168.1.151 --port 8799 --token b8bfd4285abf46b0
+      --host 26.12.48.7     --port 8799 --token b8bfd4285abf46b0
+
+   SHU QATORLARDAN BITTASINI (LAN IP'sini) NUSXA OLIB, YUBORING.
+   Odatda "192.168..." bilan boshlanadigani ishlaydi.
+
+4) Oynani YOPMANG — kontent yuklab bo'linguncha ochiq tursin.
+   Yuklash tugagach oynani yopsangiz bo'ladi.
+
+--------------------------------------------------------------------
+ESLATMALAR
+--------------------------------------------------------------------
+
+- Kiosk Server odatda C:\KioskServer papkasida bo'ladi. Boshqa joyda
+  bo'lsa, "Ishga-tushirish.bat" ni tahrirlash o'rniga, oddiy usul:
+  server ishlab tursin — dastur uni avtomatik topadi.
+
+- Ikkala kompyuter bitta tarmoqda (bitta Wi-Fi / bitta simda) bo'lishi shart.
+
+- Har safar ishga tushganda YANGI token chiqadi — eng oxirgi chiqqanini yuboring.
+====================================================================
