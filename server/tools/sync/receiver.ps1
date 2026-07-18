@@ -142,6 +142,20 @@ function Read-Exact-ToFile {
     Move-Item $tmp $Path -Force
 }
 
+function Skip-Bytes {
+    # Oqimdan $Size baytni O'QIB TASHLAYDI (hech qayerga yozmasdan). Rad etilgan
+    # `put`da mijoz payload'ini drenaj qilish uchun — RST o'rniga toza xato javobi.
+    param($Stream, [long]$Size)
+    $buf = New-Object byte[] (1MB)
+    $remaining = $Size
+    while ($remaining -gt 0) {
+        $toRead = [Math]::Min([long]$buf.Length, $remaining)
+        $read = $Stream.Read($buf, 0, [int]$toRead)
+        if ($read -le 0) { break }
+        $remaining -= $read
+    }
+}
+
 # --- Buyruqlar ---------------------------------------------------------------
 function Stop-KioskServer {
     $proc = Get-Process -Name $ProcName -ErrorAction SilentlyContinue
@@ -273,10 +287,16 @@ function Handle-Client {
                 $isContent = $target.StartsWith($contentFull, [StringComparison]::OrdinalIgnoreCase)
                 $isDb = [string]::Equals($target, $dbFull, [StringComparison]::OrdinalIgnoreCase)
                 if (-not ($isContent -or $isDb)) {
-                    throw "ruxsat yo'q: faqat content/ yoki data.db (berilgan: $($req.path))"
+                    # Mijoz payload'ni oqim qilib yuborishda davom etadi —
+                    # o'qimasdan ulanishni yopsak Windows RST yuboradi va mijoz
+                    # aniq xato JSON o'rniga ConnectionReset oladi. Shuning uchun
+                    # avval payload'ni drenaj qilamiz, keyin toza xato yuboramiz.
+                    Skip-Bytes $stream ([long]$req.size)
+                    Send-Json $stream @{ ok = $false; error = "ruxsat yo'q: faqat content/ yoki data.db (berilgan: $($req.path))" }
+                } else {
+                    Read-Exact-ToFile $stream $target ([long]$req.size)
+                    Send-Json $stream @{ ok = $true }
                 }
-                Read-Exact-ToFile $stream $target ([long]$req.size)
-                Send-Json $stream @{ ok = $true }
             }
             "hash" {
                 # Bitta faylning SHA-256 xeshi — sender --verify rejimi uchun

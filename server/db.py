@@ -577,12 +577,21 @@ STOP_COLS = ["name", "arrival_time", "departure_time", "latitude", "longitude",
 
 
 def _insert(table, cols, data):
-    """Berilgan jadvalga yangi qator qo'shadi va yangi id'ni qaytaradi."""
-    vals = [data.get(c) for c in cols]
-    placeholders = ",".join(["?"] * len(cols))
+    """Berilgan jadvalga yangi qator qo'shadi va yangi id'ni qaytaradi.
+
+    MUHIM: faqat `data`da MAVJUD ustunlarni yozamiz — berilmaganlariga
+    oshkora NULL yozmaymiz, aks holda sxemadagi DEFAULT (masalan
+    `visible INTEGER DEFAULT 1`, `is_active DEFAULT 1`) bekor bo'lib qolardi.
+    Avval add_content'ni to'g'ridan chaqirgan kod (seed/sync merge) `visible`ni
+    bermasa yozuv NULL -> kioskda ko'rinmay qolar edi."""
+    use = [c for c in cols if c in data]
+    if not use:
+        raise ValueError(f"{table}: yoziladigan ustun yo'q")
+    vals = [data[c] for c in use]
+    placeholders = ",".join(["?"] * len(use))
     with _conn() as c:
         cur = c.execute(
-            f"INSERT INTO {table} ({','.join(cols)}) VALUES ({placeholders})", vals)
+            f"INSERT INTO {table} ({','.join(use)}) VALUES ({placeholders})", vals)
         return cur.lastrowid
 
 

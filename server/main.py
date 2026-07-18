@@ -157,7 +157,12 @@ def content(type: str | None = None):
         raise HTTPException(400, f"Noma'lum tur: {type}")
     # Kioskka faqat KO'RINADIGAN kontent beriladi (admin "Kiosklarda
     # ko'rsatilsin"ni olib tashlagan bo'lsa — ro'yxatda umuman chiqmaydi).
-    return [c for c in db.get_content(type) if c.get("visible", 1)]
+    # Faqat ANIQ 0 yashiriladi: NULL (eski yozuvlar / DEFAULTsiz insert)
+    # KO'RINADI deb hisoblanadi (visible DEFAULT 1 niyati).
+    def _visible(c):
+        v = c.get("visible", 1)
+        return v is None or str(v) != "0"
+    return [c for c in db.get_content(type) if _visible(c)]
 
 
 @app.get("/api/content/{content_id}")
