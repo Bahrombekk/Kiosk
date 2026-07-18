@@ -1,0 +1,45 @@
+<div class="splash-container">
+  <img src="/splash_screen_image.png" alt="Logo" />
+</div>
+
+<style>
+  body {
+    margin: 0;
+  }
+  .splash-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    background: url("/splash_screen_background.png");
+    background-repeat: no-repeat;
+    background-size: cover;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background-color: var(--tertiary-bg);
+    color: #ffffff;
+    font-family: sans-serif;
+    z-index: 9999;
+  }
+  .dark .splash-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    background: url("/splash_screen_background_dark.png");
+    background-repeat: no-repeat;
+    background-size: cover;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background-color: var(--tertiary-bg);
+    color: #ffffff;
+    font-family: sans-serif;
+    z-index: 9999;
+  }
+</style>

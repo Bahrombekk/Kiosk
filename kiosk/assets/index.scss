@@ -1,0 +1,70 @@
+:root {
+  --brand-base: #2563eb;
+  --surface-bg: #fff;
+  --tertiary-bg: #f1f5f9;
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+  --icon-secondary: #94a3b8;
+  --info-surface-bg: #f0f9ff;
+  --warning-base: #f59e0b;
+  --brand-surface: #eff6ff;
+  --neutral-stroke: #e2e8f0;
+  --icon-active: #0f172a;
+  --icon-secondary: #94a3b8;
+  --blurred-bg: rgba(255, 255, 255, 0.9);
+}
+.dark {
+  --brand-base: #3b82f6;
+  --surface-bg: #0f172a;
+  --tertiary-bg: #1e293b;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --brand-surface: #1e3a8a;
+  --neutral-stroke: #334155;
+  --icon-active: #f8fafc;
+  --icon-secondary: #64748b;
+  --blurred-bg: rgba(0, 0, 0, 0.25);
+}
+
+.dark .leaflet-layer,
+.dark .leaflet-control-zoom-in,
+.dark .leaflet-control-zoom-out,
+.dark .leaflet-control-attribution {
+  filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+}
+
+/* Prevent your map marker icons from looking weird/inverted */
+.dark .leaflet-marker-icon {
+  filter: none !important;
+}
+
+html {
+  min-height: 100%;
+  width: 100%;
+  margin: 0;
+}
+
+body {
+  min-height: 100%;
+  margin: 0;
+  font-family: "Inter", sans-serif;
+  background: url("../public/splash_screen_background.png");
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-color: var(--tertiary-bg);
+  background-position: center;
+  background-attachment: fixed;
+}
+
+button {
+  cursor: pointer;
+}
+
+.dark body {
+  background: url("../public/splash_screen_background_dark.png");
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center;
+  background-color: var(--tertiary-bg);
+  background-attachment: fixed;
+}

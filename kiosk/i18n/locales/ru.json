@@ -1,0 +1,52 @@
+{
+  "appHeaderTitles": {
+    "maps": "КАРТА",
+    "videos": "ВИДЕО",
+    "books": "КНИГИ",
+    "websites": "САЙТЫ"
+  },
+  "appHeaderNavbar": {
+    "main": "Главная",
+    "maps": "Карта",
+    "videos": "Видео",
+    "books": "Книги",
+    "websites": "Сайты"
+  },
+  "categories": {
+    "all": "Все",
+    "movies": "Фильмы",
+    "cartoons": "Мультфильмы",
+    "music": "Музыка",
+    "other": "Другое"
+  },
+  "speed": "Скорость",
+  "temperature": "Температура",
+  "seatPlacement": "Место",
+  "weRecommend": "Рекомендуем",
+  "minutes_short": "м",
+  "hour_short": "ч",
+  "buttonActions": {
+    "listen": "Слушать",
+    "read": "Читать",
+    "watch": "Смотреть"
+  },
+  "train": "Поезд",
+  "wagon": "вагон",
+  "departure": "Отбытие",
+  "searchPlaceholder": "Искать по имени",
+  "pages": "страниц",
+  "pages_short": "стр.",
+  "back": "Назад",
+  "mediaUnavailable": "Медиафайл недоступен",
+  "loading": "Загрузка...",
+  "noContent": "Текст не найден",
+  "nothingFound": "Пока нет контента",
+  "connectionError": "Нет связи с сервером",
+  "retry": "Повторить",
+  "openOnYourPhone": "Откройте на телефоне",
+  "scanInstructions": {
+    "pointCamera": "Направьте камеру телефона на QR код",
+    "clickLink": "Нажмите на ссылку - откроется в браузере",
+    "canUseAtHome": "Можете использовать сервис дома"
+  }
+}

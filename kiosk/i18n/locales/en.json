@@ -1,0 +1,52 @@
+{
+  "appHeaderTitles": {
+    "maps": "MAP",
+    "videos": "VIDEOS",
+    "books": "BOOKS",
+    "websites": "WEBSITES"
+  },
+  "appHeaderNavbar": {
+    "main": "Main",
+    "maps": "Map",
+    "videos": "Videos",
+    "books": "Books",
+    "websites": "Websites"
+  },
+  "categories": {
+    "all": "All",
+    "movies": "Movies",
+    "cartoons": "Cartoons",
+    "music": "Music",
+    "other": "Other"
+  },
+  "speed": "Speed",
+  "temperature": "Temperature",
+  "seatPlacement": "Placement",
+  "weRecommend": "We Recommend",
+  "minutes_short": "m",
+  "hour_short": "h",
+  "buttonActions": {
+    "listen": "Listen",
+    "read": "Read",
+    "watch": "Watch"
+  },
+  "train": "Train",
+  "wagon": "wagon",
+  "departure": "Departure",
+  "searchPlaceholder": "Search by name",
+  "pages": "pages",
+  "pages_short": "p.",
+  "back": "Back",
+  "mediaUnavailable": "This media is unavailable",
+  "loading": "Loading...",
+  "noContent": "No text found",
+  "nothingFound": "No content yet",
+  "connectionError": "No connection to the server",
+  "retry": "Retry",
+  "openOnYourPhone": "Open on your phone",
+  "scanInstructions": {
+    "pointCamera": "Point your phone camera at a QR code",
+    "clickLink": "Click the link - opens in browser",
+    "canUseAtHome": "You can use the service at home"
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "appHeaderTitles": {
+    "maps": "XARITA",
+    "videos": "VIDEOLAR",
+    "books": "KITOBLAR",
+    "websites": "SAYTLAR"
+  },
+  "appHeaderNavbar": {
+    "main": "Asosiy",
+    "maps": "Xarita",
+    "videos": "Videolar",
+    "books": "Kitoblar",
+    "websites": "Saytlar"
+  },
+  "categories": {
+    "all": "Barchasi",
+    "movies": "Kinolar",
+    "cartoons": "Multfilmlar",
+    "music": "Musiqa",
+    "other": "Boshqa"
+  },
+  "speed": "Tezlik",
+  "temperature": "Harorat",
+  "seatPlacement": "Joylashuv",
+  "weRecommend": "Tavsiya etamiz",
+  "minutes_short": "d",
+  "hour_short": "s",
+  "buttonActions": {
+    "listen": "Tinglash",
+    "read": "O'qish",
+    "watch": "Tomosha qilish"
+  },
+  "train": "Poyezd",
+  "wagon": "vagon",
+  "departure": "Jo'nash",
+  "searchPlaceholder": "Nomi bo'yicha qidirish",
+  "pages": "sahifa",
+  "pages_short": "s.",
+  "back": "Ortga",
+  "mediaUnavailable": "Media mavjud emas",
+  "loading": "Yuklanmoqda...",
+  "noContent": "Matn topilmadi",
+  "nothingFound": "Hozircha kontent yo'q",
+  "connectionError": "Server bilan aloqa yo'q",
+  "retry": "Qayta urinish",
+  "openOnYourPhone": "Telefoningizda oching",
+  "scanInstructions": {
+    "pointCamera": "Telefon kamerasini QR kodga yo'naltiring",
+    "clickLink": "Havolaga bosiladi — brauzerda ochiladi",
+    "canUseAtHome": "Xizmatdan uyda ham foydalanishingiz mumkin"
+  }
+}
