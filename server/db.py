@@ -351,6 +351,25 @@ def upsert_kiosk(device_id, **fields):
             [device_id, *f.values()])
 
 
+def kiosk_ids_ordered():
+    """Barcha ro'yxatdan o'tgan kiosk device_id'lari — BIRINCHI ULANISH
+    tartibida (litsenziya limiti shu tartibda qo'llanadi: eski qurilmalar
+    limitga birinchi sig'adi, ortiqchasi bloklanadi)."""
+    with closing(connect()) as conn:
+        rows = conn.execute(
+            "SELECT device_id FROM kiosks ORDER BY first_seen, device_id"
+        ).fetchall()
+    return [r["device_id"] for r in rows]
+
+
+def delete_kiosk(device_id):
+    """Kiosk yozuvini registrdan o'chiradi (eskirgan/almashtirilgan qurilma
+    litsenziya limitidagi o'rnini bo'shatadi)."""
+    with closing(connect()) as conn:
+        conn.execute("DELETE FROM kiosks WHERE device_id=?", (device_id,))
+        conn.commit()
+
+
 def get_kiosks():
     """Ro'yxatdan o'tgan barcha kiosklar (admin jadvali uchun)."""
     with closing(connect()) as conn:

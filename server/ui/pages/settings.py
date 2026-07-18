@@ -5,6 +5,8 @@ Xavfsizlik), har birida ikonkali sarlavha. Yorliqlar maydon USTIDA (2 ustunli
 grid). Butun tarkib QScrollArea ichida — kichik oynada ham hech narsa
 ustma-ust chiqmaydi, shunchaki aylantiriladi.
 """
+import os
+
 from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtWidgets import (
     QCheckBox, QComboBox, QDateEdit, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
@@ -433,6 +435,36 @@ class SettingsPageMixin:
         clay.addLayout(t_row)
         ilay.addWidget(card)
 
+        # === 7) Imzolangan litsenziya (license.key) ===
+        card, clay = self._sec_card(
+            "file-text", "#EFF6FF", "#2563EB", "Litsenziya fayli (imzolangan)",
+            "Dastur vendor imzolagan license.key bilan ishlaydi: muddat, "
+            "kiosk soni chegarasi va AYNAN SHU kompyuterga bog'langan. "
+            "Yangi litsenziya olish uchun quyidagi Qurilma ID'ni vendorga "
+            "yuboring — u license.key faylini tayyorlab beradi.")
+        self.s_hwid = QLineEdit()
+        self.s_hwid.setReadOnly(True)
+        hw_row = QHBoxLayout()
+        hw_row.setContentsMargins(0, 0, 0, 0)
+        hw_row.setSpacing(10)
+        hw_row.addWidget(self.s_hwid, 1)
+        hw_row.addWidget(self._btn("Nusxalash", "copy",
+                                   self._copy_hwid, kind="ghost"))
+        hw_holder = QWidget()
+        hw_holder.setLayout(hw_row)
+        clay.addLayout(self._field("Qurilma ID (vendorga yuboriladi)",
+                                   hw_holder))
+        self.s_lic_status = QLabel()
+        self.s_lic_status.setWordWrap(True)
+        self.s_lic_status.setObjectName("hint")
+        clay.addWidget(self.s_lic_status)
+        l_row = QHBoxLayout()
+        l_row.addStretch(1)
+        l_row.addWidget(self._btn("Litsenziya faylini yuklash...", "file-text",
+                                  self._load_license_file))
+        clay.addLayout(l_row)
+        ilay.addWidget(card)
+
         ilay.addStretch(1)
         scroll.setWidget(inner)
         outer.addWidget(scroll, 1)
@@ -471,6 +503,7 @@ class SettingsPageMixin:
         except (TypeError, ValueError):
             self.s_trial_days.setValue(30)
         self._update_trial_status()
+        self._update_license_status()
         # Bo'sh bo'lsa standart ro'yxat ko'rsatiladi — admin hozir nima
         # chiqayotganini ko'rib, shu yerda tahrirlaydi.
         self.s_sos.setPlainText(s.get("sos_numbers", "").strip() or DEFAULT_SOS)
@@ -572,6 +605,59 @@ class SettingsPageMixin:
         self.s_trial_status.setText(txt)
         self.s_trial_status.setStyleSheet(
             f"color: {color}; font-weight: 700; background: transparent;")
+
+    # --- Imzolangan litsenziya (license.key) ---
+    def _copy_hwid(self):
+        from PyQt6.QtWidgets import QApplication
+        QApplication.clipboard().setText(self.s_hwid.text())
+        self.statusBar().showMessage("Qurilma ID nusxalandi.", 3000)
+
+    def _update_license_status(self):
+        """license.key holatini kartada ko'rsatadi (HW ID ham shu yerda)."""
+        import licensing
+        st = licensing.state()
+        self.s_hwid.setText(st["hw_id"])
+        if st["valid"]:
+            left = (f" ({st['days_left']} kun qoldi)"
+                    if st["days_left"] is not None else "")
+            txt = ("Litsenziya FAOL"
+                   + (f" — mijoz: {st['customer']}" if st["customer"] else "")
+                   + f" • muddat: {st['expires'] or 'muddatsiz'}{left}"
+                   + f" • kiosk limiti: {st['max_kiosks'] or 'cheksiz'}")
+            color = "#047857"
+        elif st["blocked"]:
+            txt = (f"LITSENZIYA YAROQSIZ: {st['reason']} — barcha kiosklar "
+                   "qulf ekranida. To'g'ri license.key yuklang.")
+            color = "#DC2626"
+        else:
+            txt = st["reason"] or ""
+            color = "#64748B"
+        self.s_lic_status.setText(txt)
+        self.s_lic_status.setStyleSheet(
+            f"color: {color}; font-weight: 700; background: transparent;")
+
+    def _load_license_file(self):
+        from PyQt6.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Litsenziya fayli", "",
+            "Litsenziya (*.key);;Barcha fayllar (*)")
+        if not path:
+            return
+        import licensing
+        try:
+            st = licensing.install_file(path)
+        except (OSError, ValueError) as e:
+            QMessageBox.warning(self, "Litsenziya", str(e))
+            return
+        db.log_action("license_install",
+                      st.get("customer") or os.path.basename(path))
+        self._broadcast_sync("settings")   # kiosklar yangi holatni darhol oladi
+        self._update_license_status()
+        if st["valid"]:
+            self.statusBar().showMessage("Litsenziya qabul qilindi.", 4000)
+        else:
+            QMessageBox.warning(self, "Litsenziya",
+                                f"Fayl yuklandi, lekin yaroqsiz: {st['reason']}")
 
     def _trial_block_now(self):
         if QMessageBox.question(

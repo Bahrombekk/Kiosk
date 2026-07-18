@@ -327,11 +327,33 @@ Tiklanish: `Ctrl+Alt+Del → Chiqish` → admin hisobiga kiring; kerak bo'lsa
 
 ---
 
-## Litsenziya / sinov muddati
+## Litsenziya (imzolangan license.key)
 
-Serverda sinov muddati / litsenziya holati saqlanadi. Muddat tugasa server
-`status.blocked=True` yuboradi va kiosk butun ekranni **qulf ekrani** bilan qoplaydi.
-Holat kioskda keshlanadi — server o'chsa ham qulf saqlanadi. Vendor **master PIN**
-(`KIOSK_DEV_PIN_HASH` — PBKDF2 xesh, ochiq matn kodda saqlanmaydi) bloklangan
-holatda ham dasturni yopa oladi (mijozdan mustaqil). Xesh yaratish:
+Production (frozen) server **vendor imzolagan `license.key`siz ishlamaydi** —
+barcha kiosklar qulf ekraniga tushadi, admin oynada esa Qurilma ID va sabab
+ko'rinadi. Litsenziya:
+
+- **Ed25519 imzolangan** — imzo kaliti faqat vendorda
+  (`server/tools/license/vendor_private.pem`, git'da YO'Q, mijozga berilmaydi).
+  DB yoki faylni tahrirlash foydasiz — imzo buziladi.
+- **Kompyuterga bog'langan** — payload ichida serverning hardware ID'si
+  (Windows MachineGuid). O'rnatilgan papkani boshqa kompyuterga ko'chirsa
+  litsenziya ishlamaydi.
+- **Muddatli** (`--days`/`--expires`) yoki muddatsiz (`--forever`).
+- **Kiosk soni chegarasi** (`--kiosks 50`) — 51-qurilma ulansa faqat O'SHA
+  qurilma qulflanadi (birinchi ulanish tartibida limit). Eskirgan kioskni
+  admin Boshqaruv → kiosk → "Registrdan o'chirish" bilan bo'shatadi.
+
+Berish oqimi: mijoz serverida **Sozlamalar → Litsenziya → Qurilma ID** ni
+nusxalab vendorga yuboriladi → vendorda:
+`py -3 server/tools/license_tool.py issue --hw <id> --customer "..." --days 365 --kiosks 50`
+→ `license.key` serverda **Sozlamalar → Litsenziya yuklash** orqali (yoki exe
+yoniga qo'yib) o'rnatiladi. Tekshirish: `license_tool.py inspect license.key`.
+
+Manba (dev) rejimida litsenziyasiz cheksiz ishlaydi (ogohlantirish bilan).
+Qo'lda darhol bloklash/ochish tugmalari (Sozlamalar) avvalgidek ishlaydi.
+
+Vendor **master PIN** (`KIOSK_DEV_PIN_HASH` — PBKDF2 xesh, ochiq matn kodda
+saqlanmaydi) bloklangan holatda ham dasturni yopa oladi (mijozdan mustaqil).
+Xesh yaratish:
 `python -c "from core import pinhash; print(pinhash.hash_secret('PIN'))"`.

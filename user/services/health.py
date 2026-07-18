@@ -16,6 +16,9 @@ class HealthChecker(QThread):
     Server tirik bo'lsa heartbeat ham yuboriladi — admin "Kiosklar" jadvali
     shu orqali to'ladi (kiosk raqami/xonasi server.txt'dan)."""
     result = pyqtSignal(bool)
+    # Heartbeat javobidagi PER-DEVICE blok (litsenziya kiosk-limiti: bu qurilma
+    # shartnomadagi sondan ortiq bo'lsa server blocked=True qaytaradi).
+    blocked = pyqtSignal(bool)
 
     def __init__(self, api):
         super().__init__()
@@ -43,6 +46,10 @@ class HealthChecker(QThread):
                 # (xotirasiz kiosk) — yuklashni to'xtatamiz
                 if isinstance(resp, dict) and "cache" in resp:
                     media_cache.set_device_allowed(bool(resp.get("cache")))
+                # Litsenziya kiosk-limiti: shu qurilma limitdan ortiq bo'lsa
+                # server per-device blocked=True beradi -> qulf ekrani.
+                if isinstance(resp, dict) and "blocked" in resp:
+                    self.blocked.emit(bool(resp.get("blocked")))
             except Exception:                       # noqa: BLE001
                 pass   # heartbeat yetmasa ham health natijasi muhimroq
         self.result.emit(ok)

@@ -271,6 +271,8 @@ class MainWindow(QWidget):
             return  # oldingi tekshiruv hali tugamagan
         self._checker = track(HealthChecker(self.api))
         self._checker.result.connect(self._on_health)
+        # Per-device litsenziya bloki (kiosk-limit) — heartbeat javobidan
+        self._checker.blocked.connect(self._apply_block)
         self._checker.start()
 
     def _show_offline_banner(self, offline):

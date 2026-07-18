@@ -99,3 +99,8 @@ server/.tools/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Litsenziya tizimi sirlari — HECH QACHON commit qilinmasin
+server/tools/license/vendor_private.pem
+license.key
+server/license.key

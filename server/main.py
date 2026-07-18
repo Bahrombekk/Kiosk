@@ -34,6 +34,7 @@ from fastapi.responses import Response, StreamingResponse, FileResponse, JSONRes
 
 import config
 import db
+import licensing
 import security
 import discovery
 import weather
@@ -86,7 +87,11 @@ async def _status_loop():
         # to'xtatib qo'ymasin — har iteratsiya o'zini himoyalaydi.
         try:
             if manager.count():
-                await manager.broadcast({"type": "status_update", **status_payload()})
+                # Litsenziya kiosk-limitidan ORTGAN qurilmalarga blocked=True
+                # bilan yuboriladi (faqat o'sha qurilmalar qulflanadi).
+                await manager.broadcast(
+                    {"type": "status_update", **status_payload()},
+                    blocked_ids=licensing.over_limit_devices())
             last_err = None
         except Exception as e:                           # noqa: BLE001
             # Bir xil xato har 3 soniyada logni to'ldirmasin — faqat xato
@@ -409,7 +414,15 @@ def heartbeat(payload: dict, request: Request):
     )
     # Kioskка JAVOBда shu qurilmaning lokal-kesh ruxsatini qaytaramiz —
     # admin xotirasiz kiosklarда keshni o'chirib qo'yishi mumkin.
-    return {"ok": True, "cache": db.get_kiosk_cache_enabled(device_id)}
+    # `blocked` — GLOBAL blok (litsenziya yaroqsiz/muddati o'tgan/qo'lda blok,
+    # status_payload bilan bir xil — WS bilan zid kelib "flap" qilmasin) YOKI
+    # per-device kiosk-limiti (50 talik shartnomaga 51-kiosk ulansa).
+    return {
+        "ok": True,
+        "cache": db.get_kiosk_cache_enabled(device_id),
+        "blocked": (status_payload()["blocked"]
+                    or not licensing.device_allowed(device_id)),
+    }
 
 
 @app.get("/api/route")
@@ -571,8 +584,11 @@ def status_payload():
         "current_stop": current,
         "train_name": s.get("train_name"),
         "route": s.get("route"),
-        # Sinov muddati/litsenziya bloki — kiosk True bo'lsa qulf ekranini ko'rsatadi
-        "blocked": db.trial_state(s)["blocked"],
+        # Blok = IMZOLANGAN litsenziya holati (yo'q/yaroqsiz/muddati o'tgan/
+        # boshqa kompyuter) YOKI eski qo'lda blok (trial_blocked — vendor
+        # admin paneldan darhol qulflashi uchun saqlangan).
+        "blocked": (licensing.state()["blocked"]
+                    or db.trial_state(s)["blocked"]),
     }
     _status_cache["data"] = payload
     _status_cache["ts"] = now_mono

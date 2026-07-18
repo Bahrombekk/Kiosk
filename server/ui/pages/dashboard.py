@@ -476,6 +476,15 @@ class DashboardPageMixin:
         if not online:
             clear_btn.setToolTip("Kiosk oflayn — buyruq qabul qilolmaydi")
         foot.addWidget(clear_btn)
+        # Registrdan o'chirish — eskirgan/almashtirilgan qurilma litsenziya
+        # kiosk-limitidagi o'rnini bo'shatadi (yangi kiosk shu o'ringa kiradi).
+        del_btn = self._btn("Registrdan o'chirish", "trash-2",
+                            lambda: self._delete_kiosk(k, dlg), kind="danger")
+        del_btn.setEnabled(bool(k.get("device_id")))
+        del_btn.setToolTip("Qurilmani ro'yxatdan o'chiradi — litsenziya "
+                           "limitidagi o'rni bo'shaydi. Qurilma yana ulansa "
+                           "qaytadan (navbat oxiridan) ro'yxatga tushadi.")
+        foot.addWidget(del_btn)
         foot.addStretch(1)
         btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         # Close tugmasi "reject" rolida — `rejected` o'zi yetarli. `clicked`'ni
@@ -484,6 +493,27 @@ class DashboardPageMixin:
         foot.addWidget(btns)
         lay.addLayout(foot)
         dlg.exec()
+
+    def _delete_kiosk(self, k, dlg):
+        """Kiosk yozuvini registrdan o'chiradi (litsenziya limitida o'rin
+        bo'shaydi). Qurilma hali ham ulanib tursa keyingi heartbeat'da qayta
+        ro'yxatga tushadi — bu tugma eskirgan/almashtirilgan qurilmalar uchun."""
+        dev = k.get("device_id")
+        if not dev:
+            return
+        name = k.get("kiosk_no") or dev
+        if QMessageBox.question(
+                self, "Registrdan o'chirish",
+                f"«{name}» qurilmasi ro'yxatdan o'chirilsinmi?\n\n"
+                "Litsenziya kiosk-limitidagi o'rni bo'shaydi. Qurilma hali "
+                "ishlayotgan bo'lsa, keyingi ulanishda qayta ro'yxatga tushadi."
+                ) != QMessageBox.StandardButton.Yes:
+            return
+        db.delete_kiosk(dev)
+        db.log_action("kiosk_delete", dev)
+        self.statusBar().showMessage(f"«{name}» registrdan o'chirildi.", 4000)
+        dlg.accept()
+        self._update_status()   # kiosk jadvali darhol yangilanadi
 
     def _clear_kiosk_cache(self, k, dlg):
         """Tanlangan kioskka faqat o'ziga «keshni tozalash» buyrug'ini yuboradi."""

@@ -119,12 +119,22 @@ class ConnectionManager:
         """Bitta socketga yuboradi (o'sha socket qulfi ostida)."""
         await self._safe_send(ws, message)
 
-    async def broadcast(self, message: dict):
+    async def broadcast(self, message: dict, blocked_ids=frozenset()):
         # Barcha socketlarga PARALLEL yuboramiz — bitta sekin/yarim o'lik kiosk
         # qolganlarini bloklamaydi (har biri o'z qulfi + timeoutida).
-        targets = list(self.active)
+        # `blocked_ids` — litsenziya kiosk-limitidan ortgan qurilmalar: ularga
+        # xabar blocked=True bilan yuboriladi (faqat o'sha kiosk qulflanadi,
+        # qolganlari odatdagidek ishlayveradi).
+        targets = list(self.active.items())
+
+        def _msg_for(info):
+            if (blocked_ids and info.get("device_id") in blocked_ids
+                    and not message.get("blocked")):
+                return {**message, "blocked": True}
+            return message
+
         results = await asyncio.gather(
-            *(self._safe_send(ws, message) for ws in targets),
+            *(self._safe_send(ws, _msg_for(info)) for ws, info in targets),
             return_exceptions=True)
         for r in results:
             if isinstance(r, BaseException):
