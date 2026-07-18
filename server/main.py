@@ -370,7 +370,10 @@ def stats_in(payload: dict):
     events = payload.get("events")
     if not isinstance(events, list):
         raise HTTPException(400, "events ro'yxati kerak")
-    saved = db.insert_stats(payload.get("device_id"), events[:1000])
+    # Manba: 'web' (Nuxt) yoki default 'kiosk' (PyQt klient) — admin
+    # statistikada ajratiladi.
+    source = "web" if payload.get("source") == "web" else "kiosk"
+    saved = db.insert_stats(payload.get("device_id"), events[:1000], source)
     return {"saved": saved}
 
 

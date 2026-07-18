@@ -141,7 +141,8 @@ CREATE TABLE IF NOT EXISTS stats_events (
     session   TEXT,                        -- kiosk sessiya id'si
     ts        TEXT,                        -- kiosk vaqti (ISO, lokal)
     event     TEXT NOT NULL,               -- session_start|screen_view|content_open|ad_play|...
-    data      TEXT                         -- JSON qo'shimcha maydonlar
+    data      TEXT,                        -- JSON qo'shimcha maydonlar
+    source    TEXT DEFAULT 'kiosk'         -- 'kiosk' (PyQt klient) | 'web' (Nuxt)
 );
 CREATE INDEX IF NOT EXISTS idx_stats_ts ON stats_events(ts);
 CREATE INDEX IF NOT EXISTS idx_stats_event ON stats_events(event);
@@ -209,6 +210,13 @@ def init_db():
                          ("cache_enabled", "INTEGER DEFAULT 1")):
             if col not in kcols:
                 conn.execute(f"ALTER TABLE kiosks ADD COLUMN {col} {ddl}")
+        # stats_events: manba (kiosk PyQt klient / veb Nuxt). Eski yozuvlar
+        # 'kiosk' bo'ladi (ular faqat kiosk klientdan kelardi).
+        scols = {r["name"] for r in
+                 conn.execute("PRAGMA table_info(stats_events)").fetchall()}
+        if "source" not in scols:
+            conn.execute("ALTER TABLE stats_events ADD COLUMN source TEXT"
+                         " DEFAULT 'kiosk'")
         conn.commit()
         _ensure_defaults(conn)
         _remove_legacy_seed(conn)
@@ -771,11 +779,12 @@ STATS_EVENTS = ("session_start", "session_end", "screen_view", "lang_change",
                 "content_open", "ad_play", "qr_route", "site_qr", "sos_open")
 
 
-def insert_stats(device_id, events):
-    """Kioskdan kelgan event to'plamini saqlaydi. Noma'lum/buzilgan yozuvlar
-    jim tashlanadi (kiosk eski/yangi versiyada bo'lishi mumkin). Saqlangan
-    yozuvlar sonini qaytaradi."""
+def insert_stats(device_id, events, source="kiosk"):
+    """Kiosk YOKI veb'dan kelgan event to'plamini saqlaydi. `source` yozuv
+    manbasini belgilaydi ('kiosk'|'web') — admin statistikada ajratiladi.
+    Noma'lum/buzilgan yozuvlar jim tashlanadi. Saqlangan sonini qaytaradi."""
     import json as _json
+    src = "web" if str(source) == "web" else "kiosk"
     rows = []
     for ev in events:
         if not isinstance(ev, dict):
@@ -788,13 +797,14 @@ def insert_stats(device_id, events):
                      str(ev.get("ts") or "")[:32],
                      name,
                      _json.dumps(ev.get("data") or {}, ensure_ascii=False,
-                                 default=str)[:1000]))
+                                 default=str)[:1000],
+                     src))
     if not rows:
         return 0
     with _conn() as c:
         c.executemany(
-            "INSERT INTO stats_events (device_id,session,ts,event,data)"
-            " VALUES (?,?,?,?,?)", rows)
+            "INSERT INTO stats_events (device_id,session,ts,event,data,source)"
+            " VALUES (?,?,?,?,?,?)", rows)
     return len(rows)
 
 
@@ -812,60 +822,102 @@ STATS_TOP_KEYS = ("title", "screen", "ad_id", "site", "lang", "type",
                   "content_id", "route", "stop")
 
 
-def stats_daily_sessions(days=7):
+def _src_filter(source):
+    """(sql_fragment, params) — manba filtri. source None='hammasi',
+    'kiosk'/'web'=faqat o'sha. WHERE bandiga qo'shiladi."""
+    if source in ("kiosk", "web"):
+        return " AND source=?", [source]
+    return "", []
+
+
+def stats_daily_sessions(days=7, source=None):
     """Kunlik sessiyalar: [{day, sessions, avg_s}] (session_end bo'yicha)."""
+    sf, sp = _src_filter(source)
     with closing(connect()) as conn:
         rows = conn.execute(
-            """SELECT substr(ts,1,10) AS day, COUNT(*) AS sessions,
+            f"""SELECT substr(ts,1,10) AS day, COUNT(*) AS sessions,
                       CAST(AVG(json_extract(data,'$.duration_s')) AS INTEGER) AS avg_s
                FROM stats_events
-               WHERE event='session_end' AND ts >= ?
-               GROUP BY day ORDER BY day DESC""", (_stats_since(days),)).fetchall()
+               WHERE event='session_end' AND ts >= ?{sf}
+               GROUP BY day ORDER BY day DESC""",
+            (_stats_since(days), *sp)).fetchall()
     return [dict(r) for r in rows]
 
 
-def stats_top(event, key, days=7, limit=10):
+def stats_top(event, key, days=7, limit=10, source=None):
     """Berilgan event ichidagi data.<key> bo'yicha TOP ro'yxat:
     [{name, n}] — masalan content_open/title yoki screen_view/screen."""
     if key not in STATS_TOP_KEYS:
         raise ValueError(f"stats_top: ruxsat etilmagan key: {key!r}")
+    sf, sp = _src_filter(source)
     with closing(connect()) as conn:
         rows = conn.execute(
             f"""SELECT json_extract(data,'$.{key}') AS name, COUNT(*) AS n
                 FROM stats_events
-                WHERE event=? AND ts >= ? AND name IS NOT NULL
+                WHERE event=? AND ts >= ? AND name IS NOT NULL{sf}
                 GROUP BY name ORDER BY n DESC LIMIT ?""",
-            (event, _stats_since(days), limit)).fetchall()
+            (event, _stats_since(days), *sp, limit)).fetchall()
     return [dict(r) for r in rows]
 
 
-def stats_event_count(event, days=7):
+def stats_event_count(event, days=7, source=None):
     """Bitta event turining umumiy soni (SOS, QR kabi yagona ko'rsatkichlar)."""
+    sf, sp = _src_filter(source)
     with closing(connect()) as conn:
         return conn.execute(
-            "SELECT COUNT(*) AS n FROM stats_events WHERE event=? AND ts >= ?",
-            (event, _stats_since(days))).fetchone()["n"]
+            f"SELECT COUNT(*) AS n FROM stats_events WHERE event=? AND ts >= ?{sf}",
+            (event, _stats_since(days), *sp)).fetchone()["n"]
 
 
-def stats_hourly(days=7):
+def stats_hourly(days=7, source=None):
     """Soatlik faollik (peak hours): [{hr, n}] — eng gavjum soat birinchi.
     screen_view (ekran navigatsiyasi) bo'yicha hisoblanadi."""
+    sf, sp = _src_filter(source)
     with closing(connect()) as conn:
         rows = conn.execute(
             "SELECT substr(ts,12,2) AS hr, COUNT(*) AS n FROM stats_events "
-            "WHERE event='screen_view' AND ts >= ? AND length(ts) >= 13 "
-            "GROUP BY hr ORDER BY n DESC", (_stats_since(days),)).fetchall()
+            f"WHERE event='screen_view' AND ts >= ? AND length(ts) >= 13{sf} "
+            "GROUP BY hr ORDER BY n DESC", (_stats_since(days), *sp)).fetchall()
     return [dict(r) for r in rows]
 
 
-def stats_by_kiosk(days=7):
-    """Kiosk bo'yicha sessiyalar: [{dev, n}] — eng faol kiosk birinchi."""
+def stats_by_kiosk(days=7, source=None):
+    """Qurilma bo'yicha sessiyalar: [{dev, n}] — eng faol birinchi."""
+    sf, sp = _src_filter(source)
     with closing(connect()) as conn:
         rows = conn.execute(
             "SELECT device_id AS dev, COUNT(*) AS n FROM stats_events "
-            "WHERE event='session_end' AND ts >= ? AND device_id IS NOT NULL "
-            "AND device_id != '' GROUP BY device_id ORDER BY n DESC",
-            (_stats_since(days),)).fetchall()
+            f"WHERE event='session_end' AND ts >= ? AND device_id IS NOT NULL "
+            f"AND device_id != ''{sf} GROUP BY device_id ORDER BY n DESC",
+            (_stats_since(days), *sp)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def stats_unique_users(days=7, source="web"):
+    """Noyob foydalanuvchilar (distinct device_id) — davr ichida jami.
+    Vebda har brauzer/telefon barqaror `web-<uuid>` device_id yuboradi, shuning
+    uchun bu "unique visitors" o'lchovi (aniq jon boshi emas — bir odam ikki
+    qurilmada = 2, kesh tozalansa qayta sanaladi)."""
+    sf, sp = _src_filter(source)
+    with closing(connect()) as conn:
+        return conn.execute(
+            f"SELECT COUNT(DISTINCT device_id) AS n FROM stats_events "
+            f"WHERE ts >= ? AND device_id IS NOT NULL AND device_id != ''{sf}",
+            (_stats_since(days), *sp)).fetchone()["n"]
+
+
+def stats_daily_users(days=7, source="web"):
+    """Kunlik noyob foydalanuvchilar (DAU): [{day, users}] — har kun bo'yicha
+    o'sha kuni faol bo'lgan noyob device_id soni."""
+    sf, sp = _src_filter(source)
+    with closing(connect()) as conn:
+        rows = conn.execute(
+            f"""SELECT substr(ts,1,10) AS day,
+                       COUNT(DISTINCT device_id) AS users
+                FROM stats_events
+                WHERE ts >= ? AND device_id IS NOT NULL AND device_id != ''{sf}
+                GROUP BY day ORDER BY day DESC""",
+            (_stats_since(days), *sp)).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -875,22 +927,23 @@ def clear_stats():
         c.execute("DELETE FROM stats_events")
 
 
-def stats_totals(days=7):
+def stats_totals(days=7, source=None):
     """Umumiy hisoblar: {sessions, content_opens, ad_plays, devices}."""
     since = _stats_since(days)
+    sf, sp = _src_filter(source)
     with closing(connect()) as conn:
         def _count(ev):
             return conn.execute(
-                "SELECT COUNT(*) AS n FROM stats_events WHERE event=? AND ts >= ?",
-                (ev, since)).fetchone()["n"]
+                f"SELECT COUNT(*) AS n FROM stats_events WHERE event=? AND ts >= ?{sf}",
+                (ev, since, *sp)).fetchone()["n"]
 
         return {
             "sessions": _count("session_end"),
             "content_opens": _count("content_open"),
             "ad_plays": _count("ad_play"),
             "devices": conn.execute(
-                "SELECT COUNT(DISTINCT device_id) AS n FROM stats_events"
-                " WHERE ts >= ?", (since,)).fetchone()["n"],
+                f"SELECT COUNT(DISTINCT device_id) AS n FROM stats_events"
+                f" WHERE ts >= ?{sf}", (since, *sp)).fetchone()["n"],
         }
 
 

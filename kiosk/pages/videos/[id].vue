@@ -86,6 +86,20 @@ const prerollIdx = useState("ad-preroll-idx", () => 0);
 const prerollAd = ref<Ad | null>(null);
 const prerollDone = ref(false);
 
+// Kontent ochilishi statistikaga (admin "Eng ko'p ochilgan kontent") — bir marta
+const { track } = useStats();
+let opened = false;
+watchEffect(() => {
+  if (video.value && !opened) {
+    opened = true;
+    track("content_open", {
+      content_id: video.value.id,
+      title: video.value.name,
+      type: video.value.type,
+    });
+  }
+});
+
 if (
   algorithm.value === "media" &&
   !isAudio.value &&

@@ -98,4 +98,12 @@ watch(
   },
   { immediate: true },
 );
+
+// Sayt QR modali ochilishi statistikaga (admin "QR va SOS" -> Sayt QR ochildi)
+const { track } = useStats();
+watch(model, (open) => {
+  if (open && props.selectedWebsite) {
+    track("site_qr", { site: props.selectedWebsite.name });
+  }
+});
 </script>

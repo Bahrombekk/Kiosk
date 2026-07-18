@@ -30,6 +30,16 @@ class StatsPageMixin:
         no_wheel(self.stats_period)   # scroll'da adashib o'zgarmasin
         top.addWidget(QLabel("Davr:"))
         top.addWidget(self.stats_period)
+        # Manba filtri: kiosk (PyQt klient) va veb (Nuxt) statistikasini
+        # ajratib ko'rsatadi. None = hammasi birga.
+        self.stats_source = QComboBox()
+        self.stats_source.addItem("Barcha manbalar", None)
+        self.stats_source.addItem("Faqat kiosklar", "kiosk")
+        self.stats_source.addItem("Faqat veb", "web")
+        self.stats_source.currentIndexChanged.connect(self.refresh_usage_stats)
+        no_wheel(self.stats_source)
+        top.addWidget(QLabel("Manba:"))
+        top.addWidget(self.stats_source)
         top.addWidget(self._btn("Yangilash", "refresh-cw",
                                 self.refresh_usage_stats, kind="ghost"))
         top.addStretch(1)
@@ -41,6 +51,7 @@ class StatsPageMixin:
         cards = QHBoxLayout()
         cards.setSpacing(14)
         self._usage_lbls = {}
+        self._usage_caps = {}   # yorliq (caption) — manba=web da o'zgaradi
         for key, label, icon_name, fg, bg in (
                 ("sessions", "Sessiyalar", "monitor", "#1D4ED8", "#DBEAFE"),
                 ("content_opens", "Kontent ochishlar", "clapperboard",
@@ -70,6 +81,7 @@ class StatsPageMixin:
             clay.addLayout(row)
             cards.addWidget(card, 1)
             self._usage_lbls[key] = num
+            self._usage_caps[key] = cap
         lay.addLayout(cards)
 
         # Jadvallar: chapda kunlik sessiyalar, o'ngda TOP kontent
@@ -112,7 +124,8 @@ class StatsPageMixin:
         return w
 
     def _stats_table(self, headers, title):
-        """Sarlavhali karta ichida kichik jadval. {'card','table'} qaytaradi."""
+        """Sarlavhali karta ichida kichik jadval.
+        {'card','table','title'} qaytaradi (title — sarlavha QLabel'i)."""
         card, clay = self._card(14)
         t = QLabel(title)
         t.setObjectName("cardTitle")
@@ -124,30 +137,37 @@ class StatsPageMixin:
         self._setup_table(table)
         table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
         clay.addWidget(table, 1)
-        return {"card": card, "table": table}
+        return {"card": card, "table": table, "title": t}
 
     # ------------------------------------------------------------------
     def refresh_usage_stats(self):
         """Barcha statistika bloklari qayta o'qiladi (sahifa ochilganda va
         davr/Yangilash bosilganda)."""
         days = self.stats_period.currentData() or 7
+        src = self.stats_source.currentData()   # None | 'kiosk' | 'web'
         try:
-            totals = db.stats_totals(days)
-            daily = db.stats_daily_sessions(days)
-            top_content = db.stats_top("content_open", "title", days)
-            top_screens = db.stats_top("screen_view", "screen", days)
-            langs = db.stats_top("lang_change", "lang", days)
-            ads = db.stats_top("ad_play", "title", days, limit=20)
-            hours = db.stats_hourly(days)
-            by_kiosk = db.stats_by_kiosk(days)
-            qr_n = db.stats_event_count("site_qr", days)
-            sos_n = db.stats_event_count("sos_open", days)
+            totals = db.stats_totals(days, source=src)
+            daily = db.stats_daily_sessions(days, source=src)
+            top_content = db.stats_top("content_open", "title", days, source=src)
+            top_screens = db.stats_top("screen_view", "screen", days, source=src)
+            langs = db.stats_top("lang_change", "lang", days, source=src)
+            ads = db.stats_top("ad_play", "title", days, limit=20, source=src)
+            hours = db.stats_hourly(days, source=src)
+            by_kiosk = db.stats_by_kiosk(days, source=src)
+            daily_users = db.stats_daily_users(days, source="web")
+            qr_n = db.stats_event_count("site_qr", days, source=src)
+            sos_n = db.stats_event_count("sos_open", days, source=src)
             kiosks = {k["device_id"]: k for k in db.get_kiosks()}
         except Exception:
             # DB hali tayyor bo'lmasa (birinchi ochilish) — bo'sh qoldiramiz
             return
         for key, lbl in self._usage_lbls.items():
             lbl.setText(str(totals.get(key, 0)))
+        # Manba=veb bo'lsa "devices" kartasi noyob foydalanuvchilarni bildiradi
+        # (distinct device_id = noyob brauzer/telefon = unique visitors).
+        web_mode = src == "web"
+        self._usage_caps["devices"].setText(
+            "Noyob foydalanuvchilar" if web_mode else "Faol kiosklar")
         self._fill(self.tbl_daily["table"],
                    [(r["day"], r["sessions"], r["avg_s"] or 0) for r in daily])
         self._fill(self.tbl_content["table"],
@@ -163,15 +183,28 @@ class StatsPageMixin:
         # Soatlik faollik — "HH:00" ko'rinishida
         self._fill(self.tbl_hours["table"],
                    [(f"{r['hr']}:00", r["n"]) for r in hours])
-        # Kiosk bo'yicha — kiosk_no/xona bilan tushunarli yorliq (bo'lmasa ID)
-        def _klabel(dev):
-            k = kiosks.get(dev)
-            if k and (k.get("kiosk_no") or k.get("room")):
-                parts = [p for p in (k.get("kiosk_no"), k.get("room")) if p]
-                return " / ".join(parts)
-            return dev
-        self._fill(self.tbl_kiosk["table"],
-                   [(_klabel(r["dev"]), r["n"]) for r in by_kiosk])
+        # Manba=veb: "Kiosk bo'yicha" jadval o'rniga "Kunlik noyob
+        # foydalanuvchilar (DAU)" ko'rsatiladi — veb qurilma nomlari yo'q,
+        # o'rniga kun bo'yicha noyob foydalanuvchilar foydaliroq.
+        if web_mode:
+            self.tbl_kiosk["title"].setText("Kunlik noyob foydalanuvchilar (DAU)")
+            self.tbl_kiosk["table"].setHorizontalHeaderLabels(
+                ["Kun", "Foydalanuvchilar"])
+            self._fill(self.tbl_kiosk["table"],
+                       [(r["day"], r["users"]) for r in daily_users])
+        else:
+            self.tbl_kiosk["title"].setText("Kiosk bo'yicha")
+            self.tbl_kiosk["table"].setHorizontalHeaderLabels(
+                ["Kiosk", "Sessiyalar"])
+            # kiosk_no/xona bilan tushunarli yorliq (bo'lmasa ID)
+            def _klabel(dev):
+                k = kiosks.get(dev)
+                if k and (k.get("kiosk_no") or k.get("room")):
+                    parts = [p for p in (k.get("kiosk_no"), k.get("room")) if p]
+                    return " / ".join(parts)
+                return dev
+            self._fill(self.tbl_kiosk["table"],
+                       [(_klabel(r["dev"]), r["n"]) for r in by_kiosk])
         # QR va SOS — yagona ko'rsatkichlar
         self._fill(self.tbl_qrsos["table"],
                    [("Sayt QR ochildi", qr_n), ("SOS ochildi", sos_n)])

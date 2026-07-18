@@ -41,6 +41,20 @@ const showAudioPlayer = computed(
     (book.value?.contentModes.audible && !book.value.contentModes.readable),
 );
 
+// Kontent ochilishi statistikaga (admin "Eng ko'p ochilgan kontent") — bir marta
+const { track } = useStats();
+let opened = false;
+watchEffect(() => {
+  if (book.value && !opened) {
+    opened = true;
+    track("content_open", {
+      content_id: book.value.id,
+      title: book.value.title,
+      type: book.value.type,
+    });
+  }
+});
+
 useHead({
   bodyAttrs: {
     class: "full-screen-page",

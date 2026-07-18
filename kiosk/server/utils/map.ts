@@ -195,6 +195,7 @@ export function mapWebsite(s: BackendSite): Website {
 export function mapAd(a: BackendAd): Ad {
   return {
     id: a.id,
+    title: a.title || `Reklama ${a.id}`,
     ad_image_link: `/api/ad-media/${a.id}`,
     placement: a.placement || "popup",
     mediaType: a.media_type || "image",

@@ -40,6 +40,16 @@ const emit = defineEmits<{ done: [] }>();
 
 const isVideo = computed(() => props.ad.mediaType === "video");
 
+// Proof-of-play: reklama ekranga chiqqani statistikaga yoziladi (popup/pre-roll)
+const { track } = useStats();
+onMounted(() =>
+  track("ad_play", {
+    ad_id: props.ad.id,
+    title: props.ad.title,
+    media_type: props.ad.mediaType,
+  }),
+);
+
 const total = () =>
   props.ad.duration && props.ad.duration > 0 ? props.ad.duration : 10;
 const remaining = ref(total());

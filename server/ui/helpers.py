@@ -35,8 +35,13 @@ def no_wheel(*widgets):
         w.installEventFilter(_wheel_guard)
 
 
+# cv2 (OpenCV) faqat VIDEO uchun ishlatiladi — audio fayllarda uning ffmpeg
+# backend'i konsolga shovqin log yozadi ("mp3 @ ... Failed to read frame size").
+_VIDEO_EXTS = {".mp4", ".m4v", ".mkv", ".mov", ".avi", ".webm", ".wmv", ".flv"}
+
+
 def _media_duration(path):
-    """Media fayl davomiyligini (soniya) o'qiydi. ffprobe -> cv2 -> None."""
+    """Media fayl davomiyligini (soniya) o'qiydi. ffprobe -> (video) cv2 -> None."""
     try:
         import subprocess
         import json as _json
@@ -50,6 +55,11 @@ def _media_duration(path):
             return int(round(float(dur)))
     except Exception:
         pass
+    # cv2 fallback FAQAT video fayllar uchun: audio (mp3/m4a/wav) da cv2 baribir
+    # davomiylik bermaydi, faqat ffmpeg shovqin logini chiqaradi.
+    import os as _os
+    if _os.path.splitext(path)[1].lower() not in _VIDEO_EXTS:
+        return None
     try:
         import cv2
         cap = cv2.VideoCapture(path)

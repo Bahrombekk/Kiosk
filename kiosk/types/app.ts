@@ -85,6 +85,7 @@ export type ScanInstruction = {
 
 export type Ad = {
   id: number;
+  title: string; // proof-of-play statistikasi shu nom bo'yicha guruhlanadi
   ad_image_link: string;
   placement: string; // banner | popup | both
   mediaType: string; // image | video
