@@ -243,6 +243,9 @@ def _ensure_defaults(conn):
             ("trial_start", ""),               # topshirish sanasi YYYY-MM-DD
             ("trial_days", "30"),              # necha kunga berilgan
             ("trial_blocked", "0"),            # 1=qo'lda darhol bloklangan
+            ("wifi_hotspot", "0"),             # 1=server Wi-Fi tarqatadi (hotspot)
+            ("wifi_ssid", "KioskServer"),      # tarqatiladigan tarmoq nomi
+            ("wifi_password", "kiosk12345"),   # Wi-Fi paroli (kamida 8 belgi)
         ])
 
 

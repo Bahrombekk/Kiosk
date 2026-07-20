@@ -94,6 +94,11 @@ def main():
     web.start()
     app.aboutToQuit.connect(web.stop)
 
+    # Wi-Fi hotspot: sozlamada yoqilgan bo'lsa server Wi-Fi tarqatadi (kiosklar
+    # alohida routersiz simsiz ulanadi). FON thread'da — PowerShell/WinRT sekin
+    # bo'lishi mumkin, login oynasini bloklamasin. Yopilganda o'chiriladi.
+    _start_hotspot_if_enabled(app)
+
     # Admin parol darvozasi — login oynasi ko'rinib turganda ham backend
     # ishlaydi (kiosklar onlayn). Parol kiritilsa — admin oynasi ochiladi.
     login = LoginDialog()
@@ -107,6 +112,37 @@ def main():
     win = AdminWindow(server=server)
     win.show()
     sys.exit(app.exec())
+
+
+def _start_hotspot_if_enabled(app):
+    """Sozlamada wifi_hotspot=1 bo'lsa Wi-Fi tarqatishni fon thread'da yoqadi
+    va ilova yopilganda o'chiradi."""
+    import threading
+    try:
+        s = db.get_settings()
+    except Exception:                                    # noqa: BLE001
+        return
+    if str(s.get("wifi_hotspot") or "0") != "1":
+        return
+    ssid = s.get("wifi_ssid") or "KioskServer"
+    pw = s.get("wifi_password") or ""
+
+    def _run():
+        import hotspot
+        ok, msg = hotspot.start(ssid, pw)
+        if not ok:
+            logging.getLogger("kiosk.hotspot").warning(
+                "Avto Wi-Fi tarqatish yoqilmadi: %s", msg)
+
+    threading.Thread(target=_run, name="kiosk-hotspot", daemon=True).start()
+
+    def _stop():
+        try:
+            import hotspot
+            hotspot.stop()
+        except Exception:                                # noqa: BLE001
+            pass
+    app.aboutToQuit.connect(_stop)
 
 
 if __name__ == "__main__":

@@ -10,3 +10,4 @@ Output/
 crash.log
 __pycache__/
 *.pyc
+alive.beat

@@ -465,6 +465,50 @@ class SettingsPageMixin:
         clay.addLayout(l_row)
         ilay.addWidget(card)
 
+        # === 8) Wi-Fi tarqatish (hotspot) ===
+        card, clay = self._sec_card(
+            "wifi", "#ECFEFF", "#0891B2", "Wi-Fi tarqatish (hotspot)",
+            "Yoqilsa server ishga tushganda o'zi Wi-Fi tarqatadi — kiosklar "
+            "alohida routersiz shu tarmoqqa ulanadi (internet shart emas). "
+            "Wi-Fi adapter hotspotni qo'llashi va dastur admin huquqida "
+            "ishlashi kerak.")
+        self.s_wifi_on = ToggleSwitch()
+        self.s_wifi_on_lbl = QLabel()
+        self.s_wifi_on.toggled.connect(
+            lambda c: self.s_wifi_on_lbl.setText(
+                "Yoqilgan" if c else "O'chirilgan"))
+        won_row = QHBoxLayout()
+        won_row.setContentsMargins(0, 0, 0, 0)
+        won_row.setSpacing(12)
+        won_row.addWidget(self.s_wifi_on)
+        won_row.addWidget(self.s_wifi_on_lbl)
+        won_row.addStretch(1)
+        won_holder = QWidget()
+        won_holder.setLayout(won_row)
+        clay.addLayout(self._field("Server ishga tushganda Wi-Fi tarqatsin",
+                                   won_holder))
+        self.s_wifi_ssid = QLineEdit()
+        self.s_wifi_ssid.setPlaceholderText("Masalan: KioskServer")
+        self.s_wifi_pass = QLineEdit()
+        self.s_wifi_pass.setPlaceholderText("Kamida 8 belgi")
+        wg = QGridLayout()
+        wg.setHorizontalSpacing(14)
+        wg.addLayout(self._field("Tarmoq nomi (SSID)", self.s_wifi_ssid), 0, 0)
+        wg.addLayout(self._field("Wi-Fi paroli", self.s_wifi_pass), 0, 1)
+        clay.addLayout(wg)
+        self.s_wifi_status = QLabel()
+        self.s_wifi_status.setWordWrap(True)
+        self.s_wifi_status.setObjectName("hint")
+        clay.addWidget(self.s_wifi_status)
+        w_row = QHBoxLayout()
+        w_row.addStretch(1)
+        w_row.addWidget(self._btn("Hozir o'chirish", "wifi",
+                                  self._wifi_stop_now, kind="ghost"))
+        w_row.addWidget(self._btn("Saqlash va qo'llash", "save",
+                                  self._wifi_apply))
+        clay.addLayout(w_row)
+        ilay.addWidget(card)
+
         ilay.addStretch(1)
         scroll.setWidget(inner)
         outer.addWidget(scroll, 1)
@@ -504,6 +548,13 @@ class SettingsPageMixin:
             self.s_trial_days.setValue(30)
         self._update_trial_status()
         self._update_license_status()
+        # Wi-Fi hotspot
+        self.s_wifi_on.setChecked((s.get("wifi_hotspot") or "0") == "1")
+        self.s_wifi_on_lbl.setText(
+            "Yoqilgan" if self.s_wifi_on.isChecked() else "O'chirilgan")
+        self.s_wifi_ssid.setText(s.get("wifi_ssid") or "KioskServer")
+        self.s_wifi_pass.setText(s.get("wifi_password") or "")
+        self._update_wifi_status()
         # Bo'sh bo'lsa standart ro'yxat ko'rsatiladi — admin hozir nima
         # chiqayotganini ko'rib, shu yerda tahrirlaydi.
         self.s_sos.setPlainText(s.get("sos_numbers", "").strip() or DEFAULT_SOS)
@@ -658,6 +709,67 @@ class SettingsPageMixin:
         else:
             QMessageBox.warning(self, "Litsenziya",
                                 f"Fayl yuklandi, lekin yaroqsiz: {st['reason']}")
+
+    # --- Wi-Fi tarqatish (hotspot) ---
+    def _update_wifi_status(self):
+        """Hotspot hozir yoqilganmi (jonli holat) — kartada ko'rsatadi."""
+        try:
+            import hotspot
+            active = hotspot.is_active()
+        except Exception:                                # noqa: BLE001
+            active = False
+        if active:
+            txt = "Hozir FAOL — kiosklar shu Wi-Fi'ga ulanishi mumkin."
+            color = "#047857"
+        elif self.s_wifi_on.isChecked():
+            txt = ("Yoqilgan, lekin hozir faol emas (server qayta ishga "
+                   "tushganda yoki 'Saqlash va qo'llash' bosilganda yoqiladi).")
+            color = "#B45309"
+        else:
+            txt = "O'chirilgan — server Wi-Fi tarqatmaydi."
+            color = "#64748B"
+        self.s_wifi_status.setText(txt)
+        self.s_wifi_status.setStyleSheet(
+            f"color: {color}; font-weight: 700; background: transparent;")
+
+    def _wifi_apply(self):
+        """Wi-Fi sozlamalarini saqlaydi va darhol qo'llaydi (yoqadi/o'chiradi)."""
+        from PyQt6.QtWidgets import QMessageBox
+        ssid = self.s_wifi_ssid.text().strip()
+        pw = self.s_wifi_pass.text().strip()
+        on = self.s_wifi_on.isChecked()
+        if on and (not ssid or len(pw) < 8):
+            QMessageBox.warning(
+                self, "Wi-Fi",
+                "Tarmoq nomi (SSID) va kamida 8 belgili parol kiriting.")
+            return
+        db.set_setting("wifi_hotspot", "1" if on else "0")
+        db.set_setting("wifi_ssid", ssid or "KioskServer")
+        db.set_setting("wifi_password", pw)
+        db.log_action("wifi_hotspot", "on" if on else "off")
+        import hotspot
+        if on:
+            ok, msg = hotspot.start(ssid, pw)
+            if ok:
+                self.statusBar().showMessage(
+                    f"Wi-Fi tarqatish yoqildi ({msg}).", 5000)
+            else:
+                QMessageBox.warning(
+                    self, "Wi-Fi tarqatib bo'lmadi",
+                    "Sozlama saqlandi, lekin hotspot yoqilmadi:\n\n" + msg +
+                    "\n\nWi-Fi adapter hotspotni qo'llashini va dastur admin "
+                    "huquqida ishlashini tekshiring.")
+        else:
+            hotspot.stop()
+            self.statusBar().showMessage("Wi-Fi tarqatish o'chirildi.", 4000)
+        self._update_wifi_status()
+
+    def _wifi_stop_now(self):
+        """Hotspot'ni darhol o'chiradi (sozlamani o'zgartirmasdan)."""
+        import hotspot
+        hotspot.stop()
+        self.statusBar().showMessage("Wi-Fi tarqatish to'xtatildi.", 4000)
+        self._update_wifi_status()
 
     def _trial_block_now(self):
         if QMessageBox.question(

@@ -8,6 +8,9 @@ interface BookText {
  * `responseType: "text"` bilan o'qiydi, shuning uchun JSON emas — matn qaytaramiz.
  */
 export default defineEventHandler(async (event) => {
+  // Kitob matnini ham faqat ilova sahifasidan o'qish mumkin (to'g'ridan URL
+  // bilan butun matnni ko'chirib olish bloklanadi).
+  assertBrowserContext(event);
   const id = Number(getRouterParam(event, "id"));
   if (!Number.isInteger(id) || id <= 0) {
     throw createError({ statusCode: 400, statusMessage: "Noto'g'ri id" });

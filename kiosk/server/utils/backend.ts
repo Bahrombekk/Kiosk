@@ -57,7 +57,43 @@ export async function backendFetch<T = unknown>(
  * Range va shartli headerlarni uzatadi, javob status/sarlavhalarini saqlaydi,
  * brauzer ulanishni uzsa (seek/yopish) upstream fetch ham bekor qilinadi.
  */
+/**
+ * Kontent o'g'irlanishiga qarshi yengil qalqon: media/matn faqat ILOVA
+ * SAHIFASI ichidan (video/img/fetch) ochilsin. Yo'lovchi brauzer manzil
+ * satriga `poyezd.uz/api/stream/5` deb yozib to'g'ridan yuklab olishi yoki
+ * boshqa saytdan hotlink qilishi bloklanadi.
+ *
+ * - Sec-Fetch-Dest === "document" -> foydalanuvchi URL'ni O'ZI ochgan
+ *   (media element emas) -> rad. Bu zamonaviy brauzerlar avtomatik qo'yadigan
+ *   header, JS/foydalanuvchi uni soxtalashtira olmaydi.
+ * - Referer boshqa hostdan bo'lsa (hotlink) -> rad.
+ *
+ * Halol chegara: bu OMMAVIY/oddiy yuklab olishni to'xtatadi, lekin maxsus
+ * dastur (curl va sh.k.) uchun to'liq himoya emas -- raqamli kontentni 100%
+ * himoya qilib bo'lmaydi (ko'rilgan/eshitilgan narsa yozib olinishi mumkin).
+ */
+export function assertBrowserContext(event: H3Event) {
+  const dest = getRequestHeader(event, "sec-fetch-dest");
+  if (dest === "document") {
+    throw createError({ statusCode: 403, statusMessage: "Ruxsat yo'q" });
+  }
+  const referer = getRequestHeader(event, "referer");
+  const host = getRequestHeader(event, "host") || "";
+  if (referer && host) {
+    let rHost = "";
+    try {
+      rHost = new URL(referer).host;
+    } catch {
+      rHost = "";
+    }
+    if (rHost && rHost !== host) {
+      throw createError({ statusCode: 403, statusMessage: "Ruxsat yo'q" });
+    }
+  }
+}
+
 export async function proxyMedia(event: H3Event, backendPath: string) {
+  assertBrowserContext(event);
   const { url, key } = base();
   const target = `${url}${backendPath}`;
 
