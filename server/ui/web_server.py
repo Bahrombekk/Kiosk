@@ -126,6 +126,26 @@ def _default_web_dir():
 _LOG_MAX_BYTES = 5 * 1024 * 1024
 
 
+def _kill_orphan_web():
+    """Oldingi seansdan qolgan "yetim" Nuxt node jarayonini o'ldiradi.
+
+    Server nokorrekt yopilса (crash / majburiy taskkill) web bola jarayoni
+    o'lmay qolib, 80-portni band qilib turishi mumkin — u holda yangi server
+    eski (nomuvofiq) build'ni ko'rsatib qoladi. Startда commandline'da
+    `.output/server/index.mjs` bo'lgan node.exe'ни topib o'ldiramiz."""
+    if os.name != "nt":
+        return
+    try:
+        subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             "Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" | "
+             "Where-Object { $_.CommandLine -like '*.output*server*index.mjs*' } | "
+             "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"],
+            capture_output=True, timeout=20)
+    except Exception:                                # noqa: BLE001
+        log.debug("Yetim web jarayonini tozalashda xato", exc_info=True)
+
+
 class WebServer:
     """Nuxt veb-ilovani bola jarayon sifatida boshqaradi (start/stop)."""
 
@@ -156,6 +176,10 @@ class WebServer:
 
         host = os.environ.get("KIOSK_WEB_HOST", "0.0.0.0")
         port = os.environ.get("KIOSK_WEB_PORT", "80")
+
+        # Oldingi seansdan qolgan yetim node'ни tozalaymiz (80-port bo'shasin,
+        # yangi build ko'rinsin — aks holda eski node eski build'ni beradi).
+        _kill_orphan_web()
 
         built = os.path.join(web_dir, ".output", "server", "index.mjs")
         node = shutil.which("node")

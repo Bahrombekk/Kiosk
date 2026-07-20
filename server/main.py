@@ -217,6 +217,23 @@ def stream(content_id: int, request: Request):
     return _range_response(path, request)
 
 
+# Oflayn vektor xarita aktivlari (PMTiles ma'lumot + shriftlar). Kiosk admin
+# oynasi ham shu papkadan foydalanadi (ui/mapserver.py). Veb (Nuxt) TrainMap
+# shu endpoint orqali oflayn xaritani oladi — internet kerak emas.
+MAP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "map")
+
+
+@app.get("/api/map/{asset_path:path}")
+def map_asset(asset_path: str, request: Request):
+    """Oflayn xarita aktivini (PMTiles/shrift) Range bilan beradi.
+    PMTiles tile'larni HTTP Range so'rovlari bilan o'qiydi — _range_response
+    buni to'liq qo'llaydi. _safe_join path-traversal'dan himoya qiladi."""
+    full = _safe_join(MAP_DIR, asset_path)
+    if not full or not os.path.isfile(full):
+        raise HTTPException(404, "Xarita fayli topilmadi")
+    return _range_response(full, request)
+
+
 def _file_tag(path, file_size):
     """Fayl uchun barqaror ETag (o'lcham + o'zgartirilgan vaqtdan)."""
     mtime = os.path.getmtime(path)

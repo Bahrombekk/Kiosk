@@ -149,9 +149,62 @@ CREATE INDEX IF NOT EXISTS idx_stats_event ON stats_events(event);
 """
 
 
+def _db_ok():
+    """Mavjud data.db butunligini tekshiradi (PRAGMA quick_check).
+    Yangi baza (fayl yo'q) — muammosiz. Korrupt/o'qib bo'lmasa False."""
+    if not os.path.exists(config.DB_PATH):
+        return True
+    try:
+        c = sqlite3.connect(config.DB_PATH, timeout=5)
+        try:
+            row = c.execute("PRAGMA quick_check").fetchone()
+        finally:
+            c.close()
+        return bool(row) and row[0] == "ok"
+    except sqlite3.DatabaseError:
+        return False
+
+
+def _quarantine_db():
+    """Buzilgan bazani (+wal/shm) chetga suradi (.corrupt-<vaqt>) — yangi baza
+    yaratilsin, lekin buzilgan nusxa keyin tiklash uchun saqlanadi."""
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    for suffix in ("", "-wal", "-shm"):
+        p = config.DB_PATH + suffix
+        if not os.path.exists(p):
+            continue
+        try:
+            os.replace(p, f"{config.DB_PATH}.corrupt-{ts}{suffix}")
+        except OSError:
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+
+
 def init_db():
-    """Bazani yaratadi, migratsiya qiladi va minimal default sozlamalarni yozadi."""
+    """Bazani yaratadi/migratsiya qiladi — KORRUPTSIYAGA CHIDAMLI.
+
+    Poyezdda quvvat WAL checkpoint paytida uzilsa data.db buzilishi mumkin.
+    Avval butunlik tekshiriladi; buzilgan bo'lsa chetga surilib yangisi
+    yaratiladi (server TIRIK qoladi — kontent yo'qolsa ham kiosklar oflayn
+    qolmaydi; buzilgan nusxa .corrupt bilan saqlanadi). Migratsiya jarayonида
+    ham xato bo'lsa xuddi shunday qayta yaratamiz."""
     os.makedirs(config.CONTENT_DIR, exist_ok=True)
+    if not _db_ok():
+        log.error("data.db butunligi buzilgan — chetga suriladi, yangi baza "
+                  "yaratiladi (buzilgan nusxa .corrupt bilan saqlanadi)")
+        _quarantine_db()
+    try:
+        _init_schema()
+    except sqlite3.DatabaseError as e:
+        log.error("Baza yaratishda xato (%s) — chetga surib qayta yaratamiz", e)
+        _quarantine_db()
+        _init_schema()
+
+
+def _init_schema():
+    """Sxema + migratsiya + default sozlamalar (init_db ichki tanasi)."""
     conn = connect()
     try:
         conn.executescript(SCHEMA)

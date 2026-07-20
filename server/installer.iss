@@ -80,6 +80,14 @@ Filename: "{sys}\netsh.exe"; \
 Filename: "{sys}\netsh.exe"; \
     Parameters: "advfirewall firewall add rule name=""KioskServer-8765"" dir=in action=allow protocol=TCP localport=8765 enable=yes profile=any"; \
     Flags: runhidden
+; UDP 8766: imzolangan discovery beacon (kiosklar serverni avto-topadi)
+Filename: "{sys}\netsh.exe"; \
+    Parameters: "advfirewall firewall add rule name=""KioskServer-8766"" dir=in action=allow protocol=UDP localport=8766 enable=yes profile=any"; \
+    Flags: runhidden
+; TCP 80: veb kiosk (poyezd.uz) — kiosklar/telefonlar brauzerdan ochadi
+Filename: "{sys}\netsh.exe"; \
+    Parameters: "advfirewall firewall add rule name=""KioskServer-Web80"" dir=in action=allow protocol=TCP localport=80 enable=yes profile=any"; \
+    Flags: runhidden
 Filename: "{app}\{#AppExe}"; Description: "Kiosk Serverni hozir ishga tushirish"; \
     Flags: nowait postinstall skipifsilent
 
@@ -87,6 +95,8 @@ Filename: "{app}\{#AppExe}"; Description: "Kiosk Serverni hozir ishga tushirish"
 Filename: "{cmd}"; Parameters: "/C taskkill /IM {#AppExe} /F"; Flags: runhidden; RunOnceId: "StopKioskServer"
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""KioskServer"""; Flags: runhidden; RunOnceId: "DelFwKioskServer"
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""KioskServer-8765"""; Flags: runhidden; RunOnceId: "DelFwKioskServer8765"
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""KioskServer-8766"""; Flags: runhidden; RunOnceId: "DelFwKioskServer8766"
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""KioskServer-Web80"""; Flags: runhidden; RunOnceId: "DelFwKioskServerWeb80"
 
 [UninstallDelete]
 Type: files; Name: "{app}\data.db-wal"
