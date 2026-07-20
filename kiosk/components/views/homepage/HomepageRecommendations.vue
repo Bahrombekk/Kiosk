@@ -52,12 +52,26 @@
           autoplay
           loop
           :items="movies"
+          :ui="{
+            root: 'h-full',
+            viewport: 'h-full',
+            container: 'h-full',
+            item: 'h-full',
+          }"
         >
-          <div class="w-full">
+          <!-- Har xil o'lchamdagi muqovalar bir xil ko'rinsin: blur fon (to'ldiradi)
+               + old rasm to'liq sig'adi (object-contain, kesilmaydi) -->
+          <div class="relative h-full w-full overflow-hidden bg-black">
             <img
               :src="item.image.original"
+              aria-hidden="true"
+              class="absolute inset-0 h-full w-full scale-110 object-cover blur-[18px]"
+            />
+            <img
+              :src="item.image.original"
+              :alt="item.name"
               loading="lazy"
-              class="h-full w-full object-cover object-top"
+              class="relative z-1 mx-auto h-full w-full object-contain"
             />
           </div>
         </UCarousel>
