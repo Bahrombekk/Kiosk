@@ -1,97 +1,87 @@
+<!-- HomepageStats.vue — 3 stat karta (§8): tezlik / harorat / vagon.
+     Oq karta, label + Unbounded qiymat (rangli) + izoh; o'ngda oltin-tus ikonka. -->
 <template>
-  <div class="grid grid-cols-1 gap-[24px] md:grid-cols-2">
-    <div
-      class="h-full rounded-[24px] bg-(--surface-bg) p-[20px] shadow-[0_8px_32px_rgba(0,0,0,0.05)]"
-    >
-      <div class="grid grid-cols-[64px_auto] gap-[16px] md:max-lg:grid-cols-1">
-        <div
-          class="flex h-[64px] w-[64px] items-center justify-center rounded-[10px] bg-(--tertiary-bg)"
-        >
-          <img
-            src="~/assets/img/speed.png"
-            alt="Tezlik"
-            class="h-[64px] w-[64px]"
-          />
-        </div>
-        <div class="flex flex-col gap-[4px] overflow-hidden text-ellipsis">
-          <p class="m-0 overflow-hidden text-ellipsis text-[1.5rem]">
-            {{ $t("speed") }}
-          </p>
-          <p class="m-0 text-[1rem] text-(--text-secondary)">{{ speedText }}</p>
-        </div>
-      </div>
-    </div>
-    <div
-      class="h-full rounded-[24px] bg-(--surface-bg) p-[20px] shadow-[0_8px_32px_rgba(0,0,0,0.05)]"
-    >
-      <div class="grid grid-cols-[64px_auto] gap-[16px] md:max-lg:grid-cols-1">
-        <div
-          class="flex h-[64px] w-[64px] items-center justify-center rounded-[10px] bg-(--tertiary-bg)"
-        >
-          <img
-            src="~/assets/img/temperature.png"
-            alt="Harorat"
-            class="h-[64px] w-[64px]"
-          />
-        </div>
-        <div class="flex flex-col gap-[4px] overflow-hidden text-ellipsis">
-          <p class="m-0 overflow-hidden text-ellipsis text-[1.5rem]">
-            {{ $t("temperature") }}
-          </p>
-          <p class="m-0 text-[1rem] text-(--text-secondary)">{{ tempText }}</p>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div
-    class="h-full rounded-[24px] bg-(--surface-bg) p-[20px] shadow-[0_8px_32px_rgba(0,0,0,0.05)]"
-  >
-    <div class="grid grid-cols-[64px_auto] gap-[16px]">
-      <div
-        class="flex h-[64px] w-[64px] items-center justify-center rounded-[10px] bg-(--tertiary-bg)"
-      >
-        <img
-          src="~/assets/img/seat_location.png"
-          alt="Joylashuv"
-          class="h-[64px] w-[64px]"
-        />
-      </div>
-      <div class="flex flex-col gap-[4px]">
-        <p class="m-0 text-[1.5rem]">{{ $t("seatPlacement") }}: {{ wagonText }}</p>
-        <p v-if="status?.wagon_note" class="m-0 text-[1rem] text-(--text-secondary)">
-          {{ status.wagon_note }}
-        </p>
-      </div>
+  <div class="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-[14px]">
+    <div v-for="c in cards" :key="c.key" class="tm-stat">
+      <img :src="c.icon" alt="" class="tm-stat-icon" />
+      <span class="text-[10px] font-extrabold tracking-[.1em] text-(--text-secondary)">
+        {{ c.label }}
+      </span>
+      <span class="font-[Unbounded] text-[22px] font-bold" :style="{ color: c.color }">
+        {{ c.value }}
+      </span>
+      <span class="text-[11px] text-(--text-secondary)">{{ c.note }}</span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import type { TrainStatus } from "~/types/app";
+import speedIcon from "~/assets/img/speed.png";
+import tempIcon from "~/assets/img/temperature.png";
+import seatIcon from "~/assets/img/seat_location.png";
 
 const { t } = useI18n();
-
-// Poyezd holati — serverdan olinadi va har 5 soniyada yangilanadi
-// (tezlik/harorat/joriy bekat jonli o'zgaradi).
 const { data: status, refresh } = await useFetch<TrainStatus>("/api/status");
 
 let timer: ReturnType<typeof setInterval> | undefined;
 onMounted(() => {
   timer = setInterval(refresh, 5000);
 });
-onBeforeUnmount(() => {
-  if (timer) clearInterval(timer);
-});
+onBeforeUnmount(() => timer && clearInterval(timer));
 
-const speedText = computed(() =>
-  status.value ? `${status.value.speed} km/h` : "—",
-);
-const tempText = computed(() => {
-  if (!status.value) return "—";
-  const tVal = status.value.temperature;
-  return `${tVal >= 0 ? "+" : ""}${tVal}°C`;
+const cards = computed(() => {
+  const s = status.value;
+  const temp = s?.temperature;
+  return [
+    {
+      key: "speed",
+      label: t("speed"),
+      value: s ? String(s.speed) : "—",
+      note: t("hero.kmh"),
+      icon: speedIcon,
+      color: "#1445a7",
+    },
+    {
+      key: "temp",
+      label: t("temperature"),
+      value:
+        typeof temp === "number" ? `${temp >= 0 ? "+" : ""}${temp}°` : "—",
+      note: t("hero.salon"),
+      icon: tempIcon,
+      color: "#14939b",
+    },
+    {
+      key: "wagon",
+      label: t("wagon").toUpperCase(),
+      value: s?.wagon ? String(s.wagon) : "—",
+      note: s?.wagon_note || t("hero.wagonNote"),
+      icon: seatIcon,
+      color: "#c99a3c",
+    },
+  ];
 });
-const wagonText = computed(() =>
-  status.value?.wagon ? `${status.value.wagon}-${t("wagon")}` : "—",
-);
 </script>
+
+<style scoped>
+.tm-stat {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--surface-bg);
+  border-radius: 20px;
+  padding: 16px;
+  box-shadow: var(--shadow-card);
+}
+.tm-stat-icon {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  width: 46px;
+  height: 46px;
+  opacity: 0.55;
+  filter: grayscale(1) sepia(1) saturate(3) hue-rotate(-8deg);
+}
+</style>

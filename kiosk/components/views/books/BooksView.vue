@@ -1,5 +1,5 @@
 <template>
-  <div class="mx-auto max-w-[1920px]">
+  <div class="flex flex-col gap-[20px]" style="animation: omFade 0.35s ease">
     <FetchErrorState v-if="error" @retry="refresh" />
     <template v-else>
       <BooksModal

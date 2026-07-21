@@ -1,26 +1,66 @@
 <template>
-  <div class="mx-auto max-w-[1920px]">
+  <div class="flex flex-col gap-[20px]" style="animation: omFade 0.35s ease">
     <FetchErrorState v-if="error" @retry="refresh" />
     <template v-else>
       <VideosModal
         v-model:is-modal-open="isModalOpen"
         :selected-video="selectedVideo"
       />
+
+      <!-- Tur tab (pill) + qidiruv -->
       <VideosFilter
         :items="videoTabs"
         v-model:active-category="activeCategory"
         v-model:search-query="searchQuery"
       />
-      <VideosList
-        :genre-sections="genreSections"
-        @openVideoModal="openVideoModal"
-      />
+
+      <div v-if="!baseVideos.length" class="py-[60px] text-center text-[15px] text-(--text-secondary)">
+        {{ $t("nothingFound") }}
+      </div>
+
+      <template v-else>
+        <!-- §13 haftaning filmi -->
+        <VideoFeatured :video="featured" @select="openVideoModal" />
+
+        <!-- §14 janr chiplari -->
+        <div class="flex flex-wrap items-center gap-[8px]">
+          <span class="mr-[4px] h-[12px] w-[12px] flex-none rotate-45 bg-(--accent-gold)" />
+          <button
+            v-for="chip in genreChips"
+            :key="chip.key"
+            type="button"
+            class="cursor-pointer rounded-full border-[1.5px] px-[18px] py-[9px] text-[13px] transition-colors"
+            :class="
+              chip.key === activeGenre
+                ? 'border-(--brand-base) bg-(--brand-base) font-extrabold text-white'
+                : 'border-(--stroke-2) bg-(--surface-bg) font-semibold text-(--text-muted-btn) hover:border-(--brand-base)'
+            "
+            @click="activeGenre = chip.key"
+          >
+            {{ chip.label }}
+          </button>
+        </div>
+
+        <!-- §15 poster to'r -->
+        <div
+          class="grid gap-[16px]"
+          style="grid-template-columns: repeat(auto-fill, minmax(min(165px, 100%), 1fr))"
+        >
+          <VideoPosterCard
+            v-for="(video, i) in filteredVideos"
+            :key="video.id"
+            :video="video"
+            :index="i"
+            @select="openVideoModal"
+          />
+        </div>
+      </template>
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import type { IconItem, Video, VideoGenreSection } from "~/types/app";
+import type { IconItem, Video } from "~/types/app";
 import MoviesIcon from "~/assets/svg/film.svg";
 import MagicWandIcon from "~/assets/svg/wand-magic-sparkles.svg";
 import MusicIcon from "~/assets/svg/music.svg";
@@ -32,6 +72,7 @@ const { data: videos, error, refresh } =
 
 const activeCategory = ref("movies");
 const searchQuery = ref("");
+const activeGenre = ref("all");
 
 // Videolarda "Barchasi" yo'q — har tab bitta turga bog'langan (kiosk kabi).
 const videoTabs = computed<IconItem[]>(() => [
@@ -40,22 +81,20 @@ const videoTabs = computed<IconItem[]>(() => [
   { key: "music", label: t("categories.music"), icon: MusicIcon },
 ]);
 
-// Tab kaliti -> backend `type`
 const TAB_TYPE: Record<string, string> = {
   movies: "movie",
   cartoons: "cartoon",
   music: "music",
 };
 
-// Til bo'yicha filtr (kiosk: lang bo'sh yoki joriy tilга teng)
 const langVideos = filterByLang(videos);
 
 const normalizedSearchQuery = computed(() =>
   searchQuery.value.trim().toLowerCase(),
 );
 
-// Joriy tab (tur) + qidiruv (nom/janr bo'yicha)
-const filteredVideos = computed(() => {
+// Tab (tur) + qidiruv bo'yicha — janr chiplari va featured shundan hosil bo'ladi.
+const baseVideos = computed(() => {
   const type = TAB_TYPE[activeCategory.value] ?? "movie";
   return langVideos.value.filter((v) => {
     if (v.type !== type) return false;
@@ -65,28 +104,32 @@ const filteredVideos = computed(() => {
   });
 });
 
-// Birinchi janr bo'yicha guruh; janrlar alifbo tartibida; janrsizlar "Boshqa"
-// sarlavhasi bilan oxirida (user kiosk videos.py:_group_by_genre bilan bir xil).
-const genreSections = computed<VideoGenreSection[]>(() => {
-  const otherLabel = t("categories.other");
-  const groups = new Map<string, Video[]>();
-  for (const v of filteredVideos.value) {
-    const key = v.genres[0] || otherLabel;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(v);
-  }
-  const sections = Array.from(groups, ([category, vids]) => ({
-    category,
-    count: vids.length,
-    videos: vids,
-  }));
-  sections.sort((a, b) => {
-    if (a.category === otherLabel) return 1;
-    if (b.category === otherLabel) return -1;
-    return a.category.localeCompare(b.category);
-  });
-  return sections;
+// Janr chiplari: "Barchasi" + mavjud janrlar (birinchi janr, alifbo tartibida).
+const genreChips = computed(() => {
+  const genres = Array.from(
+    new Set(baseVideos.value.map((v) => v.genres[0]).filter(Boolean)),
+  ).sort((a, b) => a.localeCompare(b));
+  return [
+    { key: "all", label: t("categories.all") },
+    ...genres.map((g) => ({ key: g, label: g })),
+  ];
 });
+
+// Tanlangan chip yo'qolsa (tab/qidiruv o'zgarsa) "all" ga qaytamiz.
+watch(genreChips, (chips) => {
+  if (!chips.some((c) => c.key === activeGenre.value)) activeGenre.value = "all";
+});
+
+const filteredVideos = computed(() =>
+  activeGenre.value === "all"
+    ? baseVideos.value
+    : baseVideos.value.filter((v) => v.genres[0] === activeGenre.value),
+);
+
+// Haftaning filmi: tavsiya etilgani, bo'lmasa birinchisi.
+const featured = computed(
+  () => filteredVideos.value.find((v) => v.isRecommended) || filteredVideos.value[0],
+);
 
 const isModalOpen = ref(false);
 const selectedVideo = ref<Video>();

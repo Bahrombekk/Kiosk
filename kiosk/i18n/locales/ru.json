@@ -23,6 +23,24 @@
   "temperature": "Температура",
   "seatPlacement": "Место",
   "weRecommend": "Рекомендуем",
+  "bookOfDay": "КНИГА ДНЯ",
+  "videoFeatured": "ФИЛЬМ НЕДЕЛИ",
+  "audioBadge": "АУДИО",
+  "mapInfo": {
+    "date": "Дата",
+    "duration": "Длительность",
+    "distance": "Расстояние",
+    "schema": "СХЕМА МАРШРУТА"
+  },
+  "recommendedBadge": "РЕКОМЕНД.",
+  "adBadge": "РЕКЛАМА",
+  "hero": {
+    "nextStop": "Следующая станция",
+    "enRoute": "В пути",
+    "kmh": "км/ч",
+    "salon": "салон",
+    "wagonNote": "место"
+  },
   "minutes_short": "м",
   "hour_short": "ч",
   "buttonActions": {
@@ -44,6 +62,7 @@
   "connectionError": "Нет связи с сервером",
   "retry": "Повторить",
   "openOnYourPhone": "Откройте на телефоне",
+  "openWithQr": "Открыть по QR",
   "scanInstructions": {
     "pointCamera": "Направьте камеру телефона на QR код",
     "clickLink": "Нажмите на ссылку - откроется в браузере",

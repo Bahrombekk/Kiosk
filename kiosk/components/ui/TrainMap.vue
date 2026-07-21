@@ -9,7 +9,7 @@
     pulslanuvchi halqa, bekatlar chiroyli markerlar.
 -->
 <template>
-  <div class="relative h-[368px] w-full overflow-hidden rounded-[16px]">
+  <div class="relative h-full min-h-[420px] w-full overflow-hidden rounded-[24px]">
     <div ref="mapEl" class="h-full w-full" />
     <div
       v-if="mapError"

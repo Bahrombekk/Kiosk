@@ -12,6 +12,7 @@
     v-else
     ref="playerRef"
     class="aspect-auto! relative h-dvh w-full touch-none overflow-hidden bg-black text-white"
+    :class="{ 'vp-rotated': rotated }"
     :src="mediaSrc"
     :title="video.name"
     :playsInline="true"
@@ -115,7 +116,7 @@
           :icon="isPlaying ? 'i-fa7-solid-pause' : 'i-fa7-solid-play'"
           size="xl"
           :ui="{
-            base: 'bg-(--brand-base) active:bg-(--brand-base)/50 active:text-white hover:bg-(--brand-base)/50 hover:text-white',
+            base: 'bg-(--accent-gold) text-(--text-on-gold) active:bg-(--accent-gold)/70 active:text-(--text-on-gold) hover:bg-(--accent-gold-light) hover:text-(--text-on-gold)',
           }"
           class="h-[72px] w-[72px] justify-center rounded-full shadow-xl"
           :aria-label="isPlaying ? 'Pause' : 'Play'"
@@ -148,11 +149,11 @@
         </span>
         <div class="relative h-[18px] flex-1">
           <div
-            class="absolute top-1/2 left-0 h-[6px] -translate-y-1/2 rounded-full bg-(--brand-base)"
+            class="absolute top-1/2 left-0 h-[6px] -translate-y-1/2 rounded-full bg-(--accent-gold)"
             :style="{ width: `${progressPercent}%` }"
           />
           <input
-            class="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent [&::-moz-range-thumb]:h-[18px] [&::-moz-range-thumb]:w-[18px] [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-white [&::-webkit-slider-runnable-track]:h-[6px] [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-white/25 [&::-webkit-slider-thumb]:mt-[-6px] [&::-webkit-slider-thumb]:h-[18px] [&::-webkit-slider-thumb]:w-[18px] [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
+            class="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent [&::-moz-range-thumb]:h-[18px] [&::-moz-range-thumb]:w-[18px] [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-(--accent-gold) [&::-webkit-slider-runnable-track]:h-[6px] [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-white/25 [&::-webkit-slider-thumb]:mt-[-6px] [&::-webkit-slider-thumb]:h-[18px] [&::-webkit-slider-thumb]:w-[18px] [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-(--accent-gold)"
             type="range"
             min="0"
             :max="duration || 0"
@@ -194,6 +195,18 @@
           />
         </div>
 
+        <!-- Ekranni aylantirish — mobil (portret) telefonda gorizontal videoni
+             to'liq ko'rsatish uchun. Native orientatsiya-blok kiosk/mobil
+             brauzerlarda ishonchsiz, shuning uchun CSS 90° aylantirish. -->
+        <UButton
+          icon="i-lucide-rotate-cw"
+          color="neutral"
+          variant="ghost"
+          class="hidden rounded-full text-white hover:bg-white/15 portrait:inline-flex"
+          :class="{ 'text-(--accent-gold)!': rotated }"
+          aria-label="Rotate screen"
+          @click="toggleRotate"
+        />
         <UButton
           :icon="isFullscreen ? 'i-lucide-minimize' : 'i-lucide-maximize'"
           color="neutral"
@@ -208,7 +221,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from "vue";
+import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import type { Video } from "~/types/app";
 import type { MediaKeyShortcuts } from "vidstack";
 import type { MediaPlayerElement } from "vidstack/elements";
@@ -228,6 +241,7 @@ const volume = ref(1);
 const isMuted = ref(false);
 const isFullscreen = ref(false);
 const hasStarted = ref(false);
+const rotated = ref(false); // mobil portretda ekranni 90° aylantirish
 const seekFlash = ref<"back" | "forward" | null>(null);
 let seekFlashTimeout: NodeJS.Timeout | null = null;
 
@@ -338,10 +352,26 @@ const onZoneTap = (side: "back" | "forward") => {
   }
 };
 
+// Ekranni aylantirish tugmasi (mobil portret)
+const toggleRotate = () => {
+  rotated.value = !rotated.value;
+  handleActivity();
+};
+
+// Telefon fizik landshaftga burilsa CSS aylantirishni bekor qilamiz
+// (aks holda video ikki marta aylanib teskari ko'rinardi).
+const resetRotateOnLandscape = () => {
+  if (window.matchMedia("(orientation: landscape)").matches) {
+    rotated.value = false;
+  }
+};
+onMounted(() => window.addEventListener("resize", resetRotateOnLandscape));
+
 onUnmounted(() => {
   // Taymerlar unmount'dan keyin ishlab qolmasin (leak edi)
   if (seekFlashTimeout) clearTimeout(seekFlashTimeout);
   if (activityTimeout) clearTimeout(activityTimeout);
+  window.removeEventListener("resize", resetRotateOnLandscape);
 });
 
 const togglePlayback = async () => {
@@ -474,5 +504,19 @@ const keyShortcuts: MediaKeyShortcuts = {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* Ekranni 90° aylantirish: 100vh x 100vw quti markazda aylantirilganda
+   bounding-box aynan ekranga (100vw x 100vh) to'la sig'adi. Foydalanuvchi
+   telefonni yon tomonga burib to'liq gorizontal videoni ko'radi. */
+.vp-rotated {
+  position: fixed;
+  z-index: 50;
+  top: 50%;
+  left: 50%;
+  width: 100dvh;
+  height: 100dvw;
+  transform: translate(-50%, -50%) rotate(90deg);
+  transform-origin: center center;
 }
 </style>

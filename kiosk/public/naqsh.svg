@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 720" width="320" height="720">
+<defs>
+<g id="s8">
+  <rect x="-13" y="-13" width="26" height="26"></rect>
+  <rect x="-13" y="-13" width="26" height="26" transform="rotate(45)"></rect>
+</g>
+<g id="s8o" fill="none" stroke-width="3">
+  <rect x="-17" y="-17" width="34" height="34"></rect>
+  <rect x="-17" y="-17" width="34" height="34" transform="rotate(45)"></rect>
+</g>
+<g id="step">
+  <path d="M0 -46 h12 v12 h12 v12 h12 v12 h12 v10 h-12 v12 h-12 v12 h-12 v12 h-12 v-12 h-12 v-12 h-12 v-12 h-12 v-10 h12 v-12 h12 v-12 h12 z" fill="none" stroke-width="4"></path>
+</g>
+<radialGradient id="fade" cx="0" cy="360" r="340" gradientUnits="userSpaceOnUse">
+  <stop offset="0.62" stop-color="#fff" stop-opacity="1"></stop>
+  <stop offset="1" stop-color="#fff" stop-opacity="0"></stop>
+</radialGradient>
+<mask id="m"><rect x="0" y="0" width="320" height="720" fill="url(#fade)"></rect></mask>
+</defs>
+<g mask="url(#m)">
+  <g transform="translate(0,360)">
+    <rect x="-292" y="-292" width="584" height="584" transform="rotate(45)" fill="none" stroke="#c99a3c" stroke-width="3" opacity=".5"></rect>
+    <rect x="-262" y="-262" width="524" height="524" transform="rotate(45)" fill="none" stroke="#1445a7" stroke-width="2" opacity=".35"></rect>
+    <rect x="-232" y="-232" width="464" height="464" transform="rotate(45)" fill="none" stroke="#c99a3c" stroke-width="6" opacity=".55"></rect>
+    <g stroke="#b08430" opacity=".75">
+      <use href="#step" transform="translate(0,-300)"></use>
+      <use href="#step" transform="translate(212,-212) rotate(45)"></use>
+      <use href="#step" transform="translate(300,0) rotate(90)"></use>
+      <use href="#step" transform="translate(212,212) rotate(135)"></use>
+      <use href="#step" transform="translate(0,300) rotate(180)"></use>
+      <use href="#step" transform="translate(-212,212) rotate(225)"></use>
+      <use href="#step" transform="translate(-300,0) rotate(270)"></use>
+      <use href="#step" transform="translate(-212,-212) rotate(315)"></use>
+    </g>
+    <g fill="#1c4f8f" opacity=".85">
+      <use href="#s8" transform="translate(0,-224)"></use>
+      <use href="#s8" transform="translate(158,-158)"></use>
+      <use href="#s8" transform="translate(224,0)"></use>
+      <use href="#s8" transform="translate(158,158)"></use>
+      <use href="#s8" transform="translate(0,224)"></use>
+      <use href="#s8" transform="translate(-158,158)"></use>
+      <use href="#s8" transform="translate(-224,0)"></use>
+      <use href="#s8" transform="translate(-158,-158)"></use>
+    </g>
+    <g stroke="#c99a3c" opacity=".8">
+      <use href="#s8o" transform="translate(86,-208) rotate(22)"></use>
+      <use href="#s8o" transform="translate(208,-86) rotate(22)"></use>
+      <use href="#s8o" transform="translate(208,86) rotate(22)"></use>
+      <use href="#s8o" transform="translate(86,208) rotate(22)"></use>
+      <use href="#s8o" transform="translate(-86,208) rotate(22)"></use>
+      <use href="#s8o" transform="translate(-208,86) rotate(22)"></use>
+      <use href="#s8o" transform="translate(-208,-86) rotate(22)"></use>
+      <use href="#s8o" transform="translate(-86,-208) rotate(22)"></use>
+    </g>
+    <rect x="-124" y="-124" width="248" height="248" transform="rotate(45)" fill="none" stroke="#14939b" stroke-width="5" opacity=".6"></rect>
+    <rect x="-104" y="-104" width="208" height="208" transform="rotate(45)" fill="none" stroke="#c99a3c" stroke-width="2.5" stroke-dasharray="14 8" opacity=".7"></rect>
+    <g fill="#c99a3c" opacity=".9">
+      <use href="#s8" transform="translate(0,-132) scale(.8)"></use>
+      <use href="#s8" transform="translate(93,-93) scale(.8)"></use>
+      <use href="#s8" transform="translate(132,0) scale(.8)"></use>
+      <use href="#s8" transform="translate(93,93) scale(.8)"></use>
+      <use href="#s8" transform="translate(0,132) scale(.8)"></use>
+      <use href="#s8" transform="translate(-93,93) scale(.8)"></use>
+      <use href="#s8" transform="translate(-132,0) scale(.8)"></use>
+      <use href="#s8" transform="translate(-93,-93) scale(.8)"></use>
+    </g>
+    <g stroke="#1445a7" opacity=".8">
+      <use href="#step" transform="translate(0,0) scale(1.35)"></use>
+    </g>
+    <g fill="#14939b" opacity=".85">
+      <use href="#s8" transform="translate(0,-64) scale(.55)"></use>
+      <use href="#s8" transform="translate(64,0) scale(.55)"></use>
+      <use href="#s8" transform="translate(0,64) scale(.55)"></use>
+      <use href="#s8" transform="translate(-64,0) scale(.55)"></use>
+    </g>
+    <use href="#s8" fill="#1445a7" transform="scale(1.4)"></use>
+    <use href="#s8o" stroke="#e8c87a" transform="scale(2.1) rotate(22)"></use>
+    <use href="#s8" fill="#c99a3c" transform="scale(.6)"></use>
+  </g>
+</g>
+</svg>

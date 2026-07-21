@@ -1,7 +1,16 @@
 <template>
   <div
-    class="relative flex h-dvh flex-col overflow-hidden bg-(--primary-bg) bg-[url('/splash_screen_background.png')] dark:bg-[url('/splash_screen_background_dark.png')] bg-cover text-(--text-primary)"
+    class="relative flex h-dvh flex-col overflow-hidden text-white"
+    style="background: linear-gradient(150deg, #16265e, #0e1b45)"
   >
+    <!-- Girih tekstura -->
+    <div
+      class="pointer-events-none absolute inset-0"
+      style="
+        background: repeating-conic-gradient(from 45deg, rgba(255, 255, 255, 0.04) 0 25%, transparent 0 50%);
+        background-size: 56px 56px;
+      "
+    />
     <UButton
       :to="backTo"
       icon="i-lucide-arrow-left"
@@ -9,14 +18,14 @@
       size="xl"
       class="absolute top-[20px] left-[24px] z-10 rounded-[12px]"
       :ui="{
-        base: 'bg-(--brand-base)/25 backdrop-blur-lg text-(--brand-base) active:bg-(--brand-base) active:text-white hover:bg-(--brand-base) hover:text-white',
+        base: 'bg-white/15 backdrop-blur-lg text-white active:bg-white/25 hover:bg-white/25',
       }"
     >
       {{ $t("back") }}
     </UButton>
 
     <div
-      class="mx-auto flex h-full w-full max-w-[680px] flex-col items-center justify-center gap-[24px] px-[24px] py-[32px]"
+      class="relative z-1 mx-auto flex h-full w-full max-w-[680px] flex-col items-center justify-center gap-[24px] px-[24px] py-[32px]"
     >
       <MediaPoster
         :src="track.cover"
@@ -32,11 +41,11 @@
         </h1>
         <p
           v-if="track.subtitle"
-          class="m-0 mt-[4px] text-[1.25rem] font-semibold text-(--text-secondary)"
+          class="m-0 mt-[4px] text-[1.25rem] font-semibold text-white/60"
         >
           {{ track.subtitle }}
         </p>
-        <p v-if="audioError" class="m-0 mt-[8px] text-[1rem] text-red-500">
+        <p v-if="audioError" class="m-0 mt-[8px] text-[1rem] text-red-300">
           {{ $t("mediaUnavailable") }}
         </p>
       </div>
@@ -45,11 +54,11 @@
       <div class="w-full max-w-[560px]">
         <div class="relative h-[18px]">
           <div
-            class="absolute top-1/2 left-0 h-[6px] -translate-y-1/2 rounded-full bg-(--brand-base)"
+            class="absolute top-1/2 left-0 h-[6px] -translate-y-1/2 rounded-full bg-(--accent-gold)"
             :style="{ width: `${progressPercent}%` }"
           />
           <input
-            class="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent [&::-moz-range-thumb]:h-[18px] [&::-moz-range-thumb]:w-[18px] [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-(--brand-base) [&::-webkit-slider-runnable-track]:h-[6px] [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-(--neutral-stroke) [&::-webkit-slider-thumb]:mt-[-6px] [&::-webkit-slider-thumb]:h-[18px] [&::-webkit-slider-thumb]:w-[18px] [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-(--brand-base)"
+            class="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent [&::-moz-range-thumb]:h-[18px] [&::-moz-range-thumb]:w-[18px] [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-(--accent-gold) [&::-webkit-slider-runnable-track]:h-[6px] [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-white/20 [&::-webkit-slider-thumb]:mt-[-6px] [&::-webkit-slider-thumb]:h-[18px] [&::-webkit-slider-thumb]:w-[18px] [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-(--accent-gold)"
             type="range"
             min="0"
             :max="duration || 0"
@@ -63,7 +72,7 @@
           />
         </div>
         <div
-          class="mt-[6px] flex justify-between text-[0.875rem] text-(--text-secondary)"
+          class="mt-[6px] flex justify-between text-[0.875rem] text-white/55"
         >
           <span>{{ formatTime(currentTime) }}</span>
           <span>{{ formatTime(duration) }}</span>
@@ -78,7 +87,7 @@
           color="neutral"
           variant="ghost"
           size="xl"
-          class="rounded-full text-(--icon-primary)"
+          class="rounded-full text-white"
           aria-label="Previous"
           @click="prev"
         />
@@ -88,7 +97,7 @@
           label="10s"
           variant="ghost"
           size="xl"
-          class="rounded-full text-(--icon-primary)"
+          class="rounded-full text-white"
           aria-label="Back 10 seconds"
           @click="seekBy(-10)"
         />
@@ -98,7 +107,7 @@
           class="h-[64px] w-[64px] justify-center rounded-full"
           aria-label="Play"
           :ui="{
-            base: 'bg-(--brand-base) active:bg-(--brand-base)/50 hover:bg-(--brand-base) hover:text-white shadow-[0px_8px_35px_var(--brand-base)]/25',
+            base: 'bg-(--accent-gold) text-(--text-on-gold) active:bg-(--accent-gold)/70 hover:bg-(--accent-gold-light) hover:text-(--text-on-gold) shadow-[0px_8px_35px_rgba(201,154,60,0.35)]',
           }"
           @click="togglePlayback"
         />
@@ -108,7 +117,7 @@
           label="10s"
           variant="ghost"
           size="xl"
-          class="rounded-full text-(--icon-primary)"
+          class="rounded-full text-white"
           aria-label="Forward 10 seconds"
           @click="seekBy(10)"
         />
@@ -118,14 +127,14 @@
           color="neutral"
           variant="ghost"
           size="xl"
-          class="rounded-full text-(--icon-primary)"
+          class="rounded-full text-white"
           aria-label="Next"
           @click="next"
         />
         <UButton
           color="neutral"
           variant="outline"
-          class="h-[40px] min-w-[40px] justify-center rounded-full"
+          class="h-[40px] min-w-[40px] justify-center rounded-full border-white/25 text-white hover:bg-white/10"
           @click="cycleSpeed"
         >
           {{ playbackRate }}x

@@ -1,13 +1,36 @@
 <template>
-  <div class="">
-    <div class="flex-none px-[16px] pt-[16px] md:px-[24px] md:pt-[24px]">
+  <div class="relative min-h-screen">
+    <!-- Milliy xonatlas chizig'i (sahifa tepasi) -->
+    <div class="khanatlas-top" />
+
+    <!-- Chet girih medalyonlari (naqsh.svg) — faqat keng ekranda -->
+    <img
+      src="/naqsh.svg"
+      class="naqsh-medallion naqsh-medallion--left hidden mdl:block"
+      alt=""
+      aria-hidden="true"
+    />
+    <img
+      src="/naqsh.svg"
+      class="naqsh-medallion naqsh-medallion--right hidden mdl:block"
+      alt=""
+      aria-hidden="true"
+    />
+
+    <!-- Kontent (max-width 1240, markazda) -->
+    <div
+      class="relative z-1 mx-auto max-w-[1240px] px-[clamp(16px,3vw,36px)] pt-[12px] pb-[48px]"
+    >
       <AppHeader :label="toDisplayString(currentTitle) || ''" />
+      <main class="pt-[18px] pb-[74px] mdl:pb-[18px]">
+        <slot />
+      </main>
     </div>
-    <main class="flex-1 overflow-y-auto p-4 md:p-[24px]">
-      <slot />
-    </main>
-    <!-- Qalqib chiquvchi reklama (media algoritmida chiqmaydi; pleyer sahifalari
-         layout: false — playback vaqtida ulanmaydi) -->
+
+    <!-- Xonatlas chizig'i (sahifa pasti) -->
+    <div class="khanatlas-bottom" />
+
+    <!-- Qalqib chiquvchi reklama (pleyer sahifalarida layout: false) -->
     <AdPopup />
   </div>
 </template>

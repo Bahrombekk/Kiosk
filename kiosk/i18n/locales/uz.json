@@ -23,6 +23,24 @@
   "temperature": "Harorat",
   "seatPlacement": "Joylashuv",
   "weRecommend": "Tavsiya etamiz",
+  "bookOfDay": "KUN KITOBI",
+  "videoFeatured": "HAFTANING FILMI",
+  "audioBadge": "AUDIO",
+  "mapInfo": {
+    "date": "Sana",
+    "duration": "Davomiylik",
+    "distance": "Masofa",
+    "schema": "XARITA SXEMASI"
+  },
+  "recommendedBadge": "TAVSIYA",
+  "adBadge": "REKLAMA",
+  "hero": {
+    "nextStop": "Keyingi bekat",
+    "enRoute": "Yo'lda",
+    "kmh": "km/soat",
+    "salon": "salon",
+    "wagonNote": "o'rindiq"
+  },
   "minutes_short": "d",
   "hour_short": "s",
   "buttonActions": {
@@ -44,6 +62,7 @@
   "connectionError": "Server bilan aloqa yo'q",
   "retry": "Qayta urinish",
   "openOnYourPhone": "Telefoningizda oching",
+  "openWithQr": "QR bilan ochish",
   "scanInstructions": {
     "pointCamera": "Telefon kamerasini QR kodga yo'naltiring",
     "clickLink": "Havolaga bosiladi — brauzerda ochiladi",

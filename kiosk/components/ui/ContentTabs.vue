@@ -1,22 +1,21 @@
+<!-- ContentTabs — pill segment (milliy dizayn): oq yumaloq idish + tugmalar,
+     aktiv navy. Videolar (tur) va Kitoblar (janr) filtrida ishlatiladi. -->
 <template>
-  <div class="flex w-full overflow-x-auto">
+  <div
+    class="inline-flex max-w-full gap-[4px] overflow-x-auto rounded-full bg-(--surface-bg) p-[6px] shadow-(--shadow-card)"
+  >
     <button
       v-for="item in items"
       :key="item.key"
       type="button"
-      class="flex cursor-pointer items-center gap-[10px] text-nowrap border-0 bg-transparent p-[12px] text-[1.125rem] font-medium text-(--text-secondary) md:p-[14px_21px]"
+      class="cursor-pointer whitespace-nowrap rounded-full border-0 px-[clamp(13px,1.6vw,22px)] py-[10px] text-[14px] transition-colors"
       :class="
         item.key === activeKey
-          ? 'border-b border-(--brand-base) text-(--brand-base)!'
-          : ''
+          ? 'bg-(--brand-base) font-extrabold text-white'
+          : 'bg-transparent font-semibold text-(--text-muted-btn) hover:text-(--brand-base)'
       "
       @click="$emit('update:activeKey', item.key)"
     >
-      <component
-        :is="item.icon"
-        class="text-(--icon-secondary)"
-        :class="item.key === activeKey ? 'text-(--brand-base)!' : ''"
-      />
       {{ item.label }}
     </button>
   </div>

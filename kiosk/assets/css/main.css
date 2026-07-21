@@ -3,4 +3,5 @@
 
 @theme {
   --breakpoint-mdl: 56.25rem;
+  --font-sans: "Manrope", system-ui, sans-serif;
 }

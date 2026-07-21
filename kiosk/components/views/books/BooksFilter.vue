@@ -1,5 +1,5 @@
 <template>
-  <div class="mb-[24px] flex items-center justify-between">
+  <div class="flex items-center justify-between">
     <ContentTabs v-model:active-key="model" :items="items" />
   </div>
 </template>

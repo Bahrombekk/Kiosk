@@ -1,58 +1,68 @@
+<!-- TextBookReader.vue — o'qish rejimi (§21): tepada sarlavha paneli
+     (ortga + nom + sahifa), markazda qog'oz karta (ivory reader foni). -->
 <template>
-  <div
-    class="relative flex h-dvh overflow-hidden bg-(--primary-bg) bg-[url('/splash_screen_background.png')] dark:bg-[url('/splash_screen_background_dark.png')] bg-cover text-(--text-primary)"
-  >
-    <UButton
-      :to="{ name: 'books' }"
-      icon="i-lucide-arrow-left"
-      variant="soft"
-      size="xl"
-      class="absolute top-[20px] left-[24px] z-10 rounded-[12px]"
-      :ui="{
-        base: 'bg-(--brand-base)/25 backdrop-blur-lg text-(--brand-base) active:bg-(--brand-base) active:text-white hover:bg-(--brand-base) hover:text-white',
-      }"
+  <div class="flex h-dvh flex-col overflow-hidden bg-(--reader-bg) text-(--text-primary)">
+    <!-- Tepa panel -->
+    <div
+      class="flex items-center gap-[16px] bg-(--page-bg) px-[clamp(16px,3vw,32px)] py-[14px]"
+      style="box-shadow: 0 2px 12px rgba(28, 36, 51, 0.06)"
     >
-      {{ $t("back") }}
-    </UButton>
+      <NuxtLink
+        :to="{ name: 'books' }"
+        class="rounded-[12px] bg-(--surface-bg) px-[18px] py-[10px] text-[13px] font-extrabold text-(--text-primary) no-underline shadow-(--shadow-card)"
+      >
+        ← {{ $t("back") }}
+      </NuxtLink>
+      <div class="truncate font-[Unbounded] text-[15px] font-semibold">
+        {{ chapterTitle }}
+      </div>
+      <div class="ml-auto whitespace-nowrap text-[12px] font-extrabold text-(--text-secondary)">
+        {{ currentPage }} / {{ book.pageCount || "—" }} {{ $t("pages") }}
+      </div>
+    </div>
 
+    <!-- Qog'oz -->
     <main
       ref="scrollRef"
-      class="mx-auto h-full w-full max-w-[720px] overflow-y-auto px-[24px] py-[70px] text-[1.125rem] leading-[1.75] text-(--text-secondary)"
+      class="flex flex-1 justify-center overflow-y-auto p-[clamp(16px,3vw,32px)]"
       @scroll="updateProgress"
     >
-      <h1
-        class="m-0 mb-[40px] text-center text-[1.5rem] font-semibold text-(--text-primary)"
+      <div
+        class="w-[680px] max-w-full rounded-[16px] bg-(--paper-bg) p-[clamp(28px,5vw,48px)_clamp(24px,5vw,56px)]"
+        style="box-shadow: 0 20px 60px rgba(28, 36, 51, 0.1)"
       >
-        {{ chapterTitle }}
-      </h1>
-      <p v-if="loading" class="text-center">{{ $t("loading") }}</p>
-      <template v-else-if="loadError">
-        <p class="text-center text-red-500">{{ $t("connectionError") }}</p>
-        <div class="mt-[16px] text-center">
-          <UButton icon="i-lucide-refresh-cw" @click="loadText">
-            {{ $t("retry") }}
-          </UButton>
-        </div>
-      </template>
-      <p v-else-if="!paragraphs.length" class="text-center">
-        {{ $t("noContent") }}
-      </p>
-      <template v-else>
-        <p
-          v-for="(paragraph, index) in paragraphs"
-          :key="index"
-          class="m-0 mb-[4px] indent-[1.25rem]"
-        >
-          {{ paragraph }}
-        </p>
-      </template>
-    </main>
+        <h1 class="m-0 mb-[8px] font-[Unbounded] text-[22px] font-semibold text-(--text-primary)">
+          {{ chapterTitle }}
+        </h1>
+        <div class="mb-[24px] h-[3px] w-[56px] bg-(--accent-gold)" />
 
-    <div
-      class="absolute bottom-[24px] left-[24px] rounded-[8px] bg-(--brand-base) px-[12px] py-[4px] text-[1rem] font-semibold text-white"
-    >
-      {{ currentPage }} / {{ book.pageCount }}
-    </div>
+        <p v-if="loading" class="text-center text-(--text-secondary)">{{ $t("loading") }}</p>
+        <template v-else-if="loadError">
+          <p class="text-center text-(--danger)">{{ $t("connectionError") }}</p>
+          <div class="mt-[16px] text-center">
+            <button
+              type="button"
+              class="rounded-[12px] bg-(--brand-base) px-[20px] py-[10px] text-[13px] font-extrabold text-white"
+              @click="loadText"
+            >
+              {{ $t("retry") }}
+            </button>
+          </div>
+        </template>
+        <p v-else-if="!paragraphs.length" class="text-center text-(--text-secondary)">
+          {{ $t("noContent") }}
+        </p>
+        <template v-else>
+          <p
+            v-for="(paragraph, index) in paragraphs"
+            :key="index"
+            class="m-0 mb-[18px] indent-[1.25rem] text-[17px] leading-[1.9] text-[#2c3242]"
+          >
+            {{ paragraph }}
+          </p>
+        </template>
+      </div>
+    </main>
   </div>
 </template>
 
@@ -94,9 +104,10 @@ const updateProgress = () => {
 
   const scrollable = element.scrollHeight - element.clientHeight;
   const progress = scrollable > 0 ? element.scrollTop / scrollable : 0;
+  const total = props.book.pageCount || 1;
   currentPage.value = Math.min(
-    props.book.pageCount,
-    Math.max(1, Math.round(progress * props.book.pageCount) || 1),
+    total,
+    Math.max(1, Math.round(progress * total) || 1),
   );
 };
 

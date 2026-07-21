@@ -1,56 +1,76 @@
+<!-- BooksList.vue — kitob kartalari (§16): gorizontal karta (muqova 70x100 +
+     ma'lumot: nom/muallif/janr·sahifa + O'QISH/AUDIO belgilari). -->
 <template>
-  <!-- Bo'sh holat — jim bo'sh grid o'rniga aniq xabar -->
   <p
     v-if="!books?.length"
     class="py-[48px] text-center text-[1.25rem] text-(--text-secondary)"
   >
     {{ $t("nothingFound") }}
   </p>
-  <PageGrid v-else columns="books">
+  <div
+    v-else
+    class="grid gap-[16px]"
+    style="grid-template-columns: repeat(auto-fill, minmax(min(235px, 100%), 1fr))"
+  >
     <div
-      v-for="book in books"
+      v-for="(book, i) in books"
       :key="book.id"
-      class="cursor-pointer overflow-hidden rounded-[12px] bg-(--surface-bg)"
+      class="tm-book flex cursor-pointer gap-[14px] rounded-[20px] bg-(--surface-bg) p-[16px] shadow-(--shadow-card)"
       @click="$emit('openBookModal', book)"
     >
-      <MediaPoster
-        :src="book.image.original"
-        :background-src="book.image.medium"
-        :alt="book.title"
-        frame-class="rounded-[12px] p-[15px]"
-        image-class="z-2 h-[170px] w-[125px] rounded-[4px] border border-white/60 object-cover"
+      <!-- Muqova -->
+      <div
+        class="relative flex h-[100px] w-[70px] flex-none items-end overflow-hidden rounded-[8px] p-[7px]"
+        :style="{ background: gradFor(i) }"
       >
-        <div
-          class="absolute top-[8px] right-[8px] z-3 flex items-center gap-[8px] rounded-full bg-(--surface-bg) px-[8px] py-[4px]"
+        <img
+          v-if="book.image?.original"
+          :src="book.image.original"
+          :alt="book.title"
+          loading="lazy"
+          class="absolute inset-0 h-full w-full object-cover"
+        />
+        <span
+          v-else
+          class="relative font-[Unbounded] text-[9px] font-semibold leading-[1.3] text-[rgba(255,255,255,.92)]"
         >
-          <BookOpenIcon
-            v-if="book.contentModes.readable"
-            class="h-[20px] w-[20px] pt-[2px] text-(--brand-base)"
-          />
-          <HeadphonesIconAlt
-            v-if="book.contentModes.audible"
-            class="text-(--warning-base)"
-          />
+          {{ book.title }}
+        </span>
+      </div>
+      <!-- Ma'lumot -->
+      <div class="flex min-w-0 flex-col gap-[4px]">
+        <div class="truncate text-[14px] font-extrabold text-(--text-primary)">
+          {{ book.title }}
         </div>
-      </MediaPoster>
-      <div class="p-[12px]">
-        <p class="m-0 text-[1.25rem]">{{ book.title }}</p>
-        <div class="flex items-center justify-between">
-          <p class="m-0 text-[0.875rem] text-(--text-secondary)">
-            {{ book.author }}
-          </p>
-          <p class="m-0 text-[0.875rem] text-(--text-secondary)">
-            {{ book.pageCount }} {{ $t("pages_short") }}
-          </p>
+        <div class="truncate text-[12px] text-(--text-secondary)">{{ book.author }}</div>
+        <div
+          v-if="book.genre || book.pageCount"
+          class="truncate text-[11px] text-(--text-secondary)"
+        >
+          <template v-if="book.genre">{{ book.genre }}</template>
+          <template v-if="book.genre && book.pageCount"> · </template>
+          <template v-if="book.pageCount">{{ book.pageCount }} {{ $t("pages") }}</template>
+        </div>
+        <div class="mt-auto flex flex-wrap gap-[6px] pt-[4px]">
+          <span
+            v-if="book.contentModes.readable"
+            class="rounded-full bg-(--brand-surface) px-[9px] py-[3px] text-[10px] font-extrabold uppercase text-(--brand-base)"
+          >
+            {{ $t("buttonActions.read") }}
+          </span>
+          <span
+            v-if="book.contentModes.audible"
+            class="rounded-full bg-(--accent-gold-surface) px-[9px] py-[3px] text-[10px] font-extrabold text-(--accent-gold-text)"
+          >
+            {{ $t("audioBadge") }}
+          </span>
         </div>
       </div>
     </div>
-  </PageGrid>
+  </div>
 </template>
 
 <script setup lang="ts">
-import BookOpenIcon from "~/assets/svg/book-open.svg";
-import HeadphonesIconAlt from "~/assets/svg/headphones-alt-1.svg";
 import type { Book } from "~/types/app";
 
 defineProps<{
@@ -60,4 +80,22 @@ defineProps<{
 defineEmits<{
   openBookModal: [book: Book];
 }>();
+
+const GRADS = [
+  "linear-gradient(160deg,#16265e,#0d1739)",
+  "linear-gradient(160deg,#14939b,#0e6f75)",
+  "linear-gradient(160deg,#a34a2a,#7a2f18)",
+  "linear-gradient(160deg,#1c2433,#16265e)",
+];
+const gradFor = (i: number) => GRADS[i % GRADS.length];
 </script>
+
+<style scoped>
+.tm-book {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.tm-book:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-card-hover);
+}
+</style>

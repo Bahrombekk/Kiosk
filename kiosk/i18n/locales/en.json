@@ -23,6 +23,24 @@
   "temperature": "Temperature",
   "seatPlacement": "Placement",
   "weRecommend": "We Recommend",
+  "bookOfDay": "BOOK OF THE DAY",
+  "videoFeatured": "FILM OF THE WEEK",
+  "audioBadge": "AUDIO",
+  "mapInfo": {
+    "date": "Date",
+    "duration": "Duration",
+    "distance": "Distance",
+    "schema": "ROUTE SCHEMA"
+  },
+  "recommendedBadge": "FEATURED",
+  "adBadge": "AD",
+  "hero": {
+    "nextStop": "Next stop",
+    "enRoute": "En route",
+    "kmh": "km/h",
+    "salon": "cabin",
+    "wagonNote": "seat"
+  },
   "minutes_short": "m",
   "hour_short": "h",
   "buttonActions": {
@@ -44,6 +62,7 @@
   "connectionError": "No connection to the server",
   "retry": "Retry",
   "openOnYourPhone": "Open on your phone",
+  "openWithQr": "Open with QR",
   "scanInstructions": {
     "pointCamera": "Point your phone camera at a QR code",
     "clickLink": "Click the link - opens in browser",

@@ -1,41 +1,99 @@
+/* ============================================================
+   Milliy dizayn v2 — "Registan + Afrosiyob"
+   Tokenlar: design_handoff/tokens.css | Shriftlar: oflayn @font-face
+   ============================================================ */
+@import "./fonts.css";
+
 :root {
-  --brand-base: #2563eb;
-  --surface-bg: #fff;
-  --tertiary-bg: #f1f5f9;
-  --text-primary: #0f172a;
-  --text-secondary: #64748b;
-  --icon-secondary: #94a3b8;
-  --info-surface-bg: #f0f9ff;
-  --warning-base: #f59e0b;
-  --brand-surface: #eff6ff;
-  --neutral-stroke: #e2e8f0;
-  --icon-active: #0f172a;
-  --icon-secondary: #94a3b8;
-  --blurred-bg: rgba(255, 255, 255, 0.9);
+  /* Brend (kobalt) */
+  --brand-base: #1445a7;
+  --brand-hover: #0d2f77;
+  --brand-navy-1: #16265e;
+  --brand-navy-2: #0e1b45;
+  --brand-surface: #eef3fc;
+
+  /* Aksentlar */
+  --accent-teal: #14939b;
+  --accent-teal-light: #159a93;
+  --accent-gold: #c99a3c;
+  --accent-gold-light: #e8c87a;
+  --accent-gold-surface: #f7ecd4;
+  --accent-gold-text: #7a5a10;
+  --accent-terracotta: #a34a2a;
+
+  /* Yuzalar */
+  --surface-bg: #ffffff;
+  --page-bg: #f6f1e7;
+  --reader-bg: #efe8d8;
+  --paper-bg: #fffdf8;
+  --dark-card: #1c2433;
+
+  /* Matn */
+  --text-primary: #1c2433;
+  --text-secondary: #8a7f68;
+  --text-muted-btn: #6b6350;
+  --text-on-gold: #241a05;
+
+  /* Chiziqlar */
+  --stroke-1: #e6dcc6;
+  --stroke-2: #e0d5bc;
+  --stroke-3: #d9cfb9;
+  --stroke-zigzag: #ddd0b2;
+
+  /* Soyalar */
+  --shadow-card: 0 8px 30px rgba(28, 36, 51, .06);
+  --shadow-card-hover: 0 16px 36px rgba(28, 36, 51, .14);
+  --shadow-poster: 0 10px 26px rgba(28, 36, 51, .12);
+  --shadow-modal: 0 30px 80px rgba(0, 0, 0, .35);
+  --shadow-gold-halo: 0 0 0 5px rgba(201, 154, 60, .14);
+
+  /* Radiuslar */
+  --radius-card: 20px;
+  --radius-hero: 24px;
+  --radius-btn: 12px;
+  --radius-poster: 16px;
+  --radius-pill: 999px;
+
+  /* Shriftlar */
+  --font-display: "Unbounded", sans-serif;
+  --font-body: "Manrope", system-ui, sans-serif;
+
+  /* Naqshlar */
+  --pattern-girih-dark: repeating-conic-gradient(from 45deg, rgba(255, 255, 255, .05) 0 25%, transparent 0 50%);
+  --pattern-page: repeating-linear-gradient(45deg, rgba(20, 69, 167, .025) 0 2px, transparent 2px 26px),
+    repeating-linear-gradient(-45deg, rgba(201, 154, 60, .035) 0 2px, transparent 2px 26px);
+  --pattern-khanatlas-top: repeating-linear-gradient(90deg, #1445a7 0 36px, #f6f1e7 36px 40px, #14939b 40px 66px, #f6f1e7 66px 70px, #c99a3c 70px 94px, #f6f1e7 94px 98px, #1445a7 98px 118px, #f6f1e7 118px 122px);
+  --pattern-khanatlas-bottom: repeating-linear-gradient(90deg, #c99a3c 0 36px, #f6f1e7 36px 40px, #14939b 40px 66px, #f6f1e7 66px 70px, #1445a7 70px 94px, #f6f1e7 94px 98px, #c99a3c 98px 118px, #f6f1e7 118px 122px);
+  --pattern-zigzag: linear-gradient(135deg, #ddd0b2 5px, transparent 0) 0 0/16px 8px repeat-x,
+    linear-gradient(-135deg, #ddd0b2 5px, transparent 0) 8px 0/16px 8px repeat-x;
+  --border-gold-dash: 1.5px dashed rgba(232, 200, 122, .4);
+
+  /* --- Eski token nomlari yangi qiymatlarga bog'landi (o'zgartirilmagan
+     komponentlar ham yangi dizaynda ko'rinsin) --- */
+  --tertiary-bg: #f6f1e7;
+  --neutral-stroke: #e6dcc6;
+  --icon-active: #1c2433;
+  --icon-secondary: #8a7f68;
+  --icon-primary: #1445a7;
+  --warning-base: #c99a3c;
+  --info-surface-bg: #eef3fc;
+  --danger: #a34a2a;
+  --blurred-bg: rgba(255, 253, 248, .82);
 }
+
+/* Yangi dizayn faqat LIGHT (ivory) — dark rejimda ham bir xil ko'rinadi */
 .dark {
-  --brand-base: #3b82f6;
-  --surface-bg: #0f172a;
-  --tertiary-bg: #1e293b;
-  --text-primary: #f8fafc;
-  --text-secondary: #cbd5e1;
-  --brand-surface: #1e3a8a;
-  --neutral-stroke: #334155;
-  --icon-active: #f8fafc;
-  --icon-secondary: #64748b;
-  --blurred-bg: rgba(0, 0, 0, 0.25);
-}
-
-.dark .leaflet-layer,
-.dark .leaflet-control-zoom-in,
-.dark .leaflet-control-zoom-out,
-.dark .leaflet-control-attribution {
-  filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
-}
-
-/* Prevent your map marker icons from looking weird/inverted */
-.dark .leaflet-marker-icon {
-  filter: none !important;
+  --brand-base: #1445a7;
+  --surface-bg: #ffffff;
+  --page-bg: #f6f1e7;
+  --text-primary: #1c2433;
+  --text-secondary: #8a7f68;
+  --brand-surface: #eef3fc;
+  --neutral-stroke: #e6dcc6;
+  --tertiary-bg: #f6f1e7;
+  --icon-active: #1c2433;
+  --icon-secondary: #8a7f68;
+  --blurred-bg: rgba(255, 253, 248, .82);
 }
 
 html {
@@ -47,24 +105,70 @@ html {
 body {
   min-height: 100%;
   margin: 0;
-  font-family: "Inter", sans-serif;
-  background: url("../public/splash_screen_background.png");
-  background-repeat: no-repeat;
-  background-size: cover;
-  background-color: var(--tertiary-bg);
-  background-position: center;
-  background-attachment: fixed;
+  font-family: var(--font-body);
+  color: var(--text-primary);
+  background-color: var(--page-bg);
+  background-image: var(--pattern-page);
+}
+
+.dark body {
+  background: var(--page-bg) var(--pattern-page);
 }
 
 button {
   cursor: pointer;
+  font-family: var(--font-body);
 }
 
-.dark body {
-  background: url("../public/splash_screen_background_dark.png");
-  background-repeat: no-repeat;
-  background-size: cover;
-  background-position: center;
-  background-color: var(--tertiary-bg);
-  background-attachment: fixed;
+/* Xonatlas milliy chiziqlar (sahifa tepasi/pasti, 10px) */
+.khanatlas-top,
+.khanatlas-bottom {
+  height: 10px;
+  width: 100%;
+}
+.khanatlas-top {
+  background: var(--pattern-khanatlas-top);
+}
+.khanatlas-bottom {
+  background: var(--pattern-khanatlas-bottom);
+}
+
+/* Chet girih medalyonlari (naqsh.svg) */
+.naqsh-medallion {
+  position: fixed;
+  top: 50%;
+  height: min(780px, 88vh);
+  pointer-events: none;
+  z-index: 0;
+}
+.naqsh-medallion--left {
+  left: 0;
+  transform: translateY(-50%);
+  opacity: 0.75;
+}
+.naqsh-medallion--right {
+  right: 0;
+  transform: translateY(-50%) scaleX(-1);
+  opacity: 0.22;
+  filter: sepia(0.6) saturate(0.5);
+}
+
+/* Sahifa almashish animatsiyasi (omFade) */
+@keyframes omFade {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.page-enter-active {
+  animation: omFade 0.35s ease;
+}
+
+/* Xarita (Leaflet endi ishlatilmaydi, lekin qolgan uslublar zararsiz) */
+.dark .leaflet-marker-icon {
+  filter: none !important;
 }
