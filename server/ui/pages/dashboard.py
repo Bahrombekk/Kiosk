@@ -1,5 +1,6 @@
 """ui/pages/dashboard.py — Boshqaruv (dashboard) sahifasi mixin'i."""
 import json
+import os
 from datetime import datetime
 
 from PyQt6.QtWidgets import (
@@ -92,6 +93,38 @@ class DashboardPageMixin:
         hint.setObjectName("hint")
         hint.setWordWrap(True)
         stat_lay.addWidget(hint)
+
+        # --- Veb ilova manzili (yo'lovchilar telefon/brauzerda ochadi) ---
+        # Backend (yuqorida) kiosk o'rnatuvchisi uchun; bu esa VEB (poyezd.uz)
+        # manzili — qidirib yurmaslik uchun barcha LAN IP'lar shu yerda.
+        web_port = os.environ.get("KIOSK_WEB_PORT", "80")
+        sfx = "" if str(web_port) == "80" else f":{web_port}"
+        web_ips = [ip for ip in local_ips() if ip and ip != "127.0.0.1"]
+        self._web_url = (f"http://{web_ips[0]}{sfx}" if web_ips
+                         else f"http://poyezd.uz{sfx}")
+        web_urls_txt = "   •   ".join(
+            [f"http://poyezd.uz{sfx} (shu kompyuter)"]
+            + [f"http://{ip}{sfx}" for ip in web_ips])
+        wrow = QHBoxLayout()
+        wrow.setSpacing(10)
+        web_ic = QLabel()
+        web_ic.setPixmap(svg_pixmap("globe", C_MUTED, 16))
+        web_lbl = QLabel("Veb: " + web_urls_txt)
+        web_lbl.setObjectName("muted")
+        web_lbl.setWordWrap(True)
+        web_lbl.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse)
+        web_copy = self._btn("Nusxalash", "copy", self._copy_web, kind="ghost")
+        wrow.addWidget(web_ic)
+        wrow.addWidget(web_lbl, 1)
+        wrow.addWidget(web_copy)
+        stat_lay.addLayout(wrow)
+        web_hint = QLabel(
+            "Yo'lovchilar telefonda shu manzilni ochadi. poyezd.uz faqat shu "
+            "kompyuterda ishlaydi — telefonda yuqoridagi IP manzilni yozing.")
+        web_hint.setObjectName("hint")
+        web_hint.setWordWrap(True)
+        stat_lay.addWidget(web_hint)
 
         # API kalit qatori — kiosk o'rnatuvchisiga kiritiladi (maskalangan,
         # "Nusxalash" tugmasi to'liq kalitni clipboard'ga oladi).
@@ -190,6 +223,11 @@ class DashboardPageMixin:
     def _copy_addr(self):
         QApplication.clipboard().setText(self._server_url)
         self.statusBar().showMessage("Manzil nusxalandi: " + self._server_url, 3000)
+
+    def _copy_web(self):
+        QApplication.clipboard().setText(self._web_url)
+        self.statusBar().showMessage(
+            "Veb manzil nusxalandi: " + self._web_url, 3000)
 
     def _copy_api_key(self):
         QApplication.clipboard().setText(self._api_key)

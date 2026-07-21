@@ -65,8 +65,10 @@ class AdminWindow(DashboardPageMixin, CachePageMixin, ContentPageMixin,
         ("settings", "Sozlamalar", "settings"),
     ]
 
-    def __init__(self, server=None):
+    def __init__(self, server=None, web=None):
         super().__init__()
+        # Veb ilova boshqaruvchisi (admin Sozlamalar -> "Veb ilova" toggle)
+        self.web = web
         self.setWindowTitle("Kiosk — Server admin")
         self.setWindowIcon(svg_icon("server", C_ACCENT, 64))
         self.resize(1180, 760)

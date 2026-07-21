@@ -1,5 +1,5 @@
 <template>
-  <div class="relative min-h-screen">
+  <div class="relative flex min-h-screen flex-col">
     <!-- Milliy xonatlas chizig'i (sahifa tepasi) -->
     <div class="khanatlas-top" />
 
@@ -19,9 +19,9 @@
 
     <!-- Kontent (max-width 1240, markazda) -->
     <div
-      class="relative z-1 mx-auto max-w-[1240px] px-[clamp(16px,3vw,36px)] pt-[12px] pb-[48px]"
+      class="relative z-1 mx-auto w-full max-w-[1240px] flex-1 px-[clamp(16px,3vw,36px)] pt-[12px] pb-[48px]"
     >
-      <AppHeader :label="toDisplayString(currentTitle) || ''" />
+      <AppHeader />
       <main class="pt-[18px] pb-[74px] mdl:pb-[18px]">
         <slot />
       </main>
@@ -36,8 +36,5 @@
 </template>
 
 <script setup lang="ts">
-import { toDisplayString } from "vue";
-
-const route = useRoute();
-const currentTitle = computed(() => route.meta.layoutTitle || "");
+// Header endi sarlavha (label) ko'rsatmaydi — dizaynда nav-pill bor.
 </script>

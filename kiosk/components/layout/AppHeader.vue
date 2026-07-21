@@ -168,8 +168,6 @@ import WebsitesIcon from "~/assets/svg/globe-alt.svg";
 
 const { locales, setLocale, locale } = useI18n();
 
-defineProps({ label: { type: String } });
-
 const navItems: NavItem[] = [
   { to: "/", labelKey: "appHeaderNavbar.main", icon: MainPageIcon },
   { to: "/maps", labelKey: "appHeaderNavbar.maps", icon: MapsIcon },

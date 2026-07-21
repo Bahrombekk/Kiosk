@@ -13,6 +13,7 @@ from PyQt6.QtGui import QPixmap
 
 import config
 import db
+import media_tools
 from icons import svg_icon, svg_pixmap
 from ui.styles import (
     CONTENT_TYPES, TYPE_LABELS, VIDEO_EXT, AUDIO_EXT, IMAGE_EXT, TEXT_EXT
@@ -424,6 +425,16 @@ class ContentDialog(QDialog):
                 (self.text_src, config.BOOKS_DIR, "text_path")):
             if src:
                 data[key] = _copy_unique(src, dst_dir)
+                # Video media: progressive striming uchun faststart (moov'ni
+                # fayl boshiga). Busiz katta kinolar mobil brauzerda qotib,
+                # sekin yuklanardi. Best-effort — ffmpeg yo'q/xato bo'lsa asl
+                # fayl daxlsiz qoladi.
+                if key == "file_path":
+                    try:
+                        media_tools.ensure_faststart(
+                            os.path.join(dst_dir, data[key]))
+                    except Exception:                # noqa: BLE001
+                        pass
         return data
 
 

@@ -299,6 +299,7 @@ def _ensure_defaults(conn):
             ("wifi_hotspot", "0"),             # 1=server Wi-Fi tarqatadi (hotspot)
             ("wifi_ssid", "KioskServer"),      # tarqatiladigan tarmoq nomi
             ("wifi_password", "kiosk12345"),   # Wi-Fi paroli (kamida 8 belgi)
+            ("web_enabled", "1"),              # 1=veb ilova (Nuxt) ishga tushadi
         ])
 
 

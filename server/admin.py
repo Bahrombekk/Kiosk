@@ -91,7 +91,14 @@ def main():
     # ochilishi bilanoq veb ham ishga tushadi (ui/web_server.py). Node yo'q
     # bo'lsa jim o'tadi. Ilova yopilganda web.stop() bilan birga to'xtaydi.
     web = WebServer()
-    web.start()
+    # Sozlamada o'chirib qo'yilmagan bo'lsa ishga tushiramiz (admin Sozlamalar
+    # -> "Veb ilova" kartasidan yoqib/o'chirib turadi).
+    try:
+        _web_on = str(db.get_settings().get("web_enabled") or "1") != "0"
+    except Exception:                                    # noqa: BLE001
+        _web_on = True
+    if _web_on:
+        web.start()
     app.aboutToQuit.connect(web.stop)
 
     # Wi-Fi hotspot: sozlamada yoqilgan bo'lsa server Wi-Fi tarqatadi (kiosklar
@@ -109,7 +116,7 @@ def main():
         server.wait(3000)
         sys.exit(1)
 
-    win = AdminWindow(server=server)
+    win = AdminWindow(server=server, web=web)
     win.show()
     sys.exit(app.exec())
 

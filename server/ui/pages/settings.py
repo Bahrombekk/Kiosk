@@ -509,6 +509,39 @@ class SettingsPageMixin:
         clay.addLayout(w_row)
         ilay.addWidget(card)
 
+        # === 9) Veb ilova (web kiosk) ===
+        card, clay = self._sec_card(
+            "globe", "#EEF2FF", "#4F46E5", "Veb ilova (poyezd.uz)",
+            "Yoqilsa server telefon/brauzer uchun veb versiyani tarqatadi — "
+            "yo'lovchilar o'z qurilmasidan ochadi. O'chirilsa veb yopiladi, "
+            "faqat kiosk qurilmalari ishlaydi.")
+        self.s_web_on = ToggleSwitch()
+        self.s_web_on_lbl = QLabel()
+        self.s_web_on.toggled.connect(
+            lambda c: self.s_web_on_lbl.setText(
+                "Yoqilgan" if c else "O'chirilgan"))
+        web_row = QHBoxLayout()
+        web_row.setContentsMargins(0, 0, 0, 0)
+        web_row.setSpacing(12)
+        web_row.addWidget(self.s_web_on)
+        web_row.addWidget(self.s_web_on_lbl)
+        web_row.addStretch(1)
+        web_holder = QWidget()
+        web_holder.setLayout(web_row)
+        clay.addLayout(self._field("Veb ilova ishga tushsin", web_holder))
+        self.s_web_status = QLabel()
+        self.s_web_status.setWordWrap(True)
+        self.s_web_status.setObjectName("hint")
+        clay.addWidget(self.s_web_status)
+        wb_row = QHBoxLayout()
+        wb_row.addStretch(1)
+        wb_row.addWidget(self._btn("Hozir o'chirish", "globe",
+                                   self._web_stop_now, kind="ghost"))
+        wb_row.addWidget(self._btn("Saqlash va qo'llash", "save",
+                                   self._web_apply))
+        clay.addLayout(wb_row)
+        ilay.addWidget(card)
+
         ilay.addStretch(1)
         scroll.setWidget(inner)
         outer.addWidget(scroll, 1)
@@ -555,6 +588,11 @@ class SettingsPageMixin:
         self.s_wifi_ssid.setText(s.get("wifi_ssid") or "KioskServer")
         self.s_wifi_pass.setText(s.get("wifi_password") or "")
         self._update_wifi_status()
+        # Veb ilova
+        self.s_web_on.setChecked(str(s.get("web_enabled") or "1") != "0")
+        self.s_web_on_lbl.setText(
+            "Yoqilgan" if self.s_web_on.isChecked() else "O'chirilgan")
+        self._update_web_status()
         # Bo'sh bo'lsa standart ro'yxat ko'rsatiladi — admin hozir nima
         # chiqayotganini ko'rib, shu yerda tahrirlaydi.
         self.s_sos.setPlainText(s.get("sos_numbers", "").strip() or DEFAULT_SOS)
@@ -770,6 +808,63 @@ class SettingsPageMixin:
         hotspot.stop()
         self.statusBar().showMessage("Wi-Fi tarqatish to'xtatildi.", 4000)
         self._update_wifi_status()
+
+    # --- Veb ilova (web kiosk) ---
+    def _update_web_status(self):
+        """Veb hozir ishlayaptimi (jonli) + qanday manzildan ochish — kartada."""
+        web = getattr(self, "web", None)
+        running = bool(web and web.is_running())
+        if running:
+            urls = "http://poyezd.uz"
+            try:
+                import security
+                ips = [ip for ip in security._local_ipv4s()
+                       if ip and ip != "127.0.0.1"]
+                for ip in ips:
+                    urls += f"  •  http://{ip}"
+            except Exception:                            # noqa: BLE001
+                pass
+            txt = f"Hozir ISHLAYAPTI — oching: {urls}"
+            color = "#047857"
+        elif self.s_web_on.isChecked():
+            txt = ("Yoqilgan, lekin hozir ishlamayapti (Node.js topilmagan "
+                   "bo'lishi mumkin, yoki 'Saqlash va qo'llash' bosing).")
+            color = "#B45309"
+        else:
+            txt = "O'chirilgan — veb tarqatilmaydi (faqat kiosk qurilmalari)."
+            color = "#64748B"
+        self.s_web_status.setText(txt)
+        self.s_web_status.setStyleSheet(
+            f"color: {color}; font-weight: 700; background: transparent;")
+
+    def _web_apply(self):
+        """Veb sozlamasini saqlaydi va darhol qo'llaydi (yoqadi/o'chiradi)."""
+        on = self.s_web_on.isChecked()
+        db.set_setting("web_enabled", "1" if on else "0")
+        db.log_action("web_enabled", "on" if on else "off")
+        web = getattr(self, "web", None)
+        if web:
+            if on:
+                web.start()
+            else:
+                web.stop()
+        # start() fon oqimida — holatni bir lahzadan keyin ham yangilaymiz
+        try:
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(1800, self._update_web_status)
+        except Exception:                                # noqa: BLE001
+            pass
+        self._update_web_status()
+        self.statusBar().showMessage(
+            "Veb ilova yoqildi." if on else "Veb ilova o'chirildi.", 4000)
+
+    def _web_stop_now(self):
+        """Veb'ni darhol to'xtatadi (sozlamani o'zgartirmasdan)."""
+        web = getattr(self, "web", None)
+        if web:
+            web.stop()
+        self.statusBar().showMessage("Veb ilova to'xtatildi.", 4000)
+        self._update_web_status()
 
     def _trial_block_now(self):
         if QMessageBox.question(

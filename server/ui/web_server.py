@@ -155,10 +155,21 @@ class WebServer:
         self._stopped = False
         self._start_thread = None
 
+    def is_running(self):
+        """Veb bola jarayoni hozir tirikmi."""
+        return self.proc is not None and self.proc.poll() is None
+
     def start(self):
         """Veb'ni FON oqimida ko'taradi — ensure_firewall/hosts sinxron
         PowerShell chaqiruvlari (30s+ timeout) GUI (login) oynasini bloklab
-        qo'ymasin. stop() bilan poyga _stopped flag orqali hal qilinadi."""
+        qo'ymasin. stop() bilan poyga _stopped flag orqali hal qilinadi.
+
+        Qayta ishga tushirishga ruxsat: admin sozlamada webni o'chirib-yoqса
+        bir xil WebServer nusxasi qayta ishlatiladi — shuning uchun _stopped'ни
+        tiklaymiz (aks holda _start_impl darrov qaytib ketardi)."""
+        if self.is_running():
+            return                          # allaqachon ishlayapti
+        self._stopped = False
         t = threading.Thread(target=self._start_impl, name="kiosk-web-start",
                              daemon=True)
         self._start_thread = t

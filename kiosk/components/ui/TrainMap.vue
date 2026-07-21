@@ -24,7 +24,6 @@
 import type { TrainRoute } from "~/types/app";
 
 const props = defineProps<{ routeData: TrainRoute }>();
-const colorMode = useColorMode();
 
 const mapEl = ref<HTMLElement | null>(null);
 const mapError = ref(false);
@@ -32,6 +31,7 @@ const mapError = ref(false);
 let map: any = null;
 let maplibregl: any = null;
 let railGeo: any = null; // haqiqiy temir yo'l geometriyasi (bo'lsa)
+let resizeObs: ResizeObserver | null = null;
 const MARKERS: any[] = [];
 
 const stops = computed(() => props.routeData?.stops ?? []);
@@ -133,16 +133,16 @@ function drawRoute() {
 
   ensureLine("route-casing", line(fullCs), {
     "line-color": "#ffffff",
-    "line-width": 8,
-    "line-opacity": 0.85,
+    "line-width": 9,
+    "line-opacity": 0.95,
   });
   ensureLine("route-remaining", line(fullCs), {
-    "line-color": "#3b82f6",
-    "line-width": 4.5,
+    "line-color": "#1445a7", // brend navy — qolgan yo'l
+    "line-width": 5,
   });
   ensureLine("route-passed", line(passedCs), {
-    "line-color": "#10b981",
-    "line-width": 4.5,
+    "line-color": "#14939b", // firuza — o'tilgan yo'l
+    "line-width": 5,
   });
 
   // Bekat markerlari
@@ -151,12 +151,12 @@ function drawRoute() {
   stops.value.forEach((s, i) => {
     if (!s.lat || !s.lng) return;
     const isCurrent = i === cur;
-    const color = s.passed ? "#10b981" : "#3b82f6";
+    const color = s.passed ? "#14939b" : "#1445a7";
     const el = document.createElement("div");
     if (isCurrent) {
       el.style.cssText =
-        "width:22px;height:22px;border-radius:50%;background:#10b981;" +
-        "border:3px solid #fff;box-shadow:0 0 0 4px rgba(16,185,129,.35)," +
+        "width:22px;height:22px;border-radius:50%;background:#c99a3c;" +
+        "border:3px solid #fff;box-shadow:0 0 0 4px rgba(201,154,60,.35)," +
         "0 2px 6px rgba(0,0,0,.5);animation:tm-pulse 1.8s ease-out infinite";
     } else {
       el.style.cssText =
@@ -201,8 +201,7 @@ function ensureLine(id: string, data: any, paint: any) {
 // source-layer'da bo'lishi mumkin — ikkala variantni ham qo'shamiz (mos
 // kelmagani jim ko'rinmaydi, xato bermaydi). Temir yo'l uslubi: nuqtali chiziq.
 function addRailway() {
-  const dark = colorMode.value === "dark";
-  const railColor = dark ? "#7dd3fc" : "#0369a1";
+  const railColor = "#1445a7"; // brend navy (dizayn faqat ivory)
   const candidates = [
     { sl: "transit", filt: ["==", ["get", "kind"], "rail"] },
     { sl: "roads", filt: ["==", ["get", "kind"], "rail"] },
@@ -229,10 +228,12 @@ function addRailway() {
   });
 }
 
-// O'zbekiston chegara + tashqi mask (premium ajratish)
+// O'zbekiston chegara + tashqi mask (premium ajratish). Dizayn ivory bo'lgani
+// uchun tashqi davlatlar ivory parda bilan xiralashtiriladi, chegara oltin
+// porlash bilan ta'kidlanadi — O'zbekiston yorqin ajralib turadi.
 async function addBoundary() {
-  const dark = colorMode.value === "dark";
-  // Mask: O'zbekiston TASHQARISI yarim-shaffof qoplama (ichi teshik)
+  // Mask: O'zbekiston TASHQARISI ivory parda (ichi teshik) — qo'shni davlatlar
+  // sahifa foniga singib ketadi, O'zbekiston to'liq rangda qoladi.
   try {
     const mask = await $fetch("/uzbekistan-mask.geojson").catch(() => null);
     if (mask) {
@@ -242,28 +243,41 @@ async function addBoundary() {
         type: "fill",
         source: "uz-mask",
         paint: {
-          "fill-color": dark ? "#000000" : "#0f172a",
-          "fill-opacity": dark ? 0.55 : 0.32,
+          "fill-color": "#f1ead9", // page-bg'ga yaqin ivory
+          "fill-opacity": 0.66,
         },
       });
     }
   } catch {
     /* mask ixtiyoriy */
   }
-  // Chegara chizig'i (O'zbekiston aniq ajralsin)
+  // Chegara: oltin porlash (keng, xira) + asosiy oltin chiziq
   try {
     const b = await $fetch("/uzbekistan-boundary.geojson").catch(() => null);
     if (b) {
       map.addSource("uz-boundary", { type: "geojson", data: b });
       map.addLayer({
+        id: "uz-boundary-glow",
+        type: "line",
+        source: "uz-boundary",
+        paint: {
+          "line-color": "#c99a3c",
+          "line-width": 7,
+          "line-opacity": 0.22,
+          "line-blur": 3,
+        },
+        layout: { "line-cap": "round", "line-join": "round" },
+      });
+      map.addLayer({
         id: "uz-boundary",
         type: "line",
         source: "uz-boundary",
         paint: {
-          "line-color": dark ? "#60a5fa" : "#1d4ed8",
-          "line-width": 2.5,
-          "line-opacity": 0.9,
+          "line-color": "#c99a3c",
+          "line-width": 2.2,
+          "line-opacity": 0.95,
         },
+        layout: { "line-cap": "round", "line-join": "round" },
       });
     }
   } catch {
@@ -286,7 +300,7 @@ onMounted(async () => {
     maplibregl.addProtocol("pmtiles", protocol.tile);
 
     const origin = window.location.origin;
-    const flavor = colorMode.value === "dark" ? "dark" : "light";
+    const flavor = "light"; // dizayn faqat ivory — xarita ham doim light
 
     map = new maplibregl.Map({
       container: mapEl.value!,
@@ -311,7 +325,15 @@ onMounted(async () => {
       new maplibregl.NavigationControl({ showCompass: false }),
       "top-right",
     );
+    // Konteyner o'lchami o'zgarsa (flex/grid tartib, mobil "order", panel
+    // balandligi) — canvas'ni qayta o'lchaymiz. Busiz MapLibre init paytida
+    // balandlik hali yakunlanmagan bo'lsa bo'sh (oq) qolardi.
+    if (typeof ResizeObserver !== "undefined" && mapEl.value) {
+      resizeObs = new ResizeObserver(() => map && map.resize());
+      resizeObs.observe(mapEl.value);
+    }
     map.on("load", async () => {
+      map.resize();
       await addBoundary();
       drawRoute();
     });
@@ -333,6 +355,7 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  if (resizeObs) resizeObs.disconnect();
   MARKERS.forEach((m) => m.remove());
   if (map) map.remove();
 });
@@ -342,17 +365,17 @@ onBeforeUnmount(() => {
 @keyframes tm-pulse {
   0% {
     box-shadow:
-      0 0 0 0 rgba(16, 185, 129, 0.5),
+      0 0 0 0 rgba(201, 154, 60, 0.55),
       0 2px 6px rgba(0, 0, 0, 0.5);
   }
   70% {
     box-shadow:
-      0 0 0 13px rgba(16, 185, 129, 0),
+      0 0 0 13px rgba(201, 154, 60, 0),
       0 2px 6px rgba(0, 0, 0, 0.5);
   }
   100% {
     box-shadow:
-      0 0 0 0 rgba(16, 185, 129, 0),
+      0 0 0 0 rgba(201, 154, 60, 0),
       0 2px 6px rgba(0, 0, 0, 0.5);
   }
 }

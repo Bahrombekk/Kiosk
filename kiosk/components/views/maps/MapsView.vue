@@ -2,11 +2,11 @@
      4 ma'lumot katakchasi + bekatlar timeline), o'ngda oflayn vektor xarita. -->
 <template>
   <div
-    class="grid items-stretch gap-[18px]"
-    style="grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr)); animation: omFade 0.35s ease"
+    class="tm-maps flex flex-col gap-[18px] mdl:grid mdl:grid-cols-2 mdl:items-stretch"
+    style="animation: omFade 0.35s ease"
   >
     <!-- Chap panel -->
-    <div class="flex flex-col gap-[18px] rounded-[24px] bg-(--surface-bg) p-[26px] shadow-(--shadow-card)">
+    <div class="flex flex-col gap-[18px] rounded-[24px] bg-(--surface-bg) p-[26px] shadow-(--shadow-card) mdl:min-h-0 mdl:overflow-hidden">
       <div>
         <div class="text-[11px] font-extrabold tracking-[.16em] text-(--accent-gold)">
           {{ routeLabel }}
@@ -28,8 +28,9 @@
         </div>
       </div>
 
-      <!-- Bekatlar timeline -->
-      <div class="flex flex-col">
+      <!-- Bekatlar timeline (desktopда panel ichida scroll — sahifa
+           cho'zilib ketmaydi; mobilда tabiiy balandlik, sahifa scroll) -->
+      <div class="tm-timeline flex flex-col mdl:min-h-0 mdl:flex-1 mdl:overflow-y-auto mdl:pr-[8px]">
         <div
           v-for="(stop, i) in stops"
           :key="i"
@@ -40,11 +41,28 @@
             <span v-if="i < stops.length - 1" :class="lineClass(i)" />
           </div>
           <div class="pb-[22px]">
-            <div :class="i === curIdx ? 'text-[14px] font-extrabold text-(--brand-base)' : 'text-[14px] font-bold text-(--text-primary)'">
-              {{ stop.name }}
-            </div>
-            <div v-if="i === curIdx" class="text-[12px] text-(--text-secondary)">
-              {{ $t("hero.enRoute") }}
+            <div
+              :class="
+                i === curIdx
+                  ? 'inline-flex flex-col rounded-[10px] bg-(--accent-gold-surface) px-[12px] py-[6px]'
+                  : ''
+              "
+            >
+              <div
+                :class="
+                  i === curIdx
+                    ? 'text-[14px] font-extrabold text-(--accent-gold-text)'
+                    : 'text-[14px] font-bold text-(--text-primary)'
+                "
+              >
+                {{ stop.name }}
+              </div>
+              <div
+                v-if="i === curIdx"
+                class="text-[11px] font-bold text-(--accent-gold-text) opacity-75"
+              >
+                {{ $t("hero.enRoute") }}
+              </div>
             </div>
           </div>
           <div
@@ -56,8 +74,12 @@
       </div>
     </div>
 
-    <!-- O'ng: xarita -->
-    <div class="relative min-h-[480px] overflow-hidden rounded-[24px] shadow-(--shadow-card)">
+    <!-- Xarita (mobilда yuqorida, desktopда o'ngда). Mobilда ANIQ balandlik
+         (h-[420px]) — busiz ichki canvas 100% balandlikni aniqlay olmay bo'sh
+         qolardi (flex ota-elementda faqat min-height yetmaydi). -->
+    <div
+      class="relative order-first h-[420px] overflow-hidden rounded-[24px] shadow-(--shadow-card) mdl:order-none mdl:h-auto mdl:min-h-[480px]"
+    >
       <TrainMap v-if="routeData" :route-data="routeData" />
     </div>
   </div>
@@ -155,5 +177,27 @@ function lineClass(i: number): string {
   50% {
     box-shadow: 0 0 0 8px rgba(201, 154, 60, 0.1);
   }
+}
+
+/* Desktopда bo'lim balandligi DINAMIK — ekran bo'yiga bog'liq (sahifa cheksiz
+   cho'zilmaydi). Panel ichidagi timeline scroll bo'ladi, xarita shu balandlikка
+   to'ladi. Mobilда tabiiy (flex-col) balandlik. */
+@media (min-width: 760px) {
+  .tm-maps {
+    height: clamp(500px, calc(100dvh - 200px), 900px);
+  }
+}
+
+/* Timeline nozik scrollbar */
+.tm-timeline {
+  scrollbar-width: thin;
+  scrollbar-color: var(--stroke-2) transparent;
+}
+.tm-timeline::-webkit-scrollbar {
+  width: 6px;
+}
+.tm-timeline::-webkit-scrollbar-thumb {
+  background: var(--stroke-2);
+  border-radius: 999px;
 }
 </style>

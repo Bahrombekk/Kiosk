@@ -41,19 +41,22 @@
           </button>
         </div>
 
-        <!-- §15 poster to'r -->
+        <!-- §15 poster to'r (sahifalab ko'rsatiladi) -->
         <div
           class="grid gap-[16px]"
           style="grid-template-columns: repeat(auto-fill, minmax(min(165px, 100%), 1fr))"
         >
           <VideoPosterCard
-            v-for="(video, i) in filteredVideos"
+            v-for="(video, i) in pagedVideos"
             :key="video.id"
             :video="video"
             :index="i"
             @select="openVideoModal"
           />
         </div>
+
+        <!-- Sahifalash -->
+        <Paginator :total="filteredVideos.length" :per-page="PAGE_SIZE" v-model:page="page" />
       </template>
     </template>
   </div>
@@ -73,6 +76,10 @@ const { data: videos, error, refresh } =
 const activeCategory = ref("movies");
 const searchQuery = ref("");
 const activeGenre = ref("all");
+
+// Sahifalash — bir sahifada 12 ta (2 qator). Ko'p kino bo'lsa sahifa raqamlari.
+const PAGE_SIZE = 12;
+const page = ref(1);
 
 // Videolarda "Barchasi" yo'q — har tab bitta turga bog'langan (kiosk kabi).
 const videoTabs = computed<IconItem[]>(() => [
@@ -125,6 +132,16 @@ const filteredVideos = computed(() =>
     ? baseVideos.value
     : baseVideos.value.filter((v) => v.genres[0] === activeGenre.value),
 );
+
+// Joriy sahifa kesimi (faqat shu ko'rsatiladi)
+const pagedVideos = computed(() =>
+  filteredVideos.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE),
+);
+
+// Tab / janr / qidiruv o'zgarsa 1-sahifaga qaytamiz
+watch([activeCategory, activeGenre, normalizedSearchQuery], () => {
+  page.value = 1;
+});
 
 // Haftaning filmi: tavsiya etilgani, bo'lmasa birinchisi.
 const featured = computed(
