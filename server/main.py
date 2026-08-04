@@ -38,6 +38,7 @@ import licensing
 import security
 import discovery
 import weather
+import cloud_client
 from ws import manager
 
 logging.basicConfig(
@@ -72,9 +73,11 @@ async def lifespan(app: FastAPI):
     discovery.start()   # imzolangan beacon — kiosklar serverni topadi
     weather.start_refresher()   # internet ob-havoni fonda yuklab/yangilab turadi
     task = asyncio.create_task(_status_loop())   # holatni davriy tarqatish
+    cloud_client.start()   # markaziy bulut agenti (KIOSK_CLOUD_URL berilsa)
     yield
     discovery.stop()
     task.cancel()
+    await cloud_client.stop()
     log.info("Server to'xtatilmoqda")
 
 

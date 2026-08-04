@@ -1,0 +1,126 @@
+  <sc-if value="{{ uploadOpen }}" hint-placeholder-val="{{ false }}">
+    <div>
+      <div>
+        <div>
+          <div>
+            <div>Kontent yuklash</div>
+            <div>Har bir kontent — media fayl + muqova + ma'lumotlari. Avval bulut kutubxonasiga tushadi.</div>
+          </div>
+          <div></div>
+          <div onClick="{{ closeUpload }}" style-hover="background: #F8FAFC;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></div>
+        </div>
+        <div>
+          <div>
+            <div>
+              <div>
+                <div>Turi</div>
+                <div>
+                  <sc-for list="{{ upTypes }}" as="t" hint-placeholder-count="5">
+                    <div onClick="{{ t.go }}">{{ t.label }}</div>
+                  </sc-for>
+                </div>
+              </div>
+              <div>
+                <div>Tili</div>
+                <div>O'zbekcha ▾</div>
+                <div>yoki «Barcha tillarda» — til ahamiyatsiz</div>
+              </div>
+              <div>
+                <div>{{ upTitleLabel }}</div>
+                <div>{{ upTitleVal }}</div>
+              </div>
+              <div>
+                <div>{{ upAuthorLabel }}</div>
+                <div>{{ upAuthorHint }}</div>
+              </div>
+              <div>
+                <div>Janr</div>
+                <div>{{ upGenre }} ▾</div>
+              </div>
+              <div>
+                <div>Tab (kategoriya)</div>
+                <div>{{ upTab }} ▾</div>
+              </div>
+              <div>
+                <div>Davomiylik</div>
+                <div>{{ upDur }}</div>
+              </div>
+              <div>
+                <div>Tavsif</div>
+                <div>Kiosk kartochkasi va tafsilot ekranida ko'rinadi…</div>
+              </div>
+            </div>
+            <div>
+              <div>{{ upCoverLabel }}</div>
+              <div onClick="{{ toggleCover }}">
+                <span></span>
+                <div>{{ coverState }}</div>
+                <div>{{ coverHint }}</div>
+              </div>
+              <div>jpg · png · webp. Muqovasiz kontent kioskda «Muqova yo'q» kartochka bo'lib chiqadi.</div>
+            </div>
+          </div>
+          <div>
+            <div>
+              <div>
+                <span></span>
+                <div>
+                  <div>{{ upMediaLabel }}</div>
+                  <div>ilon-vodiysi-1080p.mp4</div>
+                </div>
+                <div>68% · 1.2 / 1.8 GB</div>
+              </div>
+              <div>
+                <div></div>
+              </div>
+              <div>
+                <span>H.264 1080p · AAC</span><span>faststart ✓</span><span>sha256 ✓</span><span>davomiylik fayldan olindi</span>
+              </div>
+            </div>
+            <div>
+              <div>
+                <span></span>
+                <div>
+                  <div>Kitob matni</div>
+                  <div>Tanlanmagan — .json yoki .txt</div>
+                </div>
+                <div style-hover="background: #F8FAFC;">Tanlash</div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <sc-for list="{{ upFlags }}" as="o" hint-placeholder-count="3">
+              <div onClick="{{ o.toggle }}">
+                <span><span></span></span>
+                <div>
+                  <div>{{ o.title }}</div>
+                  <div>{{ o.sub }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <div>
+            <span></span>
+            <span>Fayllarni shu oynaga tortib tashlang</span>
+            <span>turi kengaytmadan aniqlanadi — media, rasm yoki matn</span>
+          </div>
+        </div>
+        <div>
+          <div>{{ uploadNote }}</div>
+          <div onClick="{{ closeUpload }}" style-hover="background: #F8FAFC;">Kutubxonaga saqlash</div>
+          <div onClick="{{ uploadThenDeploy }}" style-hover="background: #1D4ED8;">Saqlash va tarqatish</div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</sc-if>
+<sc-if value="{{ isNarrow }}" hint-placeholder-val="{{ false }}">
+  <div>
+    <div>
+      <div>
+        <div>K</div>
+        <div>
+          <div>{{ mTitle }}</div>
+          <div>42 / 50 server onlayn · 318 kiosk</div>
+        </div>

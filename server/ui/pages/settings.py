@@ -13,6 +13,8 @@ from PyQt6.QtWidgets import (
     QMessageBox, QPlainTextEdit, QScrollArea, QSpinBox, QVBoxLayout, QWidget
 )
 
+import cloud_client
+import config
 import db
 from icons import svg_pixmap
 from ui.helpers import no_wheel
@@ -542,6 +544,36 @@ class SettingsPageMixin:
         clay.addLayout(wb_row)
         ilay.addWidget(card)
 
+        # === 10) Markaziy bulut (masofadan boshqarish) ===
+        card, clay = self._sec_card(
+            "server", "#F5F3FF", "#7C3AED", "Markaziy bulut",
+            "Faqat bulut DOMENINI yozing — boshqa hech narsa kerak emas. Server "
+            "o'zi ulanadi va bulut panelida «Tasdiqlash kerak» bo'lib turadi; "
+            "bir marta tasdiqlangach kontent, sozlama va e'lon masofadan keladi, "
+            "statistika esa bulutga yig'iladi.")
+        self.s_cloud_url = QLineEdit()
+        self.s_cloud_url.setPlaceholderText("cloud.poyezd.uz  (yoki to'liq manzil)")
+        self.s_cloud_enroll = QLineEdit()
+        self.s_cloud_enroll.setPlaceholderText("shart emas — bo'sh qoldiring")
+        cg = QGridLayout()
+        cg.setHorizontalSpacing(14)
+        cg.addLayout(self._field("Bulut domeni (faqat shu yetarli)",
+                                 self.s_cloud_url), 0, 0)
+        cg.addLayout(self._field("Ulash kaliti (ixtiyoriy)",
+                                 self.s_cloud_enroll), 0, 1)
+        clay.addLayout(cg)
+        self.s_cloud_status = QLabel()
+        self.s_cloud_status.setWordWrap(True)
+        self.s_cloud_status.setObjectName("hint")
+        clay.addWidget(self.s_cloud_status)
+        cl_row = QHBoxLayout()
+        cl_row.addStretch(1)
+        cl_row.addWidget(self._btn("Ulanishni uzish", "server",
+                                   self._cloud_unlink, kind="danger"))
+        cl_row.addWidget(self._btn("Saqlash", "save", self._cloud_save))
+        clay.addLayout(cl_row)
+        ilay.addWidget(card)
+
         ilay.addStretch(1)
         scroll.setWidget(inner)
         outer.addWidget(scroll, 1)
@@ -593,6 +625,10 @@ class SettingsPageMixin:
         self.s_web_on_lbl.setText(
             "Yoqilgan" if self.s_web_on.isChecked() else "O'chirilgan")
         self._update_web_status()
+        # Markaziy bulut
+        self.s_cloud_url.setText(config.CLOUD_URL)
+        self.s_cloud_enroll.setText("")
+        self._update_cloud_status()
         # Bo'sh bo'lsa standart ro'yxat ko'rsatiladi — admin hozir nima
         # chiqayotganini ko'rib, shu yerda tahrirlaydi.
         self.s_sos.setPlainText(s.get("sos_numbers", "").strip() or DEFAULT_SOS)
@@ -865,6 +901,88 @@ class SettingsPageMixin:
             web.stop()
         self.statusBar().showMessage("Veb ilova to'xtatildi.", 4000)
         self._update_web_status()
+
+    # --- Markaziy bulut ---
+    def _update_cloud_status(self):
+        """Bulut agentining jonli holati (kartadagi izoh qatori)."""
+        st = cloud_client.client.status()
+        if not st["enabled"]:
+            txt = ("O'chiq — bulut manzili berilmagan. Manzil va ulash kalitini "
+                   "kiritib 'Saqlash'ni bosing, so'ng dasturni qayta ishga tushiring.")
+            color = "#64748B"
+        elif not st["enrolled"]:
+            txt = (f"{st['url']} — hali ro'yxatdan o'tilmagan. Ulash kaliti "
+                   "to'g'ri ekanini tekshirib, dasturni qayta ishga tushiring.")
+            color = "#B45309"
+        elif st["connected"] and not st.get("approved", True):
+            txt = (f"{st['url']} — ulandi, lekin BULUT ADMINI TASDIQLAMAGAN. "
+                   f"Bulut panelida «Tasdiqlash» bosilishi kerak "
+                   f"(server ID: {st['server_id']}).")
+            color = "#B45309"
+        elif st["connected"]:
+            txt = (f"ULANGAN — {st['url']} · server ID: {st['server_id']} · "
+                   f"kontent versiyasi (rev): {st['applied_rev']}")
+            color = "#047857"
+        else:
+            txt = (f"Ro'yxatdan o'tgan ({st['server_id']}), lekin hozir aloqa "
+                   f"yo'q — internet tiklanganda o'zi qayta ulanadi.")
+            color = "#B45309"
+        self.s_cloud_status.setText(txt)
+        self.s_cloud_status.setStyleSheet(
+            f"color: {color}; font-weight: 700; background: transparent;")
+
+    def _cloud_save(self):
+        """Manzil va ulash kalitini `cloud.txt`ga yozadi.
+
+        Agent sozlamalarni ishga tushishда o'qiydi (config.py), shuning uchun
+        o'zgarish qayta ishga tushirgandan keyin kuchga kiradi — buni operatorga
+        aniq aytamiz."""
+        url = self.s_cloud_url.text().strip().rstrip("/")
+        token = self.s_cloud_enroll.text().strip()
+        # Sxema yozilmasa o'zimiz qo'shamiz (operator faqat domen yozadi)
+        if url and " " in url:
+            QMessageBox.warning(self, "Bulut manzili",
+                                "Manzilda bo'shliq bo'lmaydi. Masalan: cloud.poyezd.uz")
+            return
+        path = os.path.join(config.BASE_DIR, "cloud.txt")
+        lines = ["# Markaziy bulut sozlamalari (server o'zi ulanadi)",
+                 f"url={url}"]
+        if token:
+            lines.append(f"enroll={token}")
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines) + "\n")
+        except OSError as e:
+            QMessageBox.critical(self, "Bulut", f"cloud.txt yozilmadi: {e}")
+            return
+        db.log_action("cloud_config", url or "(bo'sh)")
+        self.s_cloud_enroll.clear()
+        QMessageBox.information(
+            self, "Bulut",
+            "Saqlandi. O'zgarish kuchga kirishi uchun dasturni qayta ishga "
+            "tushiring — server o'zi bulutga ulanadi.")
+        self._update_cloud_status()
+
+    def _cloud_unlink(self):
+        """Bulut bilan bog'lanishni uzadi (token va server ID o'chiriladi).
+
+        Kontent joyida qoladi — faqat masofadan boshqarish to'xtaydi. Qayta
+        ulash uchun bulutdan YANGI kalit olish kerak (eski bir martalik)."""
+        if QMessageBox.question(
+                self, "Ulanishni uzish",
+                "Bulut bilan bog'lanish uzilsinmi?\n\nKontent va sozlamalar "
+                "joyida qoladi, lekin masofadan boshqarish to'xtaydi. Qayta "
+                "ulash uchun bulut panelidan YANGI kalit kerak bo'ladi."
+        ) != QMessageBox.StandardButton.Yes:
+            return
+        for k in ("cloud_server_id", "cloud_token", "cloud_pubkey",
+                  "cloud_applied_rev"):
+            db.set_setting(k, "")
+        db.log_action("cloud_unlinked", "")
+        QMessageBox.information(self, "Bulut",
+                                "Bog'lanish uzildi. Dasturni qayta ishga "
+                                "tushirgandan keyin to'liq kuchga kiradi.")
+        self._update_cloud_status()
 
     def _trial_block_now(self):
         if QMessageBox.question(

@@ -236,6 +236,18 @@ def _init_schema():
         if "visible" not in ccols:
             conn.execute("ALTER TABLE content ADD COLUMN visible"
                          " INTEGER DEFAULT 1")
+        # content: bulut (markaziy admin) bilan sinxronizatsiya ustunlari.
+        # origin='cloud' bo'lgan yozuvlar BULUT boshqaruvida: manifestда
+        # bo'lmasa o'chiriladi, sha256 o'zgarsa fayl qayta yuklanadi.
+        # origin='local' — shu serverда qo'lда qo'shilgan, bulut tegmaydi.
+        for col, ddl in (("cloud_id", "INTEGER"),
+                         ("origin", "TEXT DEFAULT 'local'"),
+                         ("media_sha", "TEXT"), ("cover_sha", "TEXT"),
+                         ("text_sha", "TEXT")):
+            if col not in ccols:
+                conn.execute(f"ALTER TABLE content ADD COLUMN {col} {ddl}")
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_content_cloud"
+                     " ON content(cloud_id) WHERE cloud_id IS NOT NULL")
         # ads: media (rasm/video), davomiylik va vaqt oralig'i ustunlari
         acols = {r["name"] for r in
                  conn.execute("PRAGMA table_info(ads)").fetchall()}
@@ -386,6 +398,23 @@ def content_field_values(field, content_type=None):
     with closing(connect()) as conn:
         rows = conn.execute(sql + " ORDER BY v COLLATE NOCASE", args).fetchall()
     return [r["v"] for r in rows]
+
+
+def get_cloud_content():
+    """Bulut boshqaruvidagi yozuvlar (origin='cloud') — manifest bilan
+    solishtirish uchun. Qo'lда qo'shilgan kontent bunga kirmaydi."""
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT * FROM content WHERE origin='cloud' AND cloud_id IS NOT NULL"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def content_by_cloud_id(cloud_id):
+    with _conn() as c:
+        row = c.execute("SELECT * FROM content WHERE cloud_id=?",
+                        (cloud_id,)).fetchone()
+    return dict(row) if row else None
 
 
 def get_content_by_id(content_id):
@@ -632,7 +661,9 @@ def trial_state(s=None):
 CONTENT_COLS = ["type", "title", "author", "genre", "description", "duration",
                 "pages", "cover_path", "file_path", "text_path",
                 "category_tab", "lang", "lang_group", "cache_enabled",
-                "is_recommended", "visible"]
+                "is_recommended", "visible",
+                # bulut sinxronizatsiyasi (cloud_client.py)
+                "cloud_id", "origin", "media_sha", "cover_sha", "text_sha"]
 ADS_COLS = ["media_path", "title", "subtitle", "link_url", "duration",
             "interval_min", "start_time", "end_time", "placement",
             "is_active", "sort_order"]
@@ -694,6 +725,15 @@ def delete_content(content_id):
     if not item:
         return
     _cleanup_files(item)
+
+
+def cleanup_files(paths):
+    """Berilgan fayl nomlarini (boshqa yozuv ishlatmasa) diskdan o'chiradi.
+
+    `paths` — {"file_path": ..., "cover_path": ..., "text_path": ...} shaklida.
+    Bulut kontenti tahrirlanganda (masalan muqova almashtirilganda) eski fayl
+    yetim qolib ketmasligi uchun cloud_client.py shu funksiyani chaqiradi."""
+    _cleanup_files(paths)
 
 
 def _cleanup_files(item):
@@ -982,6 +1022,34 @@ def clear_stats():
     """Barcha foydalanish statistikasini o'chiradi (hisoblarni 0 ga tushiradi)."""
     with _conn() as c:
         c.execute("DELETE FROM stats_events")
+
+
+def stats_count():
+    """Serverdagi jami event soni (bulut "qanchasi ko'chdi"ni ko'rsatadi)."""
+    with _conn() as c:
+        row = c.execute("SELECT COUNT(*) n FROM stats_events").fetchone()
+    return row["n"] if row else 0
+
+
+def stats_pending_count(last_id):
+    """Bulutga hali yuborilmagan eventlar soni (heartbeatда bildiriladi —
+    panelда "statistika navbati" ko'rinadi)."""
+    with _conn() as c:
+        row = c.execute("SELECT COUNT(*) n FROM stats_events WHERE id > ?",
+                        (int(last_id or 0),)).fetchone()
+    return row["n"] if row else 0
+
+
+def stats_since_id(last_id, limit=500):
+    """`last_id`dan keyingi eventlar — bulutga batch yuborish uchun
+    (cloud_client.py). Navbat sifatida BAZANING O'ZI ishlaydi: oflaynда
+    hech narsa yo'qolmaydi, faqat ko'rsatkich (cloud_stats_last_id) suriladi."""
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT id, device_id, session, ts, event, data, source "
+            "FROM stats_events WHERE id > ? ORDER BY id LIMIT ?",
+            (int(last_id or 0), int(limit))).fetchall()
+    return [dict(r) for r in rows]
 
 
 def stats_totals(days=7, source=None):

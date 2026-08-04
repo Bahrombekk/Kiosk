@@ -104,3 +104,15 @@ Thumbs.db
 server/tools/license/vendor_private.pem
 license.key
 server/license.key
+
+# --- Bulut (markaziy admin) ---
+# Buyruq imzo kaliti: bu fayl almashsa ro'yxatdan o'tgan serverlar bulut
+# buyruqlarini RAD ETADI. Git'ga tushmasin, lekin ZAXIRA nusxa olinsin.
+cloud/cloud_signing_key.pem
+# Bulut bazasi (serverlar, tokenlar xeshi, statistika) va fayl ombori
+cloud/cloud.db
+cloud/storage/
+cloud/logs/
+# Poyezd serveridagi bulut sozlamasi (ichida bir martalik enroll token bo'lishi
+# mumkin) — har server uchun alohida, repoga tushmaydi
+server/cloud.txt

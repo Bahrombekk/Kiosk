@@ -14,6 +14,7 @@ Loyiha uch qismdan iborat — ikki mustaqil **PyQt6 desktop ilovasi** va bitta
 | **Server (admin)** | [server/](server/) | Kontent katalogini boshqaradi, media striming qiladi, kiosklarni real vaqtda kuzatadi | `KioskServerSetup.exe` |
 | **Kiosk (vagon ekrani)** | [kiosk/](kiosk/) | Vagondagi sensorli ekran ilovasi (PyQt6, fullscreen, qulflangan) | `KioskSetup.exe` |
 | **Veb** | [web/](web/) | Kioskning veb versiyasi (Nuxt 4 SPA) — yo'lovchi o'z telefonidan/brauzerdan kiradi | server bilan birga (`web/.output`) |
+| **Bulut (markaziy admin)** | [cloud/](cloud/) | Barcha poyezd serverlarini internet orqali bir joydan boshqarish (kontent tarqatish, kuzatuv, statistika) | VPS'da `python main.py` |
 
 ---
 
@@ -64,6 +65,11 @@ Loyiha uch qismdan iborat — ikki mustaqil **PyQt6 desktop ilovasi** va bitta
   ishlashda davom etadi, faqat keshlanmagan striming to'xtaydi.
 - **Veb** (`web/`) server ilovasi ichida bola jarayon sifatida ko'tariladi (Nuxt/node,
   80-port): yo'lovchi vagon Wi-Fi'iga ulanib brauzerdan bir xil kontentni ochadi.
+- **Bulut** (`cloud/`) — ixtiyoriy yuqori qatlam: har bir poyezd serveri
+  internet (SIM) orqali bulutga **o'zi ulanadi** (chiquvchi WSS), shundan keyin
+  kontent, e'lon va kesh buyruqlari masofadan keladi, statistika esa bulutga
+  yig'iladi. Poyezdda oq IP yoki port ochish kerak emas —
+  [cloud/README.md](cloud/README.md).
 
 ---
 
@@ -162,7 +168,17 @@ Kiosk/
 │   ├── deploy/                  # veb-kiosk PC uchun avtostart skriptlari
 │   └── nuxt.config.ts / package.json
 │
-└── docs/                        # qo'llanmalar (.docx) va yo'nalish jadvallari (.xlsx)
+├── cloud/                       # BULUT (markaziy admin) — VPS'da ishlaydi
+│   ├── main.py                  # /agent WS, /api/enroll, /dl/{token}, admin API
+│   ├── relay.py                 # ulangan agentlar + manifest/buyruq yuborish
+│   ├── db.py                    # servers, content, assignments (desired state),
+│   │                            #   jobs, stats, logs, enroll_tokens
+│   ├── storage.py               # sha256 fayl ombori (dedup, Range, tozalash)
+│   ├── security.py              # Ed25519 buyruq imzosi, havola tokenlari, parol
+│   └── static/                  # admin paneli (build'siz: index.html + app.js)
+│
+└── docs/                        # qo'llanmalar (.docx), jadvallar (.xlsx)
+    └── design/                  # dizayn prototiplari (havola sifatida)
 ```
 
 > **Eslatma:** `content/`, `cache/`, `logs/`, `*.db`, TLS/imzo kalitlari (`*.pem`),
@@ -233,6 +249,19 @@ npm run dev        # http://localhost:3000 (--host bilan LANda ham)
 Nuxt Nitro proksi Python serverga ulanadi (`NUXT_KIOSK_SERVER`, `NUXT_KIOSK_API_KEY`) —
 batafsil [web/README.md](web/README.md). Server ilovasi ichidan ishga tushirilganda bu
 o'zgaruvchilar avtomatik beriladi.
+
+### 4. Bulut (markaziy admin — ixtiyoriy)
+
+```bash
+cd cloud
+pip install -r requirements.txt
+CLOUD_ADMIN_PASS=<parol> python main.py      # http://localhost:9000
+```
+
+Panelda **Ulash kalitlari → Yangi kalit** bilan token oling, so'ng poyezd
+serverida (admin oynasi → Sozlamalar → Markaziy bulut, yoki
+`KIOSK_CLOUD_URL` + `KIOSK_CLOUD_ENROLL`) ko'rsatib qayta ishga tushiring —
+server o'zi ulanadi. Batafsil: [cloud/README.md](cloud/README.md).
 
 ---
 

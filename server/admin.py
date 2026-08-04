@@ -26,6 +26,7 @@ import logging.handlers
 
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
+import cloud_client
 import config
 import db
 from ui.styles import STYLE
@@ -100,6 +101,9 @@ def main():
     if _web_on:
         web.start()
     app.aboutToQuit.connect(web.stop)
+    # Bulut agentiga veb boshqaruvini beramiz — markaziy panel veb ilovani
+    # masofadan yoqib/o'chira oladi va holatini ko'rsatadi (cloud_client.py).
+    cloud_client.client.bind_web(web)
 
     # Wi-Fi hotspot: sozlamada yoqilgan bo'lsa server Wi-Fi tarqatadi (kiosklar
     # alohida routersiz simsiz ulanadi). FON thread'da — PowerShell/WinRT sekin

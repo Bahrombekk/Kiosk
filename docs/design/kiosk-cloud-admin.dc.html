@@ -1,0 +1,1372 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin: 0; padding: 0; background: #F1F5F9; }
+  * { box-sizing: border-box; }
+  a { color: #2563EB; text-decoration: none; }
+  a:hover { color: #1D4ED8; text-decoration: underline; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  @keyframes pulseDot { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+  @keyframes barFlow { 0% { background-position: 0 0; } 100% { background-position: 28px 0; } }
+</style>
+</helmet>
+
+<sc-if value="{{ isWide }}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; height: 100vh; width: 100%; overflow: hidden; font-family: Manrope, 'Segoe UI', sans-serif; color: #0F172A; background: #F1F5F9;">
+
+  <div style="width: 248px; flex: 0 0 248px; background: #0F172A; display: flex; flex-direction: column; padding: 20px 14px;">
+    <div style="display: flex; align-items: center; gap: 11px; padding: 4px 8px 22px;">
+      <div style="width: 38px; height: 38px; border-radius: 11px; background: #2563EB; display: grid; place-items: center; color: #fff; font-family: Unbounded, sans-serif; font-weight: 700; font-size: 17px;">K</div>
+      <div>
+        <div style="color: #fff; font-family: Unbounded, sans-serif; font-size: 14px; font-weight: 600; letter-spacing: -.2px;">KioskCloud</div>
+        <div style="color: #64748B; font-size: 10.5px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase;">Markaziy boshqaruv</div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 3px; overflow-y: auto; overflow-x: hidden; min-height: 0;">
+      <sc-for list="{{ nav }}" as="n" hint-placeholder-count="7">
+        <div onClick="{{ n.go }}" style="{{ n.style }}">
+          <span style="{{ n.icon }}"></span>
+          <span style="flex: 1;">{{ n.label }}</span>
+          <span style="{{ n.badgeStyle }}">{{ n.badge }}</span>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="flex: 1;"></div>
+
+    <div style="background: #1E293B; border-radius: 14px; padding: 14px;">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+        <span style="width: 8px; height: 8px; border-radius: 50%; background: #22C55E; animation: pulseDot 2s infinite;"></span>
+        <span style="color: #E2E8F0; font-size: 12px; font-weight: 700;">Bulut ishlayapti</span>
+      </div>
+      <div style="color: #94A3B8; font-size: 11px; line-height: 1.6;">42 / 50 server onlayn<br />SIM-internet orqali ulangan</div>
+      <div style="height: 1px; background: #334155; margin: 12px 0;"></div>
+      <div style="display: flex; align-items: center; gap: 9px;">
+        <div style="width: 28px; height: 28px; border-radius: 50%; background: #334155; color: #E2E8F0; display: grid; place-items: center; font-size: 11px; font-weight: 800;">BB</div>
+        <div style="flex: 1; min-width: 0;">
+          <div style="color: #E2E8F0; font-size: 12px; font-weight: 700;">Bahrombek</div>
+          <div style="color: #64748B; font-size: 10.5px;">Super admin</div>
+        </div>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 15px;"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+      </div>
+    </div>
+  </div>
+
+  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
+
+    <div style="height: 68px; flex: 0 0 68px; background: #fff; border-bottom: 1px solid #E2E8F0; display: flex; align-items: center; gap: 16px; padding: 0 26px;">
+      <div style="min-width: 0;">
+        <div style="font-size: 17px; font-weight: 800; letter-spacing: -.3px;">{{ pageTitle }}</div>
+        <div style="font-size: 12px; color: #64748B;">{{ pageSub }}</div>
+      </div>
+      <div style="flex: 1;"></div>
+      <div style="display: flex; align-items: center; gap: 8px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 8px 12px; width: 260px;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 15px;"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+        <span style="color: #94A3B8; font-size: 13px;">Server, kiosk yoki kontent…</span>
+      </div>
+      <div onClick="{{ openUpload }}" style="background: #fff; border: 1px solid #E2E8F0; color: #334155; border-radius: 10px; padding: 9px 16px; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px;" style-hover="background: #F8FAFC; border-color: #CBD5E1;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 15px;"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"></path><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"></path><path d="M7 3v4a1 1 0 0 0 1 1h7"></path></svg><span>Kontent yuklash</span></div>
+      <div onClick="{{ openDeploy }}" style="background: #2563EB; color: #fff; border-radius: 10px; padding: 9px 16px; font-size: 13px; font-weight: 700; cursor: pointer;" style-hover="background: #1D4ED8;">Tarqatish</div>
+    </div>
+
+    <div style="flex: 1; overflow: auto; padding: 24px 26px 40px;">
+
+      <sc-if value="{{ isDash }}" hint-placeholder-val="{{ true }}">
+        <div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(212px, 1fr)); gap: 16px;">
+            <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="4">
+              <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; padding: 18px 20px;">
+                <div style="font-size: 12px; color: #64748B; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;">{{ k.label }}</div>
+                <div style="display: flex; align-items: baseline; gap: 8px; margin-top: 10px;">
+                  <div style="font-family: Unbounded, sans-serif; font-size: 27px; font-weight: 600; letter-spacing: -1px;">{{ k.value }}</div>
+                  <div style="{{ k.deltaStyle }}">{{ k.delta }}</div>
+                </div>
+                <div style="font-size: 11.5px; color: #94A3B8; margin-top: 6px;">{{ k.note }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 16px; margin-top: 16px;">
+
+            <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; overflow: hidden;">
+              <div style="display: flex; align-items: center; padding: 16px 20px; border-bottom: 1px solid #F1F5F9;">
+                <div>
+                  <div style="font-size: 14.5px; font-weight: 800;">Serverlar holati</div>
+                  <div style="font-size: 11.5px; color: #94A3B8;">Har bir poyezd serveri va uning kiosklari</div>
+                </div>
+                <div style="flex: 1;"></div>
+                <div onClick="{{ goServers }}" style="font-size: 12px; font-weight: 700; color: #2563EB; cursor: pointer;">Barchasi →</div>
+              </div>
+              <sc-for list="{{ topServers }}" as="s" hint-placeholder-count="6">
+                <div onClick="{{ s.open }}" style="display: flex; align-items: center; gap: 14px; padding: 13px 20px; border-bottom: 1px solid #F8FAFC; cursor: pointer;" style-hover="background: #F8FAFC;">
+                  <span style="{{ s.dotStyle }}"></span>
+                  <div style="flex: 1.4; min-width: 0;">
+                    <div style="font-size: 13.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ s.name }}</div>
+                    <div style="font-size: 11px; color: #94A3B8;">{{ s.route }}</div>
+                  </div>
+                  <div style="width: 84px; flex: 0 0 84px; font-size: 12px; color: #475569; font-weight: 600;">{{ s.kiosksLabel }}</div>
+                  <div style="flex: 1; min-width: 72px;">
+                    <div style="height: 7px; border-radius: 4px; background: #F1F5F9; overflow: hidden;">
+                      <div style="{{ s.barStyle }}"></div>
+                    </div>
+                  </div>
+                  <div style="width: 46px; flex: 0 0 46px; text-align: right; font-size: 12px; font-weight: 700; color: #334155;">{{ s.syncLabel }}</div>
+                  <div style="flex: 0 1 92px; min-width: 0; text-align: right; font-size: 11.5px; color: #94A3B8; white-space: nowrap; overflow: hidden;">{{ s.seen }}</div>
+                </div>
+              </sc-for>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 16px;">
+              <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; padding: 18px 20px;">
+                <div style="display: flex; align-items: center;">
+                  <div style="font-size: 14.5px; font-weight: 800;">Tarqatish navbati</div>
+                  <div style="flex: 1;"></div>
+                  <div style="background: #DBEAFE; color: #1D4ED8; font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 999px;">3 faol</div>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 14px; margin-top: 16px;">
+                  <sc-for list="{{ queuePreview }}" as="q" hint-placeholder-count="3">
+                    <div>
+                      <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="{{ q.icon }}"></span>
+                        <div style="flex: 1; min-width: 0;">
+                          <div style="font-size: 12.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ q.title }}</div>
+                          <div style="font-size: 11px; color: #94A3B8;">{{ q.sub }}</div>
+                        </div>
+                        <div style="font-size: 11.5px; font-weight: 700; color: #475569;">{{ q.pctLabel }}</div>
+                      </div>
+                      <div style="height: 6px; border-radius: 3px; background: #F1F5F9; margin-top: 7px; overflow: hidden;">
+                        <div style="{{ q.barStyle }}"></div>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+                <div onClick="{{ goQueue }}" style="margin-top: 16px; text-align: center; border: 1px solid #E2E8F0; border-radius: 10px; padding: 8px; font-size: 12.5px; font-weight: 700; color: #334155; cursor: pointer;" style-hover="background: #F8FAFC;">Navbatni ochish</div>
+              </div>
+
+              <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; padding: 18px 20px; flex: 1;">
+                <div style="font-size: 14.5px; font-weight: 800; margin-bottom: 14px;">So'nggi hodisalar</div>
+                <div style="display: flex; flex-direction: column; gap: 13px;">
+                  <sc-for list="{{ events }}" as="e" hint-placeholder-count="5">
+                    <div style="display: flex; gap: 10px;">
+                      <span style="{{ e.dotStyle }}"></span>
+                      <div style="flex: 1; min-width: 0;">
+                        <div style="font-size: 12.5px; font-weight: 600; color: #334155; line-height: 1.45;">{{ e.text }}</div>
+                        <div style="font-size: 11px; color: #94A3B8; margin-top: 2px;">{{ e.time }}</div>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isServers }}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px;">
+            <sc-for list="{{ serverFilters }}" as="f" hint-placeholder-count="4">
+              <div onClick="{{ f.go }}" style="{{ f.style }}">{{ f.label }}</div>
+            </sc-for>
+          </div>
+          <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; overflow: hidden;">
+            <div style="display: flex; align-items: center; gap: 14px; padding: 12px 20px; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; font-size: 11px; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: .5px;">
+              <div style="flex: 1.6; min-width: 138px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Server / poyezd</div>
+              <div style="flex: 0 0 88px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Kiosklar</div>
+              <div style="{{ hSync }}">Sinxronizatsiya</div>
+              <div style="{{ hDisk }}">Disk</div>
+              <div style="flex: 0 0 92px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Litsenziya</div>
+              <div style="{{ hSeen }}">Oxirgi ko'rilgan</div>
+              <div style="flex: 0 0 116px; text-align: right;">Amallar</div>
+            </div>
+            <sc-for list="{{ servers }}" as="s" hint-placeholder-count="8">
+              <div style="display: flex; align-items: center; gap: 14px; padding: 14px 20px; border-bottom: 1px solid #F8FAFC;" style-hover="background: #F8FAFC;">
+                <div onClick="{{ s.open }}" style="flex: 1.6; min-width: 138px; display: flex; align-items: center; gap: 11px; cursor: pointer;">
+                  <span style="{{ s.dotStyle }}"></span>
+                  <div style="min-width: 0;">
+                    <div style="font-size: 13.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ s.name }}</div>
+                    <div style="font-size: 11px; color: #94A3B8;">{{ s.ip }} · {{ s.route }}</div>
+                  </div>
+                </div>
+                <div style="flex: 0 0 88px; font-size: 12.5px; color: #334155; font-weight: 600; white-space: nowrap;">{{ s.kiosksLabel }}</div>
+                <div style="{{ hSync }}">
+                  <div style="height: 7px; border-radius: 4px; background: #F1F5F9; overflow: hidden;">
+                    <div style="{{ s.barStyle }}"></div>
+                  </div>
+                  <div style="font-size: 10.5px; color: #94A3B8; margin-top: 4px; white-space: nowrap; overflow: hidden;">{{ s.syncText }}</div>
+                </div>
+                <div style="{{ hDisk }}">
+                  <div style="height: 7px; border-radius: 4px; background: #F1F5F9; overflow: hidden;">
+                    <div style="{{ s.diskStyle }}"></div>
+                  </div>
+                  <div style="font-size: 10.5px; color: #94A3B8; margin-top: 4px; white-space: nowrap; overflow: hidden;">{{ s.diskText }}</div>
+                </div>
+                <div style="flex: 0 0 92px;"><span style="{{ s.licStyle }}">{{ s.lic }}</span></div>
+                <div style="{{ cSeen }}">{{ s.seen }}</div>
+                <div style="flex: 0 0 116px; display: flex; justify-content: flex-end; gap: 6px;">
+                  <span style="width: 30px; height: 30px; border-radius: 8px; border: 1px solid #E2E8F0; background: #F8FAFC; display: grid; place-items: center; cursor: pointer;" style-hover="background: #EFF6FF; border-color: #93C5FD;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 14px;"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg></span>
+                  <span style="width: 30px; height: 30px; border-radius: 8px; border: 1px solid #E2E8F0; background: #F8FAFC; display: grid; place-items: center; cursor: pointer;" style-hover="background: #EFF6FF; border-color: #93C5FD;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 14px;"><path d="m3 11 18-5v12L3 14v-3z"></path><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"></path></svg></span>
+                  <span onClick="{{ s.open }}" style="width: 30px; height: 30px; border-radius: 8px; border: 1px solid #E2E8F0; background: #F8FAFC; display: grid; place-items: center; cursor: pointer;" style-hover="background: #EFF6FF; border-color: #93C5FD;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 14px;"><path d="m9 18 6-6-6-6"></path></svg></span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isDetail }}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div onClick="{{ goServers }}" style="font-size: 12.5px; font-weight: 700; color: #2563EB; cursor: pointer; margin-bottom: 14px;">← Serverlar ro'yxati</div>
+
+          <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; padding: 20px 22px; display: flex; align-items: center; gap: 22px;">
+            <div style="width: 52px; height: 52px; border-radius: 14px; background: #0F172A; color: #fff; display: grid; place-items: center; "><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 24px;"><path d="M8 3.1V7a4 4 0 0 0 8 0V3.1"></path><path d="m9 15-1-1"></path><path d="m15 15 1-1"></path><path d="M9 19c-2.8 0-5-2.2-5-5v-4a8 8 0 0 1 16 0v4c0 2.8-2.2 5-5 5Z"></path><path d="m8 19-2 3"></path><path d="m16 19 2 3"></path></svg></div>
+            <div style="min-width: 0;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="font-family: Unbounded, sans-serif; font-size: 19px; font-weight: 600; letter-spacing: -.5px;">{{ detail.name }}</div>
+                <span style="{{ detail.badgeStyle }}">{{ detail.badge }}</span>
+              </div>
+              <div style="font-size: 12px; color: #64748B; margin-top: 4px;">{{ detail.meta }}</div>
+            </div>
+            <div style="flex: 1;"></div>
+            <div style="display: flex; gap: 8px;">
+              <div style="background: #2563EB; color: #fff; border-radius: 10px; padding: 9px 15px; font-size: 12.5px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px;" style-hover="background: #1D4ED8;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 15px;"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg><span>Hoziroq sinxronla</span></div>
+              <div style="background: #fff; border: 1px solid #E2E8F0; color: #334155; border-radius: 10px; padding: 9px 15px; font-size: 12.5px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px;" style-hover="background: #F8FAFC;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 15px;"><path d="m3 11 18-5v12L3 14v-3z"></path><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"></path></svg><span>E'lon</span></div>
+              <div style="background: #fff; border: 1px solid #E2E8F0; color: #334155; border-radius: 10px; padding: 9px 15px; font-size: 12.5px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px;" style-hover="background: #F8FAFC;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 15px;"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" x2="10" y1="11" y2="17"></line><line x1="14" x2="14" y1="11" y2="17"></line></svg><span>Kesh tozalash</span></div>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 14px; margin-top: 16px;">
+            <sc-for list="{{ detail.stats }}" as="d" hint-placeholder-count="4">
+              <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 14px; padding: 15px 18px;">
+                <div style="font-size: 11.5px; color: #64748B; font-weight: 700;">{{ d.label }}</div>
+                <div style="font-size: 21px; font-weight: 800; margin-top: 6px; letter-spacing: -.5px;">{{ d.value }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="font-size: 14.5px; font-weight: 800; margin: 24px 0 12px;">Kiosklar ({{ detail.kioskCount }})</div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 14px;">
+            <sc-for list="{{ detail.kiosks }}" as="k" hint-placeholder-count="6">
+              <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; padding: 16px 18px;" style-hover="border-color: #93C5FD;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <span style="{{ k.dotStyle }}"></span>
+                  <div style="font-size: 13.5px; font-weight: 800;">{{ k.name }}</div>
+                  <div style="flex: 1;"></div>
+                  <span style="{{ k.stateStyle }}">{{ k.state }}</span>
+                </div>
+                <div style="font-size: 11.5px; color: #94A3B8; margin-top: 5px;">{{ k.meta }}</div>
+                <div style="height: 1px; background: #F1F5F9; margin: 13px 0;"></div>
+                <div style="display: flex; gap: 18px;">
+                  <div>
+                    <div style="font-size: 10.5px; color: #94A3B8; font-weight: 700; text-transform: uppercase;">Sessiyalar</div>
+                    <div style="font-size: 16px; font-weight: 800; margin-top: 2px;">{{ k.sessions }}</div>
+                  </div>
+                  <div>
+                    <div style="font-size: 10.5px; color: #94A3B8; font-weight: 700; text-transform: uppercase;">Kesh</div>
+                    <div style="font-size: 16px; font-weight: 800; margin-top: 2px;">{{ k.cache }}</div>
+                  </div>
+                  <div>
+                    <div style="font-size: 10.5px; color: #94A3B8; font-weight: 700; text-transform: uppercase;">Versiya</div>
+                    <div style="font-size: 16px; font-weight: 800; margin-top: 2px;">{{ k.version }}</div>
+                  </div>
+                </div>
+                <div style="display: flex; gap: 6px; margin-top: 14px;">
+                  <div style="flex: 1; text-align: center; border: 1px solid #E2E8F0; border-radius: 9px; padding: 7px; font-size: 11.5px; font-weight: 700; color: #334155; cursor: pointer;" style-hover="background: #F8FAFC;">Sinxronla</div>
+                  <div style="flex: 1; text-align: center; border: 1px solid #E2E8F0; border-radius: 9px; padding: 7px; font-size: 11.5px; font-weight: 700; color: #334155; cursor: pointer;" style-hover="background: #F8FAFC;">Qayta yuklash</div>
+                  <div style="width: 34px; text-align: center; border: 1px solid #FECACA; border-radius: 9px; padding: 7px; font-size: 11.5px; font-weight: 700; cursor: pointer; display: grid; place-items: center;" style-hover="background: #FEF2F2;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 14px;"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="font-size: 14.5px; font-weight: 800; margin: 26px 0 12px;">Foydalanuvchi sessiyalari (bugun)</div>
+          <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; overflow: hidden;">
+            <div style="display: flex; gap: 14px; padding: 11px 20px; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; font-size: 11px; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: .5px;">
+              <div style="width: 120px;">Kiosk</div>
+              <div style="width: 130px;">Boshlangan</div>
+              <div style="width: 90px;">Davomiylik</div>
+              <div style="flex: 1;">Ko'rilgan kontent</div>
+              <div style="width: 70px;">Til</div>
+            </div>
+            <sc-for list="{{ detail.sessions }}" as="u" hint-placeholder-count="6">
+              <div style="display: flex; gap: 14px; padding: 12px 20px; border-bottom: 1px solid #F8FAFC; font-size: 12.5px;">
+                <div style="width: 120px; font-weight: 700;">{{ u.kiosk }}</div>
+                <div style="width: 130px; color: #64748B;">{{ u.started }}</div>
+                <div style="width: 90px; color: #334155; font-weight: 600;">{{ u.dur }}</div>
+                <div style="flex: 1; color: #334155;">{{ u.content }}</div>
+                <div style="width: 70px;"><span style="background: #F1F5F9; border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 700; color: #475569;">{{ u.lang }}</span></div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isContent }}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 16px;">
+            <sc-for list="{{ typeTabs }}" as="t" hint-placeholder-count="7">
+              <div onClick="{{ t.go }}" style="{{ t.style }}">{{ t.label }}</div>
+            </sc-for>
+            <div style="flex: 1;"></div>
+            <div onClick="{{ selectAll }}" style="font-size: 12.5px; font-weight: 700; color: #2563EB; cursor: pointer;">{{ selectAllLabel }}</div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); gap: 16px; padding-bottom: 70px;">
+            <div onClick="{{ openUpload }}" style="border: 2px dashed #CBD5E1; border-radius: 16px; min-height: 236px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: #94A3B8; cursor: pointer; background: #FBFCFE;" style-hover="border-color: #93C5FD; color: #2563EB; background: #F8FBFF;">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 26px;"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>
+              <div style="font-size: 12.5px; font-weight: 700;">Fayl yuklash</div>
+              <div style="font-size: 11px;">mp4 · mp3 · epub · jpg</div>
+            </div>
+            <sc-for list="{{ contentItems }}" as="c" hint-placeholder-count="9">
+              <div onClick="{{ c.toggle }}" style="{{ c.cardStyle }}">
+                <div style="{{ c.coverStyle }}">
+                  <span style="{{ c.icon }}"></span>
+                  <span style="{{ c.checkStyle }}"></span>
+                  <span style="position: absolute; left: 10px; bottom: 10px; background: rgba(15,23,42,.72); color: #fff; font-size: 10.5px; font-weight: 700; padding: 3px 7px; border-radius: 6px;">{{ c.dur }}</span>
+                </div>
+                <div style="padding: 12px 13px 14px;">
+                  <div style="font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ c.title }}</div>
+                  <div style="display: flex; align-items: center; gap: 7px; margin-top: 7px;">
+                    <span style="{{ c.typeStyle }}">{{ c.typeLabel }}</span>
+                    <span style="font-size: 11px; color: #94A3B8;">{{ c.size }}</span>
+                  </div>
+                  <div style="font-size: 11px; color: #94A3B8; margin-top: 8px;">{{ c.deployed }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <sc-if value="{{ hasSelection }}" hint-placeholder-val="{{ false }}">
+            <div style="position: fixed; left: 50%; transform: translateX(-50%); bottom: 26px; background: #0F172A; color: #fff; border-radius: 14px; padding: 12px 14px 12px 20px; display: flex; align-items: center; gap: 18px; box-shadow: 0 18px 40px rgba(15,23,42,.28); z-index: 40;">
+              <div style="font-size: 13px; font-weight: 700;">{{ selectionLabel }}</div>
+              <div style="width: 1px; height: 22px; background: #334155;"></div>
+              <div onClick="{{ clearSelection }}" style="font-size: 12.5px; color: #94A3B8; font-weight: 600; cursor: pointer;">Bekor qilish</div>
+              <div style="font-size: 12.5px; color: #FCA5A5; font-weight: 600; cursor: pointer;">Kiosklardan o'chirish</div>
+              <div onClick="{{ openDeploy }}" style="background: #2563EB; border-radius: 10px; padding: 9px 18px; font-size: 13px; font-weight: 800; cursor: pointer;" style-hover="background: #1D4ED8;">Tarqatish →</div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isQueue }}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <div style="background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 14px; padding: 14px 18px; display: flex; align-items: center; gap: 12px;">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 17px;"><path d="M12 20h.01"></path><path d="M2 8.82a15 15 0 0 1 20 0"></path><path d="M5 12.859a10 10 0 0 1 14 0"></path><path d="M8.5 16.429a5 5 0 0 1 7 0"></path></svg>
+            <div style="font-size: 12.5px; color: #1E40AF; line-height: 1.5;">Offlayn serverlar navbatda saqlanadi — SIM-internet tiklanishi bilan yuklash <b>avtomatik</b> davom etadi. Uzilgan fayl boshidan emas, to'xtagan joyidan (Range) yuklanadi.</div>
+          </div>
+          <sc-for list="{{ jobs }}" as="j" hint-placeholder-count="5">
+            <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; padding: 16px 20px;">
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <span style="{{ j.iconStyle }}"><span style="{{ j.icon }}"></span></span>
+                <div style="min-width: 0;">
+                  <div style="font-size: 13.5px; font-weight: 800;">{{ j.title }}</div>
+                  <div style="font-size: 11.5px; color: #94A3B8; margin-top: 2px;">{{ j.sub }}</div>
+                </div>
+                <div style="flex: 1;"></div>
+                <span style="{{ j.stateStyle }}">{{ j.state }}</span>
+                <div style="font-size: 12px; color: #64748B; width: 96px; text-align: right;">{{ j.eta }}</div>
+                <div style="border: 1px solid #E2E8F0; border-radius: 9px; padding: 6px 12px; font-size: 11.5px; font-weight: 700; color: #334155; cursor: pointer;" style-hover="background: #F8FAFC;">{{ j.action }}</div>
+              </div>
+              <div style="height: 8px; border-radius: 4px; background: #F1F5F9; margin-top: 14px; overflow: hidden;">
+                <div style="{{ j.barStyle }}"></div>
+              </div>
+              <div style="display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap;">
+                <sc-for list="{{ j.targets }}" as="t" hint-placeholder-count="4">
+                  <span style="{{ t.style }}">{{ t.label }}</span>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isStats }}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(212px, 1fr)); gap: 16px;">
+            <sc-for list="{{ statKpis }}" as="k" hint-placeholder-count="4">
+              <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; padding: 18px 20px;">
+                <div style="font-size: 12px; color: #64748B; font-weight: 700;">{{ k.label }}</div>
+                <div style="font-family: Unbounded, sans-serif; font-size: 25px; font-weight: 600; margin-top: 8px; letter-spacing: -1px;">{{ k.value }}</div>
+                <div style="font-size: 11.5px; color: #94A3B8; margin-top: 4px;">{{ k.note }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; margin-top: 16px;">
+            <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; padding: 20px 22px;">
+              <div style="font-size: 14.5px; font-weight: 800;">Kunlik sessiyalar — 14 kun</div>
+              <div style="display: flex; align-items: flex-end; gap: 8px; height: 190px; margin-top: 22px;">
+                <sc-for list="{{ chart }}" as="b" hint-placeholder-count="14">
+                  <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px;">
+                    <div style="{{ b.style }}"></div>
+                    <div style="font-size: 10px; color: #94A3B8;">{{ b.label }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; padding: 20px 22px;">
+              <div style="font-size: 14.5px; font-weight: 800;">Eng ko'p ko'rilgan</div>
+              <div style="display: flex; flex-direction: column; gap: 15px; margin-top: 18px;">
+                <sc-for list="{{ topContent }}" as="t" hint-placeholder-count="6">
+                  <div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <span style="font-size: 12.5px; font-weight: 700; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ t.title }}</span>
+                      <span style="font-size: 12px; font-weight: 700; color: #64748B;">{{ t.views }}</span>
+                    </div>
+                    <div style="height: 6px; border-radius: 3px; background: #F1F5F9; margin-top: 6px; overflow: hidden;">
+                      <div style="{{ t.barStyle }}"></div>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isLogs }}" hint-placeholder-val="{{ false }}">
+        <div style="background: #0F172A; border-radius: 16px; padding: 18px 20px; font-family: 'SF Mono', Menlo, Consolas, monospace;">
+          <sc-for list="{{ logs }}" as="l" hint-placeholder-count="12">
+            <div style="display: flex; gap: 14px; padding: 6px 0; font-size: 12px; line-height: 1.5;">
+              <span style="color: #475569; width: 132px; flex: 0 0 132px;">{{ l.time }}</span>
+              <span style="{{ l.levelStyle }}">{{ l.level }}</span>
+              <span style="color: #64748B; width: 118px; flex: 0 0 118px;">{{ l.source }}</span>
+              <span style="color: #CBD5E1; flex: 1;">{{ l.msg }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; gap: 34px; align-items: flex-start;">
+          <div style="width: 372px; flex: 0 0 372px; background: #0F172A; border-radius: 42px; padding: 12px; box-shadow: 0 24px 60px rgba(15,23,42,.25);">
+            <div style="background: #F1F5F9; border-radius: 32px; overflow: hidden; height: 740px; display: flex; flex-direction: column;">
+              <div style="background: #0F172A; color: #fff; padding: 14px 20px 16px;">
+                <div style="display: flex; align-items: center; font-size: 11px; color: #94A3B8; font-weight: 700;">
+                  <span>9:41</span><span style="flex: 1;"></span><span>LTE ▮</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px; margin-top: 14px;">
+                  <div>
+                    <div style="font-family: Unbounded, sans-serif; font-size: 15px; font-weight: 600;">Monitoring</div>
+                    <div style="font-size: 11px; color: #64748B; margin-top: 2px;">42 / 50 server onlayn</div>
+                  </div>
+                  <div style="flex: 1;"></div>
+                  <div style="background: #1E293B; border-radius: 10px; padding: 8px 12px; font-size: 11.5px; font-weight: 700;">Filtr</div>
+                </div>
+              </div>
+              <div style="flex: 1; overflow: hidden; padding: 14px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                  <sc-for list="{{ mobileKpis }}" as="m" hint-placeholder-count="4">
+                    <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 14px; padding: 12px 14px;">
+                      <div style="font-size: 10.5px; color: #64748B; font-weight: 700;">{{ m.label }}</div>
+                      <div style="font-size: 19px; font-weight: 800; margin-top: 4px;">{{ m.value }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="font-size: 12px; font-weight: 800; margin: 16px 4px 9px;">Diqqat talab qiladi</div>
+                <div style="display: flex; flex-direction: column; gap: 9px;">
+                  <sc-for list="{{ mobileAlerts }}" as="a" hint-placeholder-count="4">
+                    <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 14px; padding: 12px 14px; display: flex; align-items: center; gap: 11px;">
+                      <span style="{{ a.dotStyle }}"></span>
+                      <div style="flex: 1; min-width: 0;">
+                        <div style="font-size: 12.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ a.name }}</div>
+                        <div style="font-size: 11px; color: #94A3B8; margin-top: 2px;">{{ a.note }}</div>
+                      </div>
+                      <span style="{{ a.tagStyle }}">{{ a.tag }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="background: #fff; border-top: 1px solid #E2E8F0; display: flex; padding: 12px 0 22px;">
+                <sc-for list="{{ mobileTabs }}" as="t" hint-placeholder-count="4">
+                  <div style="{{ t.style }}">
+                    <span style="{{ t.icon }}"></span>
+                    <div style="font-size: 10px; font-weight: 700;">{{ t.label }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+          <div style="max-width: 460px; padding-top: 12px;">
+            <div style="font-family: Unbounded, sans-serif; font-size: 18px; font-weight: 600; letter-spacing: -.4px;">Telefonda — faqat kuzatuv</div>
+            <div style="font-size: 13.5px; color: #475569; line-height: 1.75; margin-top: 12px;">Mobil ko'rinishda kontent yuklash yo'q: yo'lda turib kerak bo'ladigan narsa — qaysi server uzilgan, qaysi kiosk to'lgan, sinxronizatsiya tugadimi. Shuning uchun 4 ta KPI, muammoli qurilmalar ro'yxati va bitta "Qayta sinxronla" tugmasi qoldirilgan.</div>
+            <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 20px;">
+              <sc-for list="{{ mobileNotes }}" as="n" hint-placeholder-count="3">
+                <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 12px; padding: 13px 16px; font-size: 12.5px; color: #334155; line-height: 1.6;">{{ n }}</div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isPlan }}" hint-placeholder-val="{{ false }}">
+        <div style="max-width: 980px;">
+          <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; padding: 24px 28px;">
+            <div style="font-family: Unbounded, sans-serif; font-size: 17px; font-weight: 600; letter-spacing: -.4px;">Server tomonida nima o'zgaradi</div>
+            <div style="font-size: 13px; color: #64748B; line-height: 1.7; margin-top: 8px;">Hozir har bir poyezd serveri mustaqil (FastAPI + SQLite + PyQt admin). Markaziy panel ishlashi uchun serverlar bulutga <b>o'zi ulanadi</b> (outbound WebSocket) — poyezdda statik IP yoki port-forward kerak emas, SIM-internet yetadi.</div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 16px;">
+            <sc-for list="{{ planSteps }}" as="p" hint-placeholder-count="6">
+              <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; padding: 18px 22px; display: flex; gap: 18px;">
+                <div style="width: 30px; height: 30px; flex: 0 0 30px; border-radius: 9px; background: #EFF6FF; color: #2563EB; display: grid; place-items: center; font-size: 13px; font-weight: 800;">{{ p.n }}</div>
+                <div style="min-width: 0;">
+                  <div style="font-size: 14px; font-weight: 800;">{{ p.title }}</div>
+                  <div style="font-size: 12.5px; color: #475569; line-height: 1.7; margin-top: 6px;">{{ p.body }}</div>
+                  <div style="background: #0F172A; color: #93C5FD; border-radius: 10px; padding: 10px 14px; font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 11.5px; line-height: 1.7; margin-top: 12px; white-space: pre-wrap;">{{ p.code }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+    </div>
+  </div>
+
+  <sc-if value="{{ deployOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position: fixed; inset: 0; background: rgba(15,23,42,.55); display: flex; align-items: center; justify-content: center; z-index: 60;">
+      <div style="width: min(880px, calc(100vw - 32px)); max-width: 880px; max-height: 86vh; background: #F8FAFC; border-radius: 20px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 30px 80px rgba(15,23,42,.4);">
+        <div style="background: #fff; border-bottom: 1px solid #E2E8F0; padding: 20px 26px; display: flex; align-items: center; gap: 20px;">
+          <div>
+            <div style="font-family: Unbounded, sans-serif; font-size: 16px; font-weight: 600; letter-spacing: -.3px;">Kontentni tarqatish</div>
+            <div style="font-size: 12px; color: #64748B; margin-top: 3px;">{{ deploySub }}</div>
+          </div>
+          <div style="flex: 1;"></div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <sc-for list="{{ deploySteps }}" as="s" hint-placeholder-count="3">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="{{ s.numStyle }}">{{ s.n }}</span>
+                <span style="{{ s.labelStyle }}">{{ s.label }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div onClick="{{ closeDeploy }}" style="width: 32px; height: 32px; border-radius: 9px; border: 1px solid #E2E8F0; display: grid; place-items: center; color: #64748B; cursor: pointer;" style-hover="background: #F8FAFC;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 15px;"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></div>
+        </div>
+
+        <div style="flex: 1; overflow: auto; padding: 22px 26px;">
+          <sc-if value="{{ step1 }}" hint-placeholder-val="{{ true }}">
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              <sc-for list="{{ deployContent }}" as="c" hint-placeholder-count="4">
+                <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 14px; padding: 13px 16px; display: flex; align-items: center; gap: 14px;">
+                  <span style="width: 22px; height: 22px; border-radius: 7px; background: #2563EB; color: #fff; display: grid; place-items: center;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 13px;"><path d="M20 6 9 17l-5-5"></path></svg></span>
+                  <div style="width: 42px; height: 42px; border-radius: 10px; background: #F1F5F9; display: grid; place-items: center;"><span style="{{ c.icon }}"></span></div>
+                  <div style="flex: 1; min-width: 0;">
+                    <div style="font-size: 13.5px; font-weight: 700;">{{ c.title }}</div>
+                    <div style="font-size: 11.5px; color: #94A3B8; margin-top: 2px;">{{ c.meta }}</div>
+                  </div>
+                  <span style="{{ c.typeStyle }}">{{ c.typeLabel }}</span>
+                </div>
+              </sc-for>
+              <div style="background: #fff; border: 1px dashed #CBD5E1; border-radius: 14px; padding: 16px; text-align: center; font-size: 12.5px; color: #94A3B8; font-weight: 600; cursor: pointer;" style-hover="border-color: #93C5FD; color: #2563EB;">+ Kutubxonadan yana qo'shish</div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ step2 }}" hint-placeholder-val="{{ false }}">
+            <div>
+              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">
+                <div onClick="{{ pickAllServers }}" style="border: 1px solid #E2E8F0; background: #fff; border-radius: 9px; padding: 7px 14px; font-size: 12px; font-weight: 700; color: #334155; cursor: pointer;" style-hover="background: #F1F5F9;">Barchasini belgilash</div>
+                <div onClick="{{ clearServers }}" style="border: 1px solid #E2E8F0; background: #fff; border-radius: 9px; padding: 7px 14px; font-size: 12px; font-weight: 700; color: #334155; cursor: pointer;" style-hover="background: #F1F5F9;">Tozalash</div>
+                <div style="flex: 1;"></div>
+                <div style="font-size: 12px; color: #64748B; font-weight: 600;">{{ pickedLabel }}</div>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <sc-for list="{{ pickServers }}" as="s" hint-placeholder-count="8">
+                  <div onClick="{{ s.toggle }}" style="{{ s.rowStyle }}">
+                    <span style="{{ s.boxStyle }}"></span>
+                    <span style="{{ s.dotStyle }}"></span>
+                    <div style="flex: 1; min-width: 0;">
+                      <div style="font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ s.name }}</div>
+                      <div style="font-size: 11px; color: #94A3B8; margin-top: 2px;">{{ s.sub }}</div>
+                    </div>
+                    <span style="{{ s.stateStyle }}">{{ s.state }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ step3 }}" hint-placeholder-val="{{ false }}">
+            <div>
+              <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; padding: 20px 22px;">
+                <div style="font-size: 14px; font-weight: 800;">Tarqatish xulosasi</div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(212px, 1fr)); gap: 16px; margin-top: 16px;">
+                  <sc-for list="{{ summary }}" as="s" hint-placeholder-count="4">
+                    <div>
+                      <div style="font-size: 11px; color: #94A3B8; font-weight: 700; text-transform: uppercase; letter-spacing: .4px;">{{ s.label }}</div>
+                      <div style="font-size: 19px; font-weight: 800; margin-top: 5px;">{{ s.value }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; padding: 20px 22px; margin-top: 12px; display: flex; flex-direction: column; gap: 14px;">
+                <sc-for list="{{ options }}" as="o" hint-placeholder-count="3">
+                  <div style="display: flex; align-items: flex-start; gap: 12px;">
+                    <span style="{{ o.toggleStyle }}"><span style="{{ o.knobStyle }}"></span></span>
+                    <div style="min-width: 0;">
+                      <div style="font-size: 13px; font-weight: 700;">{{ o.title }}</div>
+                      <div style="font-size: 11.5px; color: #94A3B8; margin-top: 3px; line-height: 1.5;">{{ o.sub }}</div>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 14px; padding: 14px 18px; margin-top: 12px; font-size: 12.5px; color: #92400E; line-height: 1.6;">Tanlanganlardan 2 tasi hozir offlayn. Ular navbatga qo'shiladi va onlayn bo'lishi bilan avtomatik yuklab oladi — qayta bosish shart emas.</div>
+            </div>
+          </sc-if>
+        </div>
+
+        <div style="background: #fff; border-top: 1px solid #E2E8F0; padding: 16px 26px; display: flex; align-items: center; gap: 10px;">
+          <div onClick="{{ closeDeploy }}" style="border: 1px solid #E2E8F0; border-radius: 10px; padding: 10px 18px; font-size: 13px; font-weight: 700; color: #334155; cursor: pointer;" style-hover="background: #F8FAFC;">Bekor qilish</div>
+          <div style="flex: 1;"></div>
+          <div onClick="{{ prevStep }}" style="{{ backStyle }}">← Orqaga</div>
+          <div onClick="{{ nextStep }}" style="background: #2563EB; color: #fff; border-radius: 10px; padding: 10px 22px; font-size: 13px; font-weight: 800; cursor: pointer;" style-hover="background: #1D4ED8;">{{ nextLabel }}</div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ uploadOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position: fixed; inset: 0; background: rgba(15,23,42,.55); display: flex; align-items: center; justify-content: center; z-index: 60;">
+      <div style="width: min(720px, calc(100vw - 32px)); max-width: 720px; max-height: 92vh; display: flex; flex-direction: column; background: #fff; border-radius: 20px; overflow: hidden; box-shadow: 0 30px 80px rgba(15,23,42,.4);">
+        <div style="padding: 22px 26px 16px; display: flex; align-items: flex-start; flex: 0 0 auto;">
+          <div>
+            <div style="font-family: Unbounded, sans-serif; font-size: 16px; font-weight: 600; letter-spacing: -.3px;">Kontent yuklash</div>
+            <div style="font-size: 12px; color: #64748B; margin-top: 4px;">Har bir kontent — media fayl + muqova + ma'lumotlari. Avval bulut kutubxonasiga tushadi.</div>
+          </div>
+          <div style="flex: 1;"></div>
+          <div onClick="{{ closeUpload }}" style="width: 32px; height: 32px; border-radius: 9px; border: 1px solid #E2E8F0; display: grid; place-items: center; cursor: pointer;" style-hover="background: #F8FAFC;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 15px;"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></div>
+        </div>
+        <div style="flex: 1; overflow: auto; padding: 18px 26px 4px;">
+          <div style="display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap;">
+
+            <div style="flex: 1; min-width: 300px; display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 13px;">
+              <div>
+                <div style="font-size: 11.5px; font-weight: 700; color: #334155; margin-bottom: 6px;">Turi</div>
+                <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+                  <sc-for list="{{ upTypes }}" as="t" hint-placeholder-count="5">
+                    <div onClick="{{ t.go }}" style="{{ t.style }}">{{ t.label }}</div>
+                  </sc-for>
+                </div>
+              </div>
+              <div>
+                <div style="font-size: 11.5px; font-weight: 700; color: #334155; margin-bottom: 6px;">Tili</div>
+                <div style="border: 1px solid #E2E8F0; border-radius: 10px; padding: 10px 12px; font-size: 12.5px;">O'zbekcha ▾</div>
+                <div style="font-size: 10.5px; color: #94A3B8; margin-top: 5px;">yoki «Barcha tillarda» — til ahamiyatsiz</div>
+              </div>
+
+              <div style="grid-column: 1 / -1;">
+                <div style="font-size: 11.5px; font-weight: 700; color: #334155; margin-bottom: 6px;">{{ upTitleLabel }}</div>
+                <div style="border: 1px solid #E2E8F0; border-radius: 10px; padding: 10px 12px; font-size: 13px; font-weight: 600;">{{ upTitleVal }}</div>
+              </div>
+              <div>
+                <div style="font-size: 11.5px; font-weight: 700; color: #334155; margin-bottom: 6px;">{{ upAuthorLabel }}</div>
+                <div style="border: 1px solid #E2E8F0; border-radius: 10px; padding: 10px 12px; font-size: 12.5px; color: #94A3B8;">{{ upAuthorHint }}</div>
+              </div>
+              <div>
+                <div style="font-size: 11.5px; font-weight: 700; color: #334155; margin-bottom: 6px;">Janr</div>
+                <div style="border: 1px solid #E2E8F0; border-radius: 10px; padding: 10px 12px; font-size: 12.5px;">{{ upGenre }} ▾</div>
+              </div>
+              <div style="{{ upTabRow }}">
+                <div style="font-size: 11.5px; font-weight: 700; color: #334155; margin-bottom: 6px;">Tab (kategoriya)</div>
+                <div style="border: 1px solid #E2E8F0; border-radius: 10px; padding: 10px 12px; font-size: 12.5px;">{{ upTab }} ▾</div>
+              </div>
+              <div style="{{ upDurRow }}">
+                <div style="font-size: 11.5px; font-weight: 700; color: #334155; margin-bottom: 6px;">Davomiylik</div>
+                <div style="border: 1px solid #E2E8F0; border-radius: 10px; padding: 10px 12px; font-size: 12.5px;">{{ upDur }}</div>
+              </div>
+              <div style="grid-column: 1 / -1;">
+                <div style="font-size: 11.5px; font-weight: 700; color: #334155; margin-bottom: 6px;">Tavsif</div>
+                <div style="border: 1px solid #E2E8F0; border-radius: 10px; padding: 10px 12px; font-size: 12.5px; color: #94A3B8; line-height: 1.6; min-height: 58px;">Kiosk kartochkasi va tafsilot ekranida ko'rinadi…</div>
+              </div>
+            </div>
+
+            <div style="width: 160px; flex: 0 0 160px;">
+              <div style="font-size: 11.5px; font-weight: 700; color: #334155; margin-bottom: 6px;">{{ upCoverLabel }}</div>
+              <div onClick="{{ toggleCover }}" style="{{ coverBoxStyle }}">
+                <span style="{{ coverIcon }}"></span>
+                <div style="font-size: 11px; font-weight: 700; color: #64748B; margin-top: 9px;">{{ coverState }}</div>
+                <div style="font-size: 10px; color: #94A3B8; margin-top: 3px;">{{ coverHint }}</div>
+              </div>
+              <div style="font-size: 10.5px; color: #94A3B8; line-height: 1.55; margin-top: 8px;">jpg · png · webp. Muqovasiz kontent kioskda «Muqova yo'q» kartochka bo'lib chiqadi.</div>
+            </div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 9px; margin-top: 16px;">
+            <div style="border: 1px solid #E2E8F0; border-radius: 12px; padding: 12px 14px; background: #F8FAFC;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="{{ mediaIcon }}"></span>
+                <div style="flex: 1; min-width: 0;">
+                  <div style="font-size: 11px; font-weight: 700; color: #64748B;">{{ upMediaLabel }}</div>
+                  <div style="font-size: 12.5px; font-weight: 700; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">ilon-vodiysi-1080p.mp4</div>
+                </div>
+                <div style="font-size: 11.5px; color: #64748B; white-space: nowrap;">68% · 1.2 / 1.8 GB</div>
+              </div>
+              <div style="height: 6px; border-radius: 3px; background: #E2E8F0; margin-top: 10px; overflow: hidden;">
+                <div style="{{ mediaBar }}"></div>
+              </div>
+              <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 9px; font-size: 10.5px; color: #94A3B8;">
+                <span>H.264 1080p · AAC</span><span>faststart ✓</span><span>sha256 ✓</span><span>davomiylik fayldan olindi</span>
+              </div>
+            </div>
+
+            <div style="{{ upTextRow }}">
+              <div style="border: 1px dashed #CBD5E1; border-radius: 12px; padding: 12px 14px; display: flex; align-items: center; gap: 10px;">
+                <span style="{{ textIcon }}"></span>
+                <div style="flex: 1; min-width: 0;">
+                  <div style="font-size: 11px; font-weight: 700; color: #64748B;">Kitob matni</div>
+                  <div style="font-size: 12.5px; color: #94A3B8; margin-top: 2px;">Tanlanmagan — .json yoki .txt</div>
+                </div>
+                <div style="border: 1px solid #E2E8F0; background: #fff; border-radius: 9px; padding: 7px 13px; font-size: 11.5px; font-weight: 700; color: #334155; cursor: pointer;" style-hover="background: #F8FAFC;">Tanlash</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="border: 1px solid #E2E8F0; border-radius: 13px; padding: 14px 16px; margin-top: 14px; display: flex; flex-direction: column; gap: 12px;">
+            <sc-for list="{{ upFlags }}" as="o" hint-placeholder-count="3">
+              <div onClick="{{ o.toggle }}" style="{{ o.rowStyle }}">
+                <span style="{{ o.toggleStyle }}"><span style="{{ o.knobStyle }}"></span></span>
+                <div style="min-width: 0;">
+                  <div style="font-size: 12.5px; font-weight: 700;">{{ o.title }}</div>
+                  <div style="font-size: 11px; color: #94A3B8; margin-top: 3px; line-height: 1.5;">{{ o.sub }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="border: 2px dashed #CBD5E1; border-radius: 13px; padding: 14px; background: #FBFCFE; margin-top: 13px; display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;">
+            <span style="{{ plusIcon }}"></span>
+            <span style="font-size: 12.5px; font-weight: 700; color: #64748B;">Fayllarni shu oynaga tortib tashlang</span>
+            <span style="font-size: 11px; color: #94A3B8;">turi kengaytmadan aniqlanadi — media, rasm yoki matn</span>
+          </div>
+        </div>
+
+        <div style="border-top: 1px solid #E2E8F0; padding: 15px 26px; display: flex; align-items: center; gap: 10px; flex: 0 0 auto;">
+          <div style="font-size: 11.5px; color: #94A3B8; flex: 1; min-width: 0;">{{ uploadNote }}</div>
+          <div onClick="{{ closeUpload }}" style="border: 1px solid #E2E8F0; border-radius: 10px; padding: 10px 18px; font-size: 13px; font-weight: 700; color: #334155; cursor: pointer; white-space: nowrap;" style-hover="background: #F8FAFC;">Kutubxonaga saqlash</div>
+          <div onClick="{{ uploadThenDeploy }}" style="background: #2563EB; color: #fff; border-radius: 10px; padding: 10px 20px; font-size: 13px; font-weight: 800; cursor: pointer; white-space: nowrap;" style-hover="background: #1D4ED8;">Saqlash va tarqatish</div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+
+</sc-if>
+
+<sc-if value="{{ isNarrow }}" hint-placeholder-val="{{ false }}">
+  <div style="display: flex; flex-direction: column; height: 100vh; width: 100%; overflow: hidden; font-family: Manrope, 'Segoe UI', sans-serif; color: #0F172A; background: #F1F5F9;">
+    <div style="background: #0F172A; color: #fff; padding: 16px 18px 18px; flex: 0 0 auto;">
+      <div style="display: flex; align-items: center; gap: 11px;">
+        <div style="width: 34px; height: 34px; border-radius: 10px; background: #2563EB; display: grid; place-items: center; color: #fff; font-family: Unbounded, sans-serif; font-weight: 700; font-size: 15px;">K</div>
+        <div style="flex: 1; min-width: 0;">
+          <div style="font-family: Unbounded, sans-serif; font-size: 14px; font-weight: 600;">{{ mTitle }}</div>
+          <div style="font-size: 11px; color: #64748B; margin-top: 2px;">42 / 50 server onlayn · 318 kiosk</div>
+        </div>
+        <div style="width: 32px; height: 32px; border-radius: 9px; background: #1E293B; display: grid; place-items: center; color: #94A3B8; font-size: 11px; font-weight: 800;">BB</div>
+      </div>
+    </div>
+
+    <div style="flex: 1; overflow: auto; padding: 14px;">
+      <sc-if value="{{ mHome }}" hint-placeholder-val="{{ true }}">
+        <div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <sc-for list="{{ mobileKpis }}" as="m" hint-placeholder-count="4">
+              <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 14px; padding: 14px 16px;">
+                <div style="font-size: 11px; color: #64748B; font-weight: 700;">{{ m.label }}</div>
+                <div style="font-size: 22px; font-weight: 800; margin-top: 4px; letter-spacing: -.5px;">{{ m.value }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size: 13px; font-weight: 800; margin: 20px 4px 10px;">Diqqat talab qiladi</div>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <sc-for list="{{ mobileAlerts }}" as="a" hint-placeholder-count="4">
+              <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 14px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; min-height: 64px;">
+                <span style="{{ a.dotStyle }}"></span>
+                <div style="flex: 1; min-width: 0;">
+                  <div style="font-size: 13.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ a.name }}</div>
+                  <div style="font-size: 11.5px; color: #94A3B8; margin-top: 3px;">{{ a.note }}</div>
+                </div>
+                <span style="{{ a.tagStyle }}">{{ a.tag }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 14px; padding: 14px 16px; margin-top: 14px; font-size: 12px; color: #1E40AF; line-height: 1.6;">Telefonda kontent yuklash yo'q — faqat kuzatuv va qayta sinxronlash. Tarqatish desktopda bajariladi.</div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ mServers }}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <sc-for list="{{ servers }}" as="s" hint-placeholder-count="8">
+            <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 14px; padding: 14px 16px;">
+              <div style="display: flex; align-items: center; gap: 11px;">
+                <span style="{{ s.dotStyle }}"></span>
+                <div style="flex: 1; min-width: 0;">
+                  <div style="font-size: 13.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ s.name }}</div>
+                  <div style="font-size: 11.5px; color: #94A3B8; margin-top: 2px;">{{ s.route }}</div>
+                </div>
+                <div style="font-size: 12px; font-weight: 700; color: #334155;">{{ s.syncLabel }}</div>
+              </div>
+              <div style="height: 7px; border-radius: 4px; background: #F1F5F9; margin-top: 11px; overflow: hidden;">
+                <div style="{{ s.barStyle }}"></div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 10px; margin-top: 11px;">
+                <div style="font-size: 11.5px; color: #94A3B8; flex: 1;">{{ s.kiosksLabel }} · {{ s.seen }}</div>
+                <div style="border: 1px solid #E2E8F0; border-radius: 9px; padding: 9px 14px; font-size: 12px; font-weight: 700; color: #334155; min-height: 44px; display: flex; align-items: center;">Sinxronla</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ mQueue }}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <sc-for list="{{ jobs }}" as="j" hint-placeholder-count="5">
+            <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 14px; padding: 14px 16px;">
+              <div style="display: flex; align-items: center; gap: 11px;">
+                <span style="{{ j.iconStyle }}"><span style="{{ j.icon }}"></span></span>
+                <div style="flex: 1; min-width: 0;">
+                  <div style="font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ j.title }}</div>
+                  <div style="font-size: 11.5px; color: #94A3B8; margin-top: 2px;">{{ j.sub }}</div>
+                </div>
+                <span style="{{ j.stateStyle }}">{{ j.state }}</span>
+              </div>
+              <div style="height: 7px; border-radius: 4px; background: #F1F5F9; margin-top: 12px; overflow: hidden;">
+                <div style="{{ j.barStyle }}"></div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ mLogs }}" hint-placeholder-val="{{ false }}">
+        <div style="background: #0F172A; border-radius: 14px; padding: 14px; font-family: 'SF Mono', Menlo, Consolas, monospace;">
+          <sc-for list="{{ logs }}" as="l" hint-placeholder-count="12">
+            <div style="padding: 7px 0; border-bottom: 1px solid #1E293B;">
+              <div style="display: flex; gap: 10px; font-size: 11px;">
+                <span style="color: #475569;">{{ l.time }}</span>
+                <span style="{{ l.levelStyle }}">{{ l.level }}</span>
+                <span style="color: #64748B;">{{ l.source }}</span>
+              </div>
+              <div style="color: #CBD5E1; font-size: 11.5px; line-height: 1.5; margin-top: 4px;">{{ l.msg }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+    </div>
+
+    <div style="background: #fff; border-top: 1px solid #E2E8F0; display: flex; padding: 8px 0 20px; flex: 0 0 auto;">
+      <sc-for list="{{ mTabs }}" as="t" hint-placeholder-count="4">
+        <div onClick="{{ t.go }}" style="{{ t.style }}">
+          <span style="{{ t.icon }}"></span>
+          <span style="font-size: 10.5px; font-weight: 700;">{{ t.label }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</sc-if></x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1440, &quot;height&quot;: 940}}">
+const OK = "#22C55E", BAD = "#EF4444", WARN = "#F59E0B", ACC = "#2563EB";
+const TYPES = {
+  movie: ["Kino", "#1D4ED8", "#DBEAFE", "clapperboard"],
+  cartoon: ["Multfilm", "#7C3AED", "#EDE9FE", "star"],
+  music: ["Musiqa", "#047857", "#D1FAE5", "music"],
+  book: ["Kitob", "#B45309", "#FEF3C7", "bookOpen"],
+  audiobook: ["Audiokitob", "#0F766E", "#CCFBF1", "headphones"],
+  ad: ["Reklama", "#BE185D", "#FCE7F3", "megaphone"],
+  site: ["Sayt", "#4338CA", "#E0E7FF", "globe"],
+  route: ["Bekatlar", "#0369A1", "#E0F2FE", "mapPin"],
+};
+
+const SERVERS = [
+  ["Poyezd 076Ф", "Toshkent → Xiva", 8, 8, 100, 62, "online", "Faol", "hozir"],
+  ["Poyezd 010Ф", "Toshkent → Buxoro", 6, 6, 100, 44, "online", "Faol", "1 daq oldin"],
+  ["Poyezd 054Ф", "Samarqand → Nukus", 10, 7, 63, 88, "sync", "Faol", "hozir"],
+  ["Poyezd 122Ф", "Toshkent → Andijon", 6, 6, 100, 51, "online", "Faol", "2 daq oldin"],
+  ["Poyezd 038Ф", "Buxoro → Toshkent", 8, 0, 12, 71, "offline", "Faol", "3 soat oldin"],
+  ["Poyezd 006Ф", "Toshkent → Qarshi", 4, 4, 100, 39, "online", "23 kun qoldi", "hozir"],
+  ["Poyezd 090Ф", "Urganch → Toshkent", 8, 5, 78, 93, "sync", "Faol", "hozir"],
+  ["Poyezd 018Ф", "Namangan → Toshkent", 6, 0, 0, 28, "offline", "Muddati tugagan", "1 kun oldin"],
+  ["Poyezd 062Ф", "Toshkent → Termiz", 10, 10, 100, 57, "online", "Faol", "hozir"],
+  ["Poyezd 044Ф", "Xiva → Samarqand", 8, 8, 100, 66, "online", "Faol", "4 daq oldin"],
+];
+
+const CONTENT = [
+  ["Ilon vodiysi", "movie", "1.8 GB", "1:52:10", 42],
+  ["Zumrad va Qimmat", "cartoon", "740 MB", "1:08:00", 50],
+  ["Sherzod — Yurak", "music", "9 MB", "4:12", 50],
+  ["O'tkan kunlar", "book", "2.4 MB", "412 bet", 38],
+  ["Mehrobdan chayon", "audiobook", "310 MB", "6:40:00", 31],
+  ["UzRailway — yangi xizmat", "ad", "48 MB", "0:22", 50],
+  ["Sahroda uch kun", "movie", "2.2 GB", "2:04:30", 12],
+  ["Alpomish (audio)", "audiobook", "420 MB", "8:12:00", 24],
+  ["my.gov.uz portali", "site", "12 KB", "QR", 47],
+];
+
+const P = {
+  dashboard: '<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>',
+  server: '<rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/>',
+  clapperboard: '<path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z"/><path d="m6.2 5.3 3.1 3.9"/><path d="m12.4 3.4 3.1 4"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>',
+  send: '<path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/>',
+  barChart: '<path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
+  fileText: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+  phone: '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>',
+  settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+  star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+  volume: '<path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.364 18.364a9 9 0 0 0 0-12.728"/>',
+  bookOpen: '<path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/>',
+  headphones: '<path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/>',
+  megaphone: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
+  globe: '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
+  mapPin: '<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>',
+  trash: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
+  refresh: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  image: '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>',
+  music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+};
+function maskUrl(name, sw) {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="' +
+    (sw || 2) + '" stroke-linecap="round" stroke-linejoin="round">' + P[name] + '</svg>';
+  return "url('data:image/svg+xml," + encodeURIComponent(svg) + "')";
+}
+function icon(name, size, color, sw) {
+  const u = maskUrl(name, sw);
+  return "display:inline-block;width:" + size + "px;height:" + size + "px;flex:0 0 " + size +
+    "px;background-color:" + color + ";-webkit-mask:" + u + " center/contain no-repeat;mask:" + u + " center/contain no-repeat";
+}
+
+// server/ui/dialogs.py :: ContentDialog._FIELD_LABELS
+const UT = {
+  movie:     ["Kino", "Kino nomi", "Rejissor", "Afisha (poster)", "clapperboard"],
+  cartoon:   ["Multfilm", "Multfilm nomi", "Studiya", "Afisha (poster)", "star"],
+  music:     ["Musiqa", "Qo'shiq nomi", "Ijrochi", "Albom muqovasi", "music"],
+  book:      ["Kitob", "Kitob nomi", "Muallif", "Muqova", "bookOpen"],
+  audiobook: ["Audiokitob", "Audiokitob nomi", "Muallif", "Muqova", "headphones"],
+};
+const UTK = ["movie", "cartoon", "music", "book", "audiobook"];
+
+class Component extends DCLogic {
+  ic(name, size, color, sw) { return icon(name, size, color, sw); }
+  state = { page: "dash", server: 0, type: "all", sel: {}, deploy: false, dstep: 1, upload: false, picked: {}, sfilter: "all", vw: 1440, mtab: "home", cover: true, utype: "movie", flags: {} };
+
+  componentDidMount() {
+    this._onResize = () => this.setState({ vw: window.innerWidth });
+    window.addEventListener("resize", this._onResize);
+    this._onResize();
+  }
+  componentWillUnmount() { window.removeEventListener("resize", this._onResize); }
+
+  go(page) { return () => this.setState({ page }); }
+
+  chip(active) {
+    return "border-radius:999px;padding:7px 16px;font-size:12.5px;font-weight:700;cursor:pointer;border:1px solid " +
+      (active ? ACC + ";background:" + ACC + ";color:#fff" : "#E2E8F0;background:#fff;color:#64748B");
+  }
+  dot(state) {
+    const c = state === "online" ? OK : state === "sync" ? ACC : state === "offline" ? "#CBD5E1" : WARN;
+    return "width:9px;height:9px;flex:0 0 9px;border-radius:50%;background:" + c +
+      (state === "sync" ? ";animation:pulseDot 1.4s infinite" : "");
+  }
+  pill(text, bg) {
+    return "font-size:10.5px;font-weight:800;padding:3px 9px;border-radius:999px;color:" + text + ";background:" + bg;
+  }
+  bar(pct, color) {
+    return "height:100%;width:" + pct + "%;border-radius:4px;background:" + color;
+  }
+
+  servers() {
+    return SERVERS.map((s, i) => {
+      const [name, route, total, synced, pct, disk, state, lic, seen] = s;
+      const col = state === "offline" ? "#CBD5E1" : pct === 100 ? OK : ACC;
+      return {
+        i, name, route, state, seen, lic,
+        ip: "10.20." + (30 + i) + ".1",
+        kiosksLabel: synced + " / " + total + " kiosk",
+        total, synced, pct,
+        dotStyle: this.dot(state),
+        barStyle: this.bar(pct, col),
+        syncLabel: pct + "%",
+        syncText: state === "offline" ? "kutilmoqda" : pct === 100 ? "to'liq" : "yuklanmoqda",
+        diskStyle: this.bar(disk, disk > 85 ? BAD : disk > 70 ? WARN : "#94A3B8"),
+        diskText: disk + "% band · " + (512 - Math.round(512 * disk / 100)) + " GB bo'sh",
+        licStyle: this.pill(lic === "Faol" ? "#047857" : lic === "Muddati tugagan" ? "#B91C1C" : "#B45309",
+          lic === "Faol" ? "#D1FAE5" : lic === "Muddati tugagan" ? "#FEE2E2" : "#FEF3C7"),
+        open: () => this.setState({ page: "detail", server: i }),
+      };
+    });
+  }
+
+  content() {
+    return CONTENT.map((c, i) => {
+      const [title, type, size, dur, deployed] = c;
+      const [label, fg, bg, icon] = TYPES[type];
+      const on = !!this.state.sel[i];
+      return {
+        i, title, size, dur, typeLabel: label, type,
+        icon: this.ic(icon, 34, fg, 1.6),
+        typeStyle: this.pill(fg, bg),
+        deployed: deployed + " / 50 serverda",
+        cardStyle: "background:#fff;border-radius:16px;overflow:hidden;cursor:pointer;transition:.12s;border:2px solid " +
+          (on ? ACC : "#E2E8F0") + (on ? ";box-shadow:0 0 0 4px rgba(37,99,235,.12)" : ""),
+        coverStyle: "position:relative;height:132px;background:" + bg + ";display:grid;place-items:center",
+        checkStyle: "position:absolute;top:10px;right:10px;width:22px;height:22px;border-radius:7px;display:grid;place-items:center;font-size:12px;font-weight:800;" +
+          (on ? "background:" + ACC + ";border:2px solid " + ACC + ";" + this.ic("check", 12, "#fff", 3.2) : "background:rgba(255,255,255,.85);border:2px solid #CBD5E1"),
+        toggle: () => this.setState(s => ({ sel: { ...s.sel, [i]: !s.sel[i] } })),
+      };
+    });
+  }
+
+  renderVals() {
+    const st = this.state;
+    const servers = this.servers();
+    const all = this.content();
+    const selIds = Object.keys(st.sel).filter(k => st.sel[k]);
+    const titles = {
+      dash: ["Boshqaruv", "50 ta poyezd serveri, 74 ta kiosk — bitta joydan"],
+      servers: ["Serverlar", "Har bir poyezd serveri va uning kiosklari"],
+      detail: ["Server tafsiloti", "Kiosklar, sessiyalar va masofaviy buyruqlar"],
+      content: ["Kontent kutubxonasi", "Bulutdagi barcha media — bu yerdan tarqatiladi"],
+      queue: ["Tarqatish navbati", "Yuklanayotgan va kutayotgan vazifalar"],
+      stats: ["Statistika", "Kiosklardan kelgan foydalanish hisobotlari"],
+      logs: ["Loglar", "Serverlar va kiosklardan kelgan hodisalar oqimi"],
+      mobile: ["Mobil monitoring", "Telefondan kuzatish ko'rinishi"],
+      plan: ["Texnik reja", "Server tomonidagi o'zgarishlar"],
+    };
+    const [pageTitle, pageSub] = titles[st.page] || titles.dash;
+
+    const navDefs = [
+      ["dash", "Boshqaruv", "dashboard", ""],
+      ["servers", "Serverlar", "server", "50"],
+      ["content", "Kontent", "clapperboard", ""],
+      ["queue", "Navbat", "send", "3"],
+      ["stats", "Statistika", "barChart", ""],
+      ["logs", "Loglar", "fileText", ""],
+      ["mobile", "Mobil", "phone", ""],
+      ["plan", "Texnik reja", "settings", ""],
+    ];
+    const active = st.page === "detail" ? "servers" : st.page;
+
+    const d = SERVERS[st.server];
+    const dTotal = d[2], dSynced = d[3];
+    const kioskNames = ["Vagon 1", "Vagon 2", "Vagon 3", "Vagon 4", "Vagon 5", "Vagon 6", "Vagon 7", "Vagon 8", "Vagon 9", "Vagon 10"];
+
+    const ut = st.utype;
+    const narrow = st.vw < 760;
+    const compact = st.vw < 1180;
+    const NW = "white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
+    const mTitles = { home: "Monitoring", servers: "Serverlar", queue: "Navbat", logs: "Loglar" };
+
+    return {
+      isWide: !narrow, isNarrow: narrow,
+      hSync: compact ? "flex:0 1 104px;min-width:66px;" + NW : "flex:0 1 130px;min-width:78px;" + NW,
+      hDisk: compact ? "display:none" : "flex:0 1 118px;min-width:72px;" + NW,
+      hSeen: compact ? "display:none" : "flex:0 1 118px;min-width:0;" + NW,
+      cSeen: compact ? "display:none" : "flex:0 1 118px;min-width:0;font-size:12px;color:#64748B;" + NW,
+      mTitle: mTitles[st.mtab],
+      mHome: st.mtab === "home", mServers: st.mtab === "servers",
+      mQueue: st.mtab === "queue", mLogs: st.mtab === "logs",
+      mTabs: [["home", "dashboard", "Holat"], ["servers", "server", "Serverlar"], ["queue", "send", "Navbat"], ["logs", "fileText", "Loglar"]]
+        .map(([id, ic, label]) => ({
+          label,
+          icon: this.ic(ic, 19, st.mtab === id ? ACC : "#94A3B8", 1.9),
+          go: () => this.setState({ mtab: id }),
+          style: "flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-height:44px;cursor:pointer;color:" +
+            (st.mtab === id ? ACC : "#94A3B8"),
+        })),
+
+      pageTitle, pageSub,
+      isDash: st.page === "dash", isServers: st.page === "servers", isDetail: st.page === "detail",
+      isContent: st.page === "content", isQueue: st.page === "queue", isStats: st.page === "stats",
+      isLogs: st.page === "logs", isMobile: st.page === "mobile", isPlan: st.page === "plan",
+
+      nav: navDefs.map(([id, label, icon, badge]) => ({
+        label, badge,
+        icon: this.ic(icon, 16, active === id ? "#FFFFFF" : "#94A3B8", 1.9),
+        go: this.go(id),
+        style: "display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:10px;font-size:13.5px;font-weight:600;cursor:pointer;" +
+          (active === id ? "background:" + ACC + ";color:#fff" : "background:transparent;color:#94A3B8"),
+        badgeStyle: badge ? "font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:999px;" +
+          (active === id ? "background:rgba(255,255,255,.22);color:#fff" : "background:#1E293B;color:#94A3B8") : "display:none",
+      })),
+
+      goServers: this.go("servers"), goQueue: this.go("queue"),
+      openDeploy: () => this.setState({ deploy: true, dstep: 1, upload: false }),
+      closeDeploy: () => this.setState({ deploy: false }),
+      openUpload: () => this.setState({ upload: true }),
+      closeUpload: () => this.setState({ upload: false }),
+      uploadThenDeploy: () => this.setState({ upload: false, deploy: true, dstep: 2 }),
+
+      kpis: [
+        { label: "Onlayn serverlar", value: "42 / 50", delta: "▲ 3", note: "8 tasi SIM-signalsiz", deltaStyle: "font-size:12px;font-weight:800;color:" + OK },
+        { label: "Faol kiosklar", value: "318", delta: "▲ 12", note: "74 vagonda o'rnatilgan", deltaStyle: "font-size:12px;font-weight:800;color:" + OK },
+        { label: "Navbatdagi vazifa", value: "3", delta: "2 kutmoqda", note: "12.4 GB yuborilmoqda", deltaStyle: "font-size:12px;font-weight:800;color:" + ACC },
+        { label: "Diqqat talab", value: "5", delta: "▼ 1", note: "disk to'lgan / litsenziya", deltaStyle: "font-size:12px;font-weight:800;color:" + BAD },
+      ],
+
+      topServers: servers.slice(0, 6),
+      servers: servers,
+
+      serverFilters: [["all", "Barchasi · 50"], ["online", "Onlayn · 42"], ["offline", "Offlayn · 8"], ["attn", "Diqqat · 5"]]
+        .map(([id, label]) => ({ label, style: this.chip(st.sfilter === id), go: () => this.setState({ sfilter: id }) })),
+
+      queuePreview: [
+        { icon: this.ic("clapperboard", 15, "#475569"), title: "Ilon vodiysi — 1.8 GB", sub: "12 serverga", pctLabel: "68%", barStyle: this.bar(68, ACC) },
+        { icon: this.ic("megaphone", 15, "#475569"), title: "Yangi reklama paketi", sub: "50 serverga", pctLabel: "94%", barStyle: this.bar(94, ACC) },
+        { icon: this.ic("headphones", 15, "#94A3B8"), title: "Alpomish (audiokitob)", sub: "8 server offlayn — kutmoqda", pctLabel: "0%", barStyle: this.bar(0, "#CBD5E1") },
+      ],
+
+      events: [
+        ["Poyezd 054Ф — 'Ilon vodiysi' 7 ta kioskka yuklandi", "3 daqiqa oldin", OK],
+        ["Poyezd 038Ф aloqadan uzildi (SIM signal yo'q)", "18 daqiqa oldin", BAD],
+        ["Poyezd 018Ф litsenziyasi tugadi — kiosklar qulflandi", "1 soat oldin", WARN],
+        ["Eski reklama 50 ta serverdan o'chirildi", "2 soat oldin", "#94A3B8"],
+        ["Poyezd 090Ф keshi tozalandi (42 GB bo'shadi)", "4 soat oldin", "#94A3B8"],
+      ].map(([text, time, c]) => ({ text, time, dotStyle: "width:8px;height:8px;flex:0 0 8px;border-radius:50%;margin-top:5px;background:" + c })),
+
+      detail: {
+        name: d[0], badge: d[6] === "online" ? "Onlayn" : d[6] === "sync" ? "Sinxronlanmoqda" : "Offlayn",
+        badgeStyle: this.pill(d[6] === "offline" ? "#475569" : d[6] === "online" ? "#047857" : "#1D4ED8",
+          d[6] === "offline" ? "#F1F5F9" : d[6] === "online" ? "#D1FAE5" : "#DBEAFE"),
+        meta: d[1] + " · 10.20." + (30 + st.server) + ".1:8765 · v2.4.1 · oxirgi ko'rilgan " + d[8],
+        kioskCount: dTotal,
+        stats: [
+          { label: "Kiosklar", value: dSynced + " / " + dTotal },
+          { label: "Bugungi sessiyalar", value: "1 284" },
+          { label: "Kontent", value: "186 ta" },
+          { label: "Disk", value: d[5] + "% band" },
+        ],
+        kiosks: kioskNames.slice(0, dTotal).map((name, i) => {
+          const on = i < dSynced;
+          return {
+            name, sessions: on ? String(120 + i * 17) : "—",
+            cache: on ? (22 + i * 3) + " GB" : "—",
+            version: "2.4.1",
+            meta: "KIOSK-" + (st.server + 1) + "0" + (i + 1) + " · " + (on ? "onlayn " + (i + 1) + " soat" : "aloqa yo'q"),
+            dotStyle: this.dot(on ? "online" : "offline"),
+            state: on ? "Sinxron" : "Kutmoqda",
+            stateStyle: this.pill(on ? "#047857" : "#475569", on ? "#D1FAE5" : "#F1F5F9"),
+          };
+        }),
+        sessions: [
+          ["Vagon 1", "14:02", "18 daq", "Ilon vodiysi (kino)", "UZ"],
+          ["Vagon 3", "13:58", "42 daq", "Alpomish (audiokitob)", "UZ"],
+          ["Vagon 2", "13:41", "7 daq", "Xarita — yo'nalish", "RU"],
+          ["Vagon 5", "13:30", "1 s 12 daq", "Zumrad va Qimmat", "UZ"],
+          ["Vagon 1", "13:12", "24 daq", "O'tkan kunlar (kitob)", "UZ"],
+          ["Vagon 4", "12:55", "9 daq", "my.gov.uz (QR)", "EN"],
+        ].map(([kiosk, started, dur, content, lang]) => ({ kiosk, started, dur, content, lang })),
+      },
+
+      typeTabs: [["all", "Barchasi"], ["movie", "Kino"], ["cartoon", "Multfilm"], ["music", "Musiqa"], ["book", "Kitob"], ["audiobook", "Audiokitob"], ["ad", "Reklama"], ["site", "Saytlar"], ["route", "Bekatlar"]]
+        .map(([id, label]) => ({ label, style: this.chip(st.type === id), go: () => this.setState({ type: id }) })),
+      contentItems: st.type === "all" ? all : all.filter(c => c.type === st.type),
+      hasSelection: selIds.length > 0,
+      selectionLabel: selIds.length + " ta kontent tanlandi",
+      selectAllLabel: selIds.length ? "Tanlovni tozalash" : "Barchasini tanlash",
+      selectAll: () => this.setState(s => {
+        if (Object.keys(s.sel).some(k => s.sel[k])) return { sel: {} };
+        const n = {}; CONTENT.forEach((_, i) => n[i] = true); return { sel: n };
+      }),
+      clearSelection: () => this.setState({ sel: {} }),
+
+      jobs: [
+        ["clapperboard", "Ilon vodiysi — 1.8 GB", "12 serverga · 4 ta tugadi", "Yuklanmoqda", ACC, 68, "~14 daq", "To'xtatish",
+          [["Poyezd 076Ф", "ok"], ["Poyezd 010Ф", "ok"], ["Poyezd 054Ф", "run"], ["Poyezd 122Ф", "run"], ["+8", "idle"]]],
+        ["megaphone", "Reklama paketi (3 fayl)", "50 serverga · 47 ta tugadi", "Yakunlanmoqda", ACC, 94, "~2 daq", "To'xtatish",
+          [["47 server", "ok"], ["3 offlayn", "wait"]]],
+        ["headphones", "Alpomish — audiokitob", "8 offlayn serverga", "Navbatda", "#64748B", 0, "onlayn kutilmoqda", "Bekor qilish",
+          [["Poyezd 038Ф", "wait"], ["Poyezd 018Ф", "wait"], ["+6", "idle"]]],
+        ["trash", "Eski reklamalarni o'chirish", "50 serverdan", "Bajarildi", OK, 100, "5 daq oldin", "Hisobot",
+          [["50 server", "ok"]]],
+        ["music", "Musiqa to'plami — 42 trek", "Poyezd 018Ф", "Xato: litsenziya tugagan", BAD, 34, "to'xtadi", "Qayta urinish",
+          [["Poyezd 018Ф", "err"]]],
+      ].map(([icon, title, sub, state, col, pct, eta, action, targets]) => ({
+        title, sub, state, eta, action,
+        icon: this.ic(icon, 17, "#475569"),
+        iconStyle: "width:36px;height:36px;flex:0 0 36px;border-radius:11px;background:#F1F5F9;display:grid;place-items:center;font-size:16px",
+        stateStyle: this.pill(col === OK ? "#047857" : col === BAD ? "#B91C1C" : col === ACC ? "#1D4ED8" : "#475569",
+          col === OK ? "#D1FAE5" : col === BAD ? "#FEE2E2" : col === ACC ? "#DBEAFE" : "#F1F5F9"),
+        barStyle: "height:100%;width:" + pct + "%;border-radius:4px;background:" + (pct === 0 ? "#CBD5E1" : col) +
+          (state === "Yuklanmoqda" ? ";background-image:linear-gradient(115deg,rgba(255,255,255,.28) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.28) 50%,rgba(255,255,255,.28) 75%,transparent 75%);background-size:28px 28px;animation:barFlow .9s linear infinite" : ""),
+        targets: targets.map(([label, s]) => ({
+          label,
+          style: this.pill(s === "ok" ? "#047857" : s === "err" ? "#B91C1C" : s === "run" ? "#1D4ED8" : "#475569",
+            s === "ok" ? "#D1FAE5" : s === "err" ? "#FEE2E2" : s === "run" ? "#DBEAFE" : "#F1F5F9"),
+        })),
+      })),
+
+      statKpis: [
+        { label: "Bugungi sessiyalar", value: "18 420", note: "o'rtacha 14 daq" },
+        { label: "Ko'rilgan video", value: "6 108", note: "eng ko'p: kino" },
+        { label: "Tinglangan audio", value: "3 947", note: "audiokitob ustun" },
+        { label: "QR o'tishlar", value: "812", note: "my.gov.uz yetakchi" },
+      ],
+      chart: [42, 55, 48, 61, 73, 88, 96, 70, 64, 78, 84, 91, 99, 86].map((v, i) => ({
+        label: (22 + i) % 31 + 1 + "",
+        style: "width:100%;border-radius:6px 6px 3px 3px;height:" + v + "%;background:" + (i === 13 ? ACC : "#BFDBFE"),
+      })),
+      topContent: [["Ilon vodiysi", "2 140"], ["Zumrad va Qimmat", "1 870"], ["Alpomish (audio)", "1 412"], ["O'tkan kunlar", "1 108"], ["Sherzod — Yurak", "904"], ["Sahroda uch kun", "731"]]
+        .map(([title, views], i) => ({ title, views, barStyle: this.bar(100 - i * 14, i === 0 ? ACC : "#BFDBFE") })),
+
+      logs: [
+        ["14:22:41", "INFO", "sync", "Poyezd 076Ф · KIOSK-101 — 'Ilon vodiysi' keshga yozildi (1.8 GB)"],
+        ["14:22:03", "INFO", "ws", "Poyezd 054Ф — 3 ta kiosk ulandi"],
+        ["14:19:58", "WARN", "disk", "Poyezd 090Ф — disk 93% band, eski kesh tozalanmoqda"],
+        ["14:11:12", "ERROR", "queue", "Poyezd 018Ф — litsenziya imzosi yaroqsiz, tarqatish to'xtadi"],
+        ["14:04:30", "INFO", "deploy", "Reklama paketi 47/50 serverga yetkazildi"],
+        ["13:58:17", "WARN", "net", "Poyezd 038Ф — WS uzildi, 30s dan keyin qayta ulanish"],
+        ["13:47:02", "INFO", "stats", "12 840 ta event qabul qilindi (batch)"],
+        ["13:31:44", "INFO", "auth", "Admin kirdi — 84.54.x.x"],
+        ["13:20:09", "INFO", "content", "Yangi kontent yuklandi: Alpomish (audiokitob, 420 MB)"],
+        ["13:02:55", "ERROR", "stream", "Poyezd 062Ф — 3 ta Range so'rovi 416 qaytardi"],
+        ["12:55:31", "INFO", "cache", "Poyezd 044Ф keshi 12 GB tozalandi"],
+        ["12:41:08", "INFO", "ws", "E'lon yuborildi: 'Buxoro bekatiga 20 daqiqa'"],
+      ].map(([time, level, source, msg]) => ({
+        time, level, source, msg,
+        levelStyle: "width:56px;flex:0 0 56px;font-weight:700;color:" + (level === "ERROR" ? "#F87171" : level === "WARN" ? "#FBBF24" : "#4ADE80"),
+      })),
+
+      mobileKpis: [
+        { label: "Onlayn", value: "42/50" }, { label: "Kiosklar", value: "318" },
+        { label: "Navbat", value: "3" }, { label: "Xato", value: "2" },
+      ],
+      mobileAlerts: [
+        ["Poyezd 038Ф", "3 soatdan beri offlayn", "Offlayn", "#475569", "#F1F5F9", "offline"],
+        ["Poyezd 018Ф", "Litsenziya muddati tugadi", "Qulf", "#B91C1C", "#FEE2E2", "offline"],
+        ["Poyezd 090Ф", "Disk 93% band", "Disk", "#B45309", "#FEF3C7", "sync"],
+        ["Poyezd 054Ф", "Sinxronizatsiya 63%", "Sinx", "#1D4ED8", "#DBEAFE", "sync"],
+      ].map(([name, note, tag, fg, bg, s]) => ({ name, note, tag, tagStyle: this.pill(fg, bg), dotStyle: this.dot(s) })),
+      mobileTabs: [["dashboard", "Holat", true], ["server", "Serverlar", false], ["send", "Navbat", false], ["fileText", "Loglar", false]]
+        .map(([icon, label, on]) => ({
+          label,
+          icon: this.ic(icon, 17, on ? ACC : "#94A3B8", 1.9),
+          style: "flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;color:" + (on ? ACC : "#94A3B8"),
+        })),
+      mobileNotes: [
+        "Push-bildirishnoma: server 15 daqiqadan ortiq offlayn bo'lsa yoki tarqatishda xato chiqsa.",
+        "Ro'yxat faqat muammoli qurilmalarni ko'rsatadi — 42 ta sog'lom server ro'yxatni to'ldirmaydi.",
+        "Tarqatish va o'chirish faqat desktopda — telefonda tasodifan bosib yuborish xavfi yo'q.",
+      ],
+
+      planSteps: [
+        { n: "1", title: "Bulut relay (yangi) — serverlar o'zi ulanadi", body: "Poyezdda oq IP yo'q. Har bir server bulutga doimiy outbound WSS ochadi va o'zini ro'yxatdan o'tkazadi; buyruqlar shu kanal orqali qaytadi. Mavjud ws.py deyarli o'zgarmaydi — faqat 'client' tarafi qo'shiladi.", code: "# server/cloud_client.py (yangi)\nWSS wss://cloud.kiosk.uz/agent?token=<server_token>\n→ {\"type\":\"register\",\"server_id\",\"version\",\"kiosks\":[...],\"disk\",\"license\"}\n← {\"type\":\"deploy\",\"job_id\",\"items\":[{id,type,sha256,size,url}]}\n← {\"type\":\"delete\"|\"cache_clear\"|\"announce\"|\"reboot\"|\"sync_now\"}\n→ {\"type\":\"progress\",\"job_id\",\"pct\",\"bytes\"}  # har 2s" },
+        { n: "2", title: "Heartbeat kengaytiriladi", body: "Hozirgi POST /api/heartbeat kiosk → server uchun. Endi server → bulut uchun ham xuddi shu shakl: 30 soniyada holat, disk, kiosk ro'yxati, litsenziya, versiya. Panelning 'oxirgi ko'rilgan' ustuni shundan.", code: "POST https://cloud/api/servers/{id}/heartbeat\n{ \"online_kiosks\": 8, \"disk_pct\": 62, \"license\": \"active\",\n  \"content_hash\": \"sha256:…\",   # farq bo'lsa bulut sync yuboradi\n  \"queue\": {\"active\": 1, \"pending\": 2} }" },
+        { n: "3", title: "Kontent — bulutda manba, serverda nusxa", body: "Fayl bulutga bir marta yuklanadi (S3/MinIO). Serverga faqat imzolangan vaqtinchalik URL yuboriladi; u faylni Range bilan o'zi tortadi — uzilsa to'xtagan joyidan davom etadi, sha256 bilan tekshiriladi. db.py ga 'origin' va 'sha256' ustunlari qo'shiladi.", code: "# server tomonida (yangi downloader)\nGET <signed_url>  Range: bytes=734003200-\n→ content/media/<id>.mp4  + sha256 tekshiruv\n→ db.upsert_content(id, …, origin='cloud', rev=17)" },
+        { n: "4", title: "O'chirish va sinxronizatsiya — 'desired state'", body: "Har bir serverda qanday kontent bo'lishi kerakligini bulut belgilaydi (revision raqami bilan). Server heartbeatda o'z rev'ini aytadi, farq bo'lsa bulut manifest yuboradi: nimani yuklash, nimani o'chirish. Bu 'yuklash' va 'o'chirish'ni bitta mexanizmga aylantiradi.", code: "GET /api/servers/{id}/manifest?rev=16\n{ \"rev\": 17, \"add\": [ids…], \"remove\": [ids…] }\n# server: remove → db o'chirish + yetim fayl tozalash (allaqachon bor)" },
+        { n: "5", title: "Statistika va loglar bulutga", body: "Kiosk → server statistikasi allaqachon bor (stats_events). Server uni 5 daqiqada bulutga batch qilib yuboradi; offlaynda diskda navbatda turadi (kiosk services/stats.py dagi mantiqning aynan o'zi, bir qavat yuqorida).", code: "POST /api/servers/{id}/stats  [ {ts, kiosk_id, screen, content_id, dur}… ]\nPOST /api/servers/{id}/logs   [ {ts, level, source, msg}… ]" },
+        { n: "6", title: "Xavfsizlik", body: "Har bir serverga bir martalik 'enrollment token' beriladi (installerga yoziladi), u doimiy server_token'ga almashadi. Kanal WSS + TLS; buyruqlar Ed25519 bilan imzolanadi — mavjud security.py dagi imzo mexanizmi qayta ishlatiladi, faqat kalitlar tomoni almashadi (endi bulut imzolaydi, server tekshiradi).", code: "POST /api/enroll { \"enroll_token\", \"hw_id\" } → { \"server_id\", \"server_token\" }\n# har bir buyruq: {\"payload\":…, \"sig\": ed25519(cloud_priv)}\n# server: security.verify(cloud_pub, payload, sig)" },
+      ],
+
+      deployOpen: st.deploy,
+      uploadOpen: st.upload,
+      step1: st.dstep === 1, step2: st.dstep === 2, step3: st.dstep === 3,
+      deploySub: st.dstep === 1 ? "1-qadam: nimani yuborish" : st.dstep === 2 ? "2-qadam: qaysi serverlarga" : "3-qadam: tasdiqlash",
+      deploySteps: [[1, "Kontent"], [2, "Manzil"], [3, "Tasdiq"]].map(([n, label]) => ({
+        n, label,
+        numStyle: "width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:800;" +
+          (st.dstep >= n ? "background:" + ACC + ";color:#fff" : "background:#F1F5F9;color:#94A3B8"),
+        labelStyle: "font-size:12px;font-weight:700;color:" + (st.dstep >= n ? "#0F172A" : "#94A3B8"),
+      })),
+      deployContent: (selIds.length ? selIds.map(i => CONTENT[i]) : [CONTENT[0], CONTENT[5], CONTENT[7]]).map(c => {
+        const [label, fg, bg, icon] = TYPES[c[1]];
+        return { title: c[0], icon: this.ic(icon, 19, fg, 1.7), meta: c[2] + " · " + c[3], typeLabel: label, typeStyle: this.pill(fg, bg) };
+      }),
+      pickServers: servers.map(s => {
+        const on = st.picked[s.i] !== false;
+        return {
+          name: s.name, sub: s.route + " · " + s.total + " kiosk",
+          dotStyle: s.dotStyle,
+          state: s.state === "offline" ? "Offlayn" : "Onlayn",
+          stateStyle: this.pill(s.state === "offline" ? "#475569" : "#047857", s.state === "offline" ? "#F1F5F9" : "#D1FAE5"),
+          rowStyle: "display:flex;align-items:center;gap:11px;padding:12px 14px;border-radius:13px;cursor:pointer;background:#fff;border:1.5px solid " + (on ? ACC : "#E2E8F0"),
+          boxStyle: "width:20px;height:20px;flex:0 0 20px;border-radius:6px;display:grid;place-items:center;font-size:11px;font-weight:800;" +
+            (on ? "background:" + ACC + ";" + this.ic("check", 12, "#fff", 3.2) : "background:#fff;border:2px solid #CBD5E1"),
+          toggle: () => this.setState(p => ({ picked: { ...p.picked, [s.i]: p.picked[s.i] === false } })),
+        };
+      }),
+      pickedLabel: servers.filter(s => st.picked[s.i] !== false).length + " ta server tanlandi",
+      pickAllServers: () => this.setState({ picked: {} }),
+      clearServers: () => this.setState(() => { const p = {}; SERVERS.forEach((_, i) => p[i] = false); return { picked: p }; }),
+      summary: [
+        { label: "Kontent", value: (selIds.length || 3) + " fayl" },
+        { label: "Hajm", value: "2.7 GB" },
+        { label: "Serverlar", value: servers.filter(s => st.picked[s.i] !== false).length + " ta" },
+        { label: "Kiosklar", value: "58 ta" },
+      ],
+      options: [
+        ["Onlayn serverlarga darhol yuborish", "Offlayn bo'lganlari navbatda kutadi va o'zi tortib oladi", true],
+        ["sha256 mos kelsa qayta yubormaslik", "Serverda allaqachon bor fayl SIM-trafikni behuda sarflamaydi", true],
+        ["Tungi soatlarda yuborish (00:00 – 06:00)", "SIM-trafikni tejash uchun", false],
+      ].map(([title, sub, on]) => ({
+        title, sub,
+        toggleStyle: "width:38px;height:22px;flex:0 0 38px;border-radius:999px;display:flex;align-items:center;padding:3px;cursor:pointer;background:" + (on ? ACC : "#CBD5E1"),
+        knobStyle: "width:16px;height:16px;border-radius:50%;background:#fff;margin-left:" + (on ? "16px" : "0"),
+      })),
+      nextLabel: st.dstep === 3 ? "Tarqatishni boshlash" : "Davom etish →",
+      backStyle: "border:1px solid #E2E8F0;border-radius:10px;padding:10px 18px;font-size:13px;font-weight:700;color:#334155;cursor:pointer;" + (st.dstep === 1 ? "opacity:.4;pointer-events:none" : ""),
+      prevStep: () => this.setState(s => ({ dstep: Math.max(1, s.dstep - 1) })),
+      nextStep: () => this.setState(s => s.dstep === 3 ? { deploy: false, page: "queue", sel: {} } : { dstep: s.dstep + 1 }),
+
+      mediaIcon: this.ic(UT[ut][4], 17, "#475569"),
+      textIcon: this.ic("fileText", 16, "#94A3B8"),
+      plusIcon: this.ic("plus", 15, "#94A3B8", 2.4),
+      coverIcon: this.ic("image", 26, st.cover ? "#2563EB" : "#94A3B8", 1.7),
+      coverBoxStyle: "height:214px;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:12px;cursor:pointer;" +
+        (st.cover ? "background:#EFF6FF;border:2px solid " + ACC : "background:#FBFCFE;border:2px dashed #CBD5E1"),
+      coverState: st.cover ? "ilon-vodiysi.jpg" : "Muqova yo'q",
+      coverHint: st.cover ? "1200 × 1600 · 340 KB" : "bosing yoki tashlang",
+      toggleCover: () => this.setState(s => ({ cover: !s.cover })),
+      mediaBar: this.bar(68, ACC),
+
+      upTypes: UTK.map(k => ({
+        label: UT[k][0],
+        go: () => this.setState({ utype: k }),
+        style: "border-radius:8px;padding:7px 11px;font-size:11.5px;font-weight:700;cursor:pointer;border:1px solid " +
+          (ut === k ? ACC + ";background:" + ACC + ";color:#fff" : "#E2E8F0;background:#fff;color:#64748B"),
+      })),
+      upTitleLabel: UT[ut][1], upAuthorLabel: UT[ut][2], upCoverLabel: UT[ut][3],
+      upTitleVal: ut === "music" ? "Yurak" : ut === "book" || ut === "audiobook" ? "O'tkan kunlar" : "Ilon vodiysi",
+      upAuthorHint: UT[ut][2] + " ismini yozing",
+      upGenre: ut === "music" ? "Estrada" : ut === "cartoon" ? "Multfilm" : "Drama",
+      upTab: ut === "cartoon" ? "Multfilmlar" : ut === "music" ? "Musiqa" : "Kinolar",
+      upTabRow: ut === "book" ? "display:none" : "",
+      upDurRow: ut === "book" ? "display:none" : "",
+      upDur: ut === "music" ? "252 soniya" : "6 730 soniya",
+      upMediaLabel: ut === "book" ? "Audio fayl (ixtiyoriy)" : "Media fayl",
+      upTextRow: (ut === "book" || ut === "audiobook") ? "" : "display:none",
+      upFlags: [
+        ["visible", "Kiosklarda ko'rsatilsin", "Belgi olib tashlansa server bu kontentni kioskka umuman bermaydi"],
+        ["rec", "Tavsiya blokida ko'rsatilsin", "Bosh sahifadagi «Tavsiya etamiz» qatorida chiqadi"],
+        ["cache", "Kiosklarga yuklab qo'yilsin (lokal kesh)", "Belgilanmasa — faqat serverdan striming, oflaynda ochilmaydi"],
+      ].filter(x => !(x[0] === "cache" && false)).map(([k, title, sub]) => {
+        const on = st.flags[k] !== false;
+        return {
+          title, sub,
+          rowStyle: "display:flex;align-items:flex-start;gap:12px;cursor:pointer",
+          toggleStyle: "width:36px;height:21px;flex:0 0 36px;border-radius:999px;display:flex;align-items:center;padding:3px;background:" + (on ? ACC : "#CBD5E1"),
+          knobStyle: "width:15px;height:15px;border-radius:50%;background:#fff;margin-left:" + (on ? "15px" : "0"),
+          toggle: () => this.setState(s => ({ flags: { ...s.flags, [k]: s.flags[k] === false } })),
+        };
+      }),
+      uploadNote: st.flags.visible === false
+        ? "«Kiosklarda ko'rsatilsin» o'chirilgan — tarqatilsa ham kioskda ko'rinmaydi"
+        : st.cover ? "Muqova kiosk kartochkasi va tafsilot ekranida ishlatiladi"
+        : "Muqova tanlanmagan — kioskda bo'sh kartochka bo'lib ko'rinadi",
+    };
+  }
+}
+</script>
+</body>
+</html>
