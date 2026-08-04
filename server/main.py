@@ -462,7 +462,7 @@ def route():
 # `exit_pin_hash` ATAYLAB beriladi: kiosk chiqish PIN'ini oflayn (keshdan)
 # tekshiradi; endpoint API kalit bilan yopiq — bu xesh faqat ishonchli
 # (kalitli) klientlarga ketadi. Uni kalitsiz kanalga (masalan, veb-proksi)
-# uzatish TAQIQLANADI — kiosk/server/api/settings.ts o'z, yanada tor oq
+# uzatish TAQIQLANADI — web/server/api/settings.ts o'z, yanada tor oq
 # ro'yxatini qo'llaydi.
 _KIOSK_SETTINGS = {
     "train_name", "route", "depart_time",

@@ -114,12 +114,33 @@ def ensure_firewall(port, node_path=None):
 def _default_web_dir():
     """Veb ilova papkasini topadi (yo'q bo'lsa None)."""
     if getattr(sys, "frozen", False):
-        d = os.path.join(os.path.dirname(sys.executable), "web")
-    else:
-        # ui/ -> server/ -> <repo>/kiosk
-        repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        d = os.path.join(os.path.dirname(repo), "kiosk")
+        # PyInstaller (onedir): bundle qilingan `web/` `_internal/` ichiga
+        # tushadi (sys._MEIPASS). Ba'zi tuzilishlarda exe yonida ham bo'lishi
+        # mumkin — ikkala joyni ham tekshiramiz.
+        cands = []
+        mei = getattr(sys, "_MEIPASS", None)
+        if mei:
+            cands.append(os.path.join(mei, "web"))
+        cands.append(os.path.join(os.path.dirname(sys.executable), "web"))
+        for c in cands:
+            if os.path.isdir(c):
+                return c
+        return None
+    # ui/ -> server/ -> <repo>/web
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    d = os.path.join(os.path.dirname(repo), "web")
     return d if os.path.isdir(d) else None
+
+
+def _bundled_node():
+    """Frozen (exe) rejimda exe yoniga qo'yilgan node.exe (installer bundle
+    qiladi — mashinaga alohida Node.js o'rnatish shart bo'lmaydi). Topilmasa
+    None (tizim PATH'idan qidiriladi)."""
+    if getattr(sys, "frozen", False):
+        p = os.path.join(os.path.dirname(sys.executable), "node.exe")
+        if os.path.isfile(p):
+            return p
+    return None
 
 
 # web.log shu hajmdan oshsa yangi ishga tushishda .1 nusxaga suriladi
@@ -193,7 +214,8 @@ class WebServer:
         _kill_orphan_web()
 
         built = os.path.join(web_dir, ".output", "server", "index.mjs")
-        node = shutil.which("node")
+        # Avval exe yoniga bundle qilingan node.exe, keyin tizim PATH'i.
+        node = _bundled_node() or shutil.which("node")
         npm = shutil.which("npm") or shutil.which("npm.cmd")
 
         if os.path.isfile(built) and node:

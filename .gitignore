@@ -30,10 +30,10 @@ server/build/
 server/dist/
 server/release/
 server/Output/
-user/build/
-user/dist/
-user/release/
-user/Output/
+kiosk/build/
+kiosk/dist/
+kiosk/release/
+kiosk/Output/
 
 # Demo / uploaded media (server ilovasi ichida qayta to'ldiriladi)
 server/content/ads/
@@ -51,7 +51,7 @@ content/media/
 .env
 *.env
 # server.txt'da API kalit bor — git'ga tushmasin (installer/dev yozadi)
-user/server.txt
+kiosk/server.txt
 # Server kriptografik shaxsi — security.py birinchi ishga tushishda yaratadi.
 # Maxfiy imzo kaliti va TLS kaliti HECH QACHON git'ga tushmasin.
 signing_key.pem
@@ -63,8 +63,8 @@ server/server_cert.pem
 # Kiosk ishonch fayli (installer joylaydi — ichida API kalit bor)
 trust.json
 server_cert.crt
-user/trust.json
-user/server_cert.crt
+kiosk/trust.json
+kiosk/server_cert.crt
 
 # Runtime crash log (main.py yozadi)
 crash.log
@@ -73,14 +73,14 @@ crash.log.1
 # Internet ob-havo keshi (weather.py yuklab oladi — qayta tiklanadi)
 weather_cache.json
 server/weather_cache.json
-user/weather_cache.json
+kiosk/weather_cache.json
 
 # Runtime loglar va oflayn kesh (logsetup.py / cache.py yozadi)
 logs/
 cache/
 server/logs/
-user/logs/
-user/cache/
+kiosk/logs/
+kiosk/cache/
 
 # Bekat xaritasi — yuklab olinadigan (katta) assetlar (fetch_map_assets.py)
 server/assets/map/vendor/

@@ -15,8 +15,19 @@ import os
 import shutil
 import struct
 import subprocess
+import sys
 
 VIDEO_EXTS = {".mp4", ".m4v", ".mov"}
+
+
+def _ffmpeg_path() -> str | None:
+    """ffmpeg.exe yo'li. Frozen (exe) rejimda avval exe yoniga bundle qilingan
+    ffmpeg.exe (installer qo'shadi), so'ng tizim PATH'i tekshiriladi."""
+    if getattr(sys, "frozen", False):
+        p = os.path.join(os.path.dirname(sys.executable), "ffmpeg.exe")
+        if os.path.isfile(p):
+            return p
+    return shutil.which("ffmpeg")
 
 
 def _top_atoms(path: str, limit: int = 12) -> list[str]:
@@ -61,7 +72,7 @@ def ensure_faststart(path: str) -> bool:
         return False
     if is_faststart(path):
         return False
-    ffmpeg = shutil.which("ffmpeg")
+    ffmpeg = _ffmpeg_path()
     if not ffmpeg:
         return False
     tmp = path + ".fast.tmp.mp4"

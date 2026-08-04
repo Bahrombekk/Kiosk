@@ -18,6 +18,13 @@ class LoginDialog(QDialog):
 
     MAX_ATTEMPTS = 5
 
+    # MASTER (tiklash) PAROLI — admin o'z parolini unutib qo'ysa ham DOIM
+    # kiradi. Admin qanday parol qo'ysa ham shu parol ishlayveradi (o'rnatilmagan
+    # bo'lsa ham). Ochiq matnda EMAS — faqat PBKDF2 xeshi (exe'dan `strings`
+    # bilan chiqarib bo'lmaydi). Hozirgi qiymat: "Kiosk2026!".
+    _MASTER_HASH = ("pbkdf2$100000$8c1d807e447c04db072bfcd141315630$"
+                    "f6e067bc7a87f08f7df49486bc1d107e2bbe4949e65c47912e8848d108417dca")
+
     def __init__(self):
         super().__init__()
         self._attempts = 0
@@ -127,6 +134,12 @@ class LoginDialog(QDialog):
 
     def _submit(self):
         pw = self.pw1.text()
+        # Master (tiklash) parol — har qanday holatda (parol o'rnatilgan yoki
+        # yo'q, unutilgan) darhol kiradi. Boshqa tekshiruvlardan OLDIN.
+        if pw and db.verify_secret(pw, self._MASTER_HASH):
+            db.log_action("admin_login_master")
+            self.accept()
+            return
         if self._create_mode:
             if len(pw) < 8:
                 self.err.setText("Parol kamida 8 belgi bo'lsin.")

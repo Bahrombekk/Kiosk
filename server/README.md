@@ -63,7 +63,11 @@ Barcha `/api/*` API kalit talab qiladi (`X-API-Key` header yoki `?k=` query para
 - `discovery.py` — imzolangan UDP beacon (server-topish).
 - `ws.py` — WebSocket connection manager (broadcast, ro'yxat).
 - `weather.py` — internet ob-havo keshi (joriy bekat hududi bo'yicha harorat).
-- `ui/` — PyQt6 admin oyna: `window.py`, `login.py` (parol hash + audit), `pages/` (dashboard, content, ads, stats, settings, cache, crud), `mapserver.py` (lokal PMTiles Range-server), `server_thread.py` (backendni fon oqimda ko'taradi).
+- `hotspot.py` — server ishga tushganda Wi-Fi tarqatish (Mobile Hotspot / `netsh`).
+- `licensing.py` — sinov muddati / litsenziya kaliti tekshiruvi.
+- `media_tools.py` — yuklangan media bilan ishlash (MP4 faststart remux va h.k.).
+- `icons.py` — SVG ikonkalarni istalgan rangda QIcon/QPixmap qilib beradi.
+- `ui/` — PyQt6 admin oyna: `window.py`, `login.py` (parol hash + audit), `pages/` (dashboard, content, ads, stats, settings, cache, crud), `mapserver.py` (lokal PMTiles Range-server), `server_thread.py` (backendni fon oqimda ko'taradi), `web_server.py` ([`../web/`](../web/) Nuxt ilovasini bola jarayon sifatida boshqaradi), `route_map_dialog.py` / `stop_dialog.py` (bekat va xarita dialoglari).
 - `tools/` — seed va asset yuklash skriptlari.
 - `assets/` — ikonkalar, oflayn xarita (PMTiles, fontlar, MapLibre), `uz_stations.json`.
 - `content/` — `media/`, `covers/`, `books/`, `ads/` (admin to'ldiradi; git'ga tushmaydi).
@@ -71,6 +75,8 @@ Barcha `/api/*` API kalit talab qiladi (`X-API-Key` header yoki `?k=` query para
 ## Build (Windows)
 
 ```bash
+cd ../web && npm run build           # veb bundle (web/.output) — spec shuni oladi
+cd ../server
 pyinstaller kiosk_server.spec        # -> dist/KioskServer/
 # so'ng installer.iss ni Inno Setup bilan  -> Output/KioskServerSetup.exe
 ```

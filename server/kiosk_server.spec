@@ -17,15 +17,15 @@ datas = [
 
 # Veb (Nuxt) build'ini exe yonidagi `web/` papkaga qo'shamiz. web_server.py
 # frozen rejimda `<exe>/web/.output/server/index.mjs` ni qidiradi (node bilan
-# ishga tushiradi). Avval `kiosk/` da `npm run build` bajarilgan bo'lishi kerak.
+# ishga tushiradi). Avval `web/` da `npm run build` bajarilgan bo'lishi kerak.
 # DIQQAT: ishga tushiriladigan mashinada Node.js (node.exe PATH'da) o'rnatilgan
 # bo'lishi shart — .output node runtime bilan ishlaydi (bundle qilinmaydi).
-_web_output = os.path.join("..", "kiosk", ".output")
+_web_output = os.path.join("..", "web", ".output")
 if os.path.isdir(_web_output):
     datas.append((_web_output, os.path.join("web", ".output")))
 else:
-    print("OGOHLANTIRISH: kiosk/.output topilmadi — veb bundle QILINMAYDI. "
-          "Avval `kiosk/` papkada `npm run build` bajaring.")
+    print("OGOHLANTIRISH: web/.output topilmadi — veb bundle QILINMAYDI. "
+          "Avval `web/` papkada `npm run build` bajaring.")
 
 a = Analysis(
     ["admin.py"],
@@ -64,7 +64,7 @@ exe = EXE(
     strip=False,
     upx=False,
     console=False,
-    icon="../user/assets/design/app.ico",
+    icon="../kiosk/assets/design/app.ico",
 )
 
 coll = COLLECT(

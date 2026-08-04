@@ -6,12 +6,14 @@ ko'radi/tinglaydi, safar yo'nalishini xaritada kuzatadi, foydali saytlarga QR ko
 o'tadi. Mazmun bitta **server (admin) dasturi** orqali boshqariladi; vagondagi har bir
 kiosk shu serverdan kontent oladi va internet bo'lmasa lokal keshdan ishlaydi.
 
-Loyiha ikki mustaqil **PyQt6 desktop ilovasi**dan iborat:
+Loyiha uch qismdan iborat — ikki mustaqil **PyQt6 desktop ilovasi** va bitta
+**veb-ilova** (kiosk ilovasining brauzerdagi muqobili):
 
 | Qism | Papka | Vazifasi | Build natijasi |
 |---|---|---|---|
 | **Server (admin)** | [server/](server/) | Kontent katalogini boshqaradi, media striming qiladi, kiosklarni real vaqtda kuzatadi | `KioskServerSetup.exe` |
-| **Kiosk (user)** | [user/](user/) | Vagondagi sensorli ekran ilovasi (fullscreen, qulflangan) | `KioskSetup.exe` |
+| **Kiosk (vagon ekrani)** | [kiosk/](kiosk/) | Vagondagi sensorli ekran ilovasi (PyQt6, fullscreen, qulflangan) | `KioskSetup.exe` |
+| **Veb** | [web/](web/) | Kioskning veb versiyasi (Nuxt 4 SPA) — yo'lovchi o'z telefonidan/brauzerdan kiradi | server bilan birga (`web/.output`) |
 
 ---
 
@@ -48,7 +50,7 @@ Loyiha ikki mustaqil **PyQt6 desktop ilovasi**dan iborat:
         ▼                           ▼                           ▼
   ┌──────────────┐          ┌──────────────┐          ┌──────────────┐
   │  KIOSK #1    │          │  KIOSK #2    │   ...    │  KIOSK #N     │
-  │  user/ ilova │          │  user/ ilova │          │  user/ ilova  │
+  │ kiosk/ ilova │          │ kiosk/ ilova │          │ kiosk/ ilova  │
   │ + lokal kesh │          │ + lokal kesh │          │ + lokal kesh  │
   └──────────────┘          └──────────────┘          └──────────────┘
 ```
@@ -60,6 +62,8 @@ Loyiha ikki mustaqil **PyQt6 desktop ilovasi**dan iborat:
   fonda lokal diskka keshlaydi.
 - Internet/server uzilsa kiosk **oflayn rejimga** o'tadi: keshlangan katalog va media
   ishlashda davom etadi, faqat keshlanmagan striming to'xtaydi.
+- **Veb** (`web/`) server ilovasi ichida bola jarayon sifatida ko'tariladi (Nuxt/node,
+  80-port): yo'lovchi vagon Wi-Fi'iga ulanib brauzerdan bir xil kontentni ochadi.
 
 ---
 
@@ -132,12 +136,12 @@ Kiosk/
 │   ├── kiosk_server.spec        # PyInstaller spec
 │   └── requirements.txt
 │
-├── user/                        # KIOSK (foydalanuvchi) ilovasi
+├── kiosk/                       # KIOSK (vagon ekrani) ilovasi — PyQt6
 │   ├── main.py                  # kiosk oyna, ulanish, navigatsiya, qulf
 │   ├── core/                    # config, theme, i18n, cache, security(ExitGuard),
 │   │                            #   netpin/trust (TLS pinning), pinhash, logsetup
 │   ├── services/                # api, ws_client, discovery, health, ads, stats,
-│   │                            #   media_cache, maptiles, stream_proxy
+│   │                            #   media_cache, stream_proxy
 │   ├── screens/                 # home, map, videos, books, sites, connecting
 │   ├── players/                 # video, audio, reader
 │   ├── widgets/                 # navbar, card, cover, banner, screensaver,
@@ -148,7 +152,17 @@ Kiosk/
 │   ├── setup_kiosk_user.ps1     # kiosk foydalanuvchisini yaratish skripti
 │   ├── installer.iss / kiosk.spec / requirements.txt
 │
-└── Qo'llanmalar/                # dastlabki qoralama/prototip (arxiv)
+├── web/                         # VEB ilova (Nuxt 4 SPA) — kioskning brauzer muqobili
+│   ├── pages/                   # index, videos, books, maps, websites
+│   ├── components/              # layout/, ui/, views/ (bo'limlar bo'yicha)
+│   ├── composables/             # useAds, useStats, useContentLang, useVideoFormatting
+│   ├── server/                  # Nitro proksi: api/*, utils/, plugins/ (X-API-Key, TLS)
+│   ├── i18n/locales/            # uz, ru, en
+│   ├── assets/ · public/        # uslublar, svg, shriftlar, geojson
+│   ├── deploy/                  # veb-kiosk PC uchun avtostart skriptlari
+│   └── nuxt.config.ts / package.json
+│
+└── docs/                        # qo'llanmalar (.docx) va yo'nalish jadvallari (.xlsx)
 ```
 
 > **Eslatma:** `content/`, `cache/`, `logs/`, `*.db`, TLS/imzo kalitlari (`*.pem`),
@@ -185,10 +199,10 @@ python tools/seed_route_xiva.py    # 076Ф Xiva yo'nalishi jadvali
 python tools/fetch_map_assets.py   # oflayn xarita assetlari (MapLibre + PMTiles)
 ```
 
-### 2. Kiosk (user)
+### 2. Kiosk (vagon ekrani)
 
 ```bash
-cd user
+cd kiosk
 pip install -r requirements.txt
 python main.py
 ```
@@ -207,6 +221,18 @@ python main.py
 **Texnik tugmalar (ishlab chiqishda):**
 - `Ctrl+Shift+Q` — chiqish PIN oynasi
 - Soat ustiga **10 marta** tez teginish — chiqish PIN (sensorli ekranlar uchun)
+
+### 3. Veb (Nuxt)
+
+```bash
+cd web
+npm install
+npm run dev        # http://localhost:3000 (--host bilan LANda ham)
+```
+
+Nuxt Nitro proksi Python serverga ulanadi (`NUXT_KIOSK_SERVER`, `NUXT_KIOSK_API_KEY`) —
+batafsil [web/README.md](web/README.md). Server ilovasi ichidan ishga tushirilganda bu
+o'zgaruvchilar avtomatik beriladi.
 
 ---
 
@@ -283,7 +309,7 @@ Bir necha mustaqil qatlam (har biri alohida ham himoya beradi):
 - **Maxfiy kalitlar** — `*.pem`, `signing_key.pem`, `trust.json` hech qachon git'ga
   tushmaydi (birinchi ishga tushishda yaratiladi).
 
-Batafsil: [user/DEPLOYMENT-LOCKDOWN.md](user/DEPLOYMENT-LOCKDOWN.md).
+Batafsil: [kiosk/DEPLOYMENT-LOCKDOWN.md](kiosk/DEPLOYMENT-LOCKDOWN.md).
 
 ---
 
@@ -292,13 +318,17 @@ Batafsil: [user/DEPLOYMENT-LOCKDOWN.md](user/DEPLOYMENT-LOCKDOWN.md).
 Windows uchun **PyInstaller** (paketlash) + **Inno Setup** (installer):
 
 ```bash
+# Veb (server bundle'iga tushadi — server'dan OLDIN)
+cd web
+npm run build                        # -> web/.output
+
 # Server
-cd server
-pyinstaller kiosk_server.spec        # -> dist/KioskServer/
+cd ../server
+pyinstaller kiosk_server.spec        # -> dist/KioskServer/ (+ web/.output)
 # so'ng installer.iss ni Inno Setup bilan kompilyatsiya  -> Output/KioskServerSetup.exe
 
-# Kiosk
-cd user
+# Kiosk (vagon ekrani)
+cd ../kiosk
 pyinstaller kiosk.spec               # -> dist/Kiosk/ (VLC bundle bilan)
 # so'ng installer.iss ni Inno Setup bilan kompilyatsiya  -> Output/KioskSetup.exe
 ```
@@ -314,7 +344,7 @@ pyinstaller kiosk.spec               # -> dist/Kiosk/ (VLC bundle bilan)
 
 Poyezdda yo'lovchi chiqib keta olmaydigan to'liq qulflash bosqichlari (alohida
 foydalanuvchi + shell almashtirish, registry siyosatlari, watchdog, tiklanish yo'li)
-**[user/DEPLOYMENT-LOCKDOWN.md](user/DEPLOYMENT-LOCKDOWN.md)** da batafsil.
+**[kiosk/DEPLOYMENT-LOCKDOWN.md](kiosk/DEPLOYMENT-LOCKDOWN.md)** da batafsil.
 
 Tezkor xulosa:
 1. `KioskSetup.exe` → server manzili + API kalit kiriting → "qulflash" belgisini qoldiring.

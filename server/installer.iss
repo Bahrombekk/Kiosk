@@ -32,7 +32,7 @@ SolidCompression=yes
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
-SetupIconFile=..\user\assets\design\app.ico
+SetupIconFile=..\kiosk\assets\design\app.ico
 UninstallDisplayIcon={app}\{#AppExe}
 UninstallDisplayName={#AppName}
 
@@ -62,14 +62,14 @@ Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
     ValueType: string; ValueName: "KioskServer"; ValueData: """{app}\{#AppExe}"""; \
     Flags: uninsdeletevalue; Tasks: autostart
 
+; DIQQAT: bu yerda AVVAL data.db va content/* o'chirilardi — ya'ni har
+; o'rnatishda baza va yuklangan kontent yo'qolardi. Endi XAVFSIZ YANGILASH:
+; eski ustidan o'rnatsa ham baza (data.db) va content/ saqlanadi, faqat dastur
+; fayllari (exe, _internal, web, node, ffmpeg) ustiga yoziladi (ignoreversion).
+; Eski PYINSTALLER _internal'ini tozalab qo'yamiz — eski kutubxona qoldiqlari
+; yangisi bilan aralashib ketmasin (data.db/content saqlanadi).
 [InstallDelete]
-Type: files; Name: "{app}\data.db"
-Type: files; Name: "{app}\data.db-wal"
-Type: files; Name: "{app}\data.db-shm"
-Type: filesandordirs; Name: "{app}\content\ads"
-Type: filesandordirs; Name: "{app}\content\books"
-Type: filesandordirs; Name: "{app}\content\covers"
-Type: filesandordirs; Name: "{app}\content\media"
+Type: filesandordirs; Name: "{app}\_internal"
 
 [Run]
 ; Windows Firewall: kiosklar serverga ulana olishi uchun KIRISH ruxsati
@@ -105,3 +105,21 @@ Type: files; Name: "{app}\logs\server.log"
 Type: files; Name: "{app}\logs\server.log.1"
 Type: filesandordirs; Name: "{app}\__pycache__"
 Type: dirifempty; Name: "{app}"
+
+[Code]
+{ Yangilashdan (ustidan o'rnatishdan) OLDIN ishlab turgan serverni va veb
+  node jarayonini yopamiz — aks holda exe/_internal/web fayllari qulflangani
+  uchun nusxalash muvaffaqiyatsiz bo'ladi. data.db va content O'CHIRILMAYDI —
+  faqat jarayon to'xtatiladi, ma'lumot saqlanadi. }
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var rc: Integer;
+begin
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM KioskServer.exe /F /T',
+       '', SW_HIDE, ewWaitUntilTerminated, rc);
+  { Veb node bola jarayoni alohida guruhda — uni ham to'xtatamiz (80-port va
+    web/.output fayllari bo'shashi uchun). }
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM node.exe /F',
+       '', SW_HIDE, ewWaitUntilTerminated, rc);
+  Sleep(800);
+  Result := '';
+end;

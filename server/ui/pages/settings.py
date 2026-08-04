@@ -224,7 +224,7 @@ class SettingsPageMixin:
         no_wheel(self.s_ad_int)
 
         # Rejalashtirish algoritmlari — bir nechtasini birga tanlash mumkin
-        # (qiymatlar user/services/ads.py bilan mos). Popup tanlash usullari
+        # (qiymatlar kiosk/services/ads.py bilan mos). Popup tanlash usullari
         # (Vaznli/Navbat/Tasodifiy) bir-birini istisno qiladi — bir nechtasi
         # belgilansa, kiosk prioritet bo'yicha birinchisini ishlatadi; «Media»
         # esa alohida joylashuv (kino atrofida), ularning ustiga qo'shiladi.
