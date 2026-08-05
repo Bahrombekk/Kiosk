@@ -453,6 +453,23 @@ def heartbeat(payload: dict, request: Request):
     }
 
 
+@app.get("/api/branding/{kind}")
+def branding(kind: str, request: Request):
+    """Bulutdan almashtirilgan brending rasmi (masalan asosiy sahifa hero
+    banneri). Sozlamada nom yo'q bo'lsa 404 — mijoz o'zining standart
+    rasmini ko'rsatadi (veb'da CSS zaxira fon bilan)."""
+    key = {"hero": "hero_image"}.get(kind)
+    if not key:
+        raise HTTPException(404, "noma'lum brending turi")
+    name = (db.get_settings().get(key) or "").strip()
+    if not name:
+        raise HTTPException(404, "brending yo'q")
+    path = _safe_join(config.BRANDING_DIR, name)
+    if not path or not os.path.isfile(path):
+        raise HTTPException(404, "fayl topilmadi")
+    return _range_response(path, request)
+
+
 @app.get("/api/route")
 def route():
     return db.get_route()
@@ -474,6 +491,7 @@ _KIOSK_SETTINGS = {
     "ad_interval_min", "ad_algorithm", "media_ad_slots",
     "media_cache", "cache_limit_gb",
     "sos_enabled", "sos_numbers", "kiosk_location",
+    "hero_image",
     "saver_facts", "active_route_direction",
     "exit_pin_hash",
 }

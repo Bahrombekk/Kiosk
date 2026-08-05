@@ -267,6 +267,19 @@ def _init_schema():
         if "placement" not in acols:
             conn.execute("ALTER TABLE ads ADD COLUMN placement TEXT"
                          " DEFAULT 'popup'")
+        # ads/sites/route_stops uchun ham bulut kuzatuvi (content bilan bir xil
+        # mantiq): origin='cloud' yozuvlar markaziy paneldan boshqariladi,
+        # 'local' — shu serverda qo'lда qo'shilgan va bulut ularga TEGMAYDI.
+        for table in ("ads", "sites", "route_stops"):
+            tcols = {r["name"] for r in
+                     conn.execute(f"PRAGMA table_info({table})").fetchall()}
+            if "cloud_id" not in tcols:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN cloud_id INTEGER")
+            if "origin" not in tcols:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN origin TEXT"
+                             " DEFAULT 'local'")
+        if "media_sha" not in acols:
+            conn.execute("ALTER TABLE ads ADD COLUMN media_sha TEXT")
         # kiosks: kesh ro'yxati va disk ma'lumotlari (keyin qo'shilgan)
         kcols = {r["name"] for r in
                  conn.execute("PRAGMA table_info(kiosks)").fetchall()}
@@ -666,10 +679,52 @@ CONTENT_COLS = ["type", "title", "author", "genre", "description", "duration",
                 "cloud_id", "origin", "media_sha", "cover_sha", "text_sha"]
 ADS_COLS = ["media_path", "title", "subtitle", "link_url", "duration",
             "interval_min", "start_time", "end_time", "placement",
-            "is_active", "sort_order"]
-SITE_COLS = ["name", "url", "description", "features", "icon", "sort_order"]
+            "is_active", "sort_order",
+            "cloud_id", "origin", "media_sha"]
+SITE_COLS = ["name", "url", "description", "features", "icon", "sort_order",
+             "cloud_id", "origin"]
 STOP_COLS = ["name", "arrival_time", "departure_time", "latitude", "longitude",
-             "distance_km", "sort_order", "direction"]
+             "distance_km", "sort_order", "direction",
+             "cloud_id", "origin"]
+
+
+def cloud_rows(table):
+    """Bulut boshqaruvidagi yozuvlar (origin='cloud') — manifest bilan
+    solishtirish uchun. `table`: ads | sites | route_stops."""
+    if table not in ("ads", "sites", "route_stops"):
+        raise ValueError(table)
+    with _conn() as c:
+        rows = c.execute(
+            f"SELECT * FROM {table} WHERE origin='cloud' AND cloud_id IS NOT NULL"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def delete_cloud_rows(table, keep_cloud_ids):
+    """origin='cloud' bo'lgan, lekin manifestда YO'Q yozuvlarni o'chiradi.
+    Qo'lда qo'shilgan (origin='local') yozuvlarga tegmaydi."""
+    if table not in ("ads", "sites", "route_stops"):
+        raise ValueError(table)
+    keep = [int(i) for i in keep_cloud_ids]
+    with _conn() as c:
+        if keep:
+            qs = ",".join("?" * len(keep))
+            rows = c.execute(
+                f"SELECT * FROM {table} WHERE origin='cloud' AND cloud_id IS NOT NULL"
+                f" AND cloud_id NOT IN ({qs})", keep).fetchall()
+        else:
+            rows = c.execute(
+                f"SELECT * FROM {table} WHERE origin='cloud' AND cloud_id IS NOT NULL"
+            ).fetchall()
+        ids = [r["id"] for r in rows]
+        if ids:
+            qs = ",".join("?" * len(ids))
+            c.execute(f"DELETE FROM {table} WHERE id IN ({qs})", ids)
+    # Reklama fayllarini ham tozalaymiz (yetim qolmasin)
+    if table == "ads":
+        for r in rows:
+            _cleanup_ad_file(dict(r).get("media_path"))
+    return len(ids)
 
 
 def _insert(table, cols, data):
@@ -781,9 +836,12 @@ def delete_ad(ad_id):
     yetim fayllar cheksiz to'planib qolmasin)."""
     item = get_ad_by_id(ad_id)
     _delete("ads", ad_id)
-    if not item:
-        return
-    name = item.get("media_path")
+    if item:
+        _cleanup_ad_file(item.get("media_path"))
+
+
+def _cleanup_ad_file(name):
+    """Reklama faylini (boshqa reklama ishlatmasa) diskdan o'chiradi."""
     if not name:
         return
     with closing(connect()) as conn:

@@ -21,6 +21,7 @@ import logging.handlers
 import os
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 from fastapi import (Cookie, Depends, FastAPI, HTTPException, Query, Request,
                      WebSocket, WebSocketDisconnect)
@@ -66,9 +67,57 @@ async def lifespan(app: FastAPI):
     log.info("Bulut tayyor — %s://%s:%s",
              "https" if config.USE_TLS else "http", config.HOST, config.PORT)
     watch = asyncio.create_task(_offline_watch())
+    ops = asyncio.create_task(_ops_loop())
     yield
     watch.cancel()
+    ops.cancel()
     log.info("Bulut to'xtatilmoqda")
+
+
+async def _ops_loop():
+    """Navbatда turgan va vaqti kelgan buyruqlarni yuboradi.
+
+    Shu sikl tufayli "saqlash" hech qachon yo'qolmaydi: server oflayn bo'lsa
+    yoki reja qo'yilgan bo'lsa, buyruq bazada turadi va shart bajarilishi bilan
+    (server onlayn + vaqti kelgan) o'zi qo'llanadi."""
+    while True:
+        await asyncio.sleep(10)
+        try:
+            for op in db.due_ops():
+                sid = op["server_id"]
+                if not db.is_approved(sid):
+                    continue
+                try:
+                    fields = json.loads(op["payload"] or "{}")
+                except ValueError:
+                    fields = {}
+                srv = db.get_server(sid) or {}
+
+                # BULUT TOMONIDA bajariladigan ish (buyruq emas): rejalashtirilgan
+                # tarqatish. Server offlayn bo'lса ham tayinlov qo'yiladi —
+                # keyin ulanganда o'zi tortib oladi.
+                if op["kind"] == "deploy_apply":
+                    cids = [int(i) for i in fields.get("content_ids") or []]
+                    if cids:
+                        db.assign([sid], cids)
+                        job_id = fields.get("job_id")
+                        if isinstance(job_id, int):
+                            await relay.dispatch_job(job_id, [sid])
+                        elif relay.is_online(sid):
+                            await relay.push_manifest(sid)
+                    db.mark_op_sent(op["id"])
+                    db.add_event(f"{srv.get('name', sid)} — rejalashtirilgan "
+                                 f"tarqatish qo'llandi ({len(cids)} fayl)", "ok")
+                    continue
+
+                if not relay.is_online(sid):
+                    continue                      # buyruqlar ulanganда ketadi
+                if await relay.send_cmd(sid, op["kind"], **fields):
+                    db.mark_op_sent(op["id"])
+                    db.add_event(f"{srv.get('name', sid)} — navbatdagi buyruq "
+                                 f"qo'llandi: {op['label'] or op['kind']}", "ok")
+        except Exception:                                        # noqa: BLE001
+            log.exception("navbat siklida xato")
 
 
 app = FastAPI(title="Kiosk Cloud", version="1.0", lifespan=lifespan)
@@ -97,9 +146,17 @@ async def _offline_watch():
 # =====================================================================
 #  AGENT (poyezd serveri) tomoni
 # =====================================================================
+# Panel (static/app.js) shu qiymatni o'zining UI_BUILD'i bilan solishtiradi.
+# API o'zgarganda OSHIRILADI — shunda brauzerdagi yangi UI eski backendga
+# urilib "Not Found" bermaydi, balki aniq "qayta ishga tushiring" deb aytadi.
+# (Statik fayllar diskdan o'qiladi, ya'ni UI restartsiz yangilanadi; endpointlar
+# esa yangilanmaydi — chalkashlik aynan shundan chiqadi.)
+APP_BUILD = "2026-08-04.10"
+
+
 @app.get("/api/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "build": APP_BUILD}
 
 
 @app.post("/api/enroll")
@@ -225,10 +282,16 @@ async def _handle_agent_msg(server_id, msg, ws):
             "web_running": 1 if msg.get("web_running") else 0,
             "last_seen": db.now(),
         }
-        if msg.get("name"):
+        cur = db.get_server(server_id) or {}
+        # Nomni FAQAT admin qo'ymagan bo'lsa serverdan olamiz — aks holda har
+        # heartbeatда hostname («GPUPC») admin bergan nomni bosib ketardi.
+        if msg.get("name") and not cur.get("name_custom"):
             fields["name"] = str(msg["name"])[:120]
-        if msg.get("route"):
+        if msg.get("route") and not cur.get("name_custom"):
             fields["route"] = str(msg["route"])[:160]
+        if isinstance(msg.get("license_info"), dict):
+            fields["license_info"] = json.dumps(msg["license_info"],
+                                                ensure_ascii=False)
         if isinstance(msg.get("settings"), dict):
             # Serverning joriy sozlamalari — panel shu qiymatlarni forma
             # sifatida ko'rsatadi (JSON bo'lib saqlanadi)
@@ -243,6 +306,9 @@ async def _handle_agent_msg(server_id, msg, ws):
                             "approved": bool(srv.get("approved"))})
         if kind == "register":
             await relay.on_register(server_id)
+            # Ulanish tiklandi — navbatда turgan buyruqlarni darhol yuboramiz
+            # ("saqlash"ni oflaynда bosgan bo'lsa shu yerda qo'llanadi)
+            await relay.flush_ops(server_id)
         elif srv.get("applied_rev") != srv.get("desired_rev"):
             # Heartbeatда farq ko'rinsa — manifest yuboramiz (buyruq yo'qolgan
             # yoki server offlaynда o'tkazib yuborgan holat o'zini tuzatadi).
@@ -337,19 +403,33 @@ A = Depends(require_admin)
 
 @app.post("/api/admin/login")
 def admin_login(payload: dict, request: Request):
+    """Login + parol. Login bo'sh bo'lsa `admin` deb qabul qilinadi (eski,
+    faqat parolli kirish ham ishlashda davom etadi).
+
+    Xato holatда QAYSI maydon xato ekani aytilmaydi — mavjud loginlarni
+    taxmin qilib chiqishning oldi olinadi. Urinish chegarasi IP + login
+    juftligi bo'yicha: bitta hisobni tashqaridan bloklab qo'yish qiyinlashadi."""
     ip = request.client.host if request.client else "?"
-    if _rate_limited(ip):
+    username = str(payload.get("username") or "").strip()[:64]
+    who = f"{ip}|{username.lower()}"
+    if _rate_limited(who) or _rate_limited(ip):
         raise HTTPException(429, "juda ko'p urinish — 5 daqiqadan keyin urinib ko'ring")
-    if not security.check_password(str(payload.get("password") or "")):
+    user = security.check_login(username, str(payload.get("password") or ""))
+    if not user:
+        _note_fail(who)
         _note_fail(ip)
-        log.warning("Admin kirish muvaffaqiyatsiz: %s", ip)
-        raise HTTPException(403, "parol noto'g'ri")
+        log.warning("Admin kirish muvaffaqiyatsiz: %s (login=%r)", ip, username)
+        raise HTTPException(403, "login yoki parol noto'g'ri")
+    _fails.pop(who, None)
     _fails.pop(ip, None)
-    token = security.new_session()
-    r = JSONResponse({"ok": True})
+    remember = bool(payload.get("remember"))
+    token = security.new_session(user, remember)
+    ttl = (7 * 24 * 3600) if remember else config.SESSION_TTL_S
+    r = JSONResponse({"ok": True, "username": user["username"],
+                      "role": user.get("role") or "super", "ttl": ttl})
     r.set_cookie("cs", token, httponly=True, samesite="lax",
-                 secure=config.USE_TLS, max_age=config.SESSION_TTL_S)
-    log.info("Admin kirdi: %s", ip)
+                 secure=config.USE_TLS, max_age=ttl)
+    log.info("Admin kirdi: %s (%s)", user["username"], ip)
     return r
 
 
@@ -363,7 +443,9 @@ def admin_logout(cs: str = Cookie(default="")):
 
 @app.get("/api/admin/me")
 def admin_me(cs: str = Cookie(default="")):
-    return {"auth": security.valid_session(cs)}
+    u = security.session_user(cs) if security.valid_session(cs) else None
+    return {"auth": bool(u), "user": u,
+            "servers_total": len(db.get_servers()) if u else 0}
 
 
 def _srv_view(s):
@@ -375,12 +457,16 @@ def _srv_view(s):
     if s.get("disk_total"):
         disk_pct = round(100 * (s["disk_total"] - s.get("disk_free", 0))
                          / s["disk_total"])
-    try:
-        settings = json.loads(s.get("settings") or "{}")
-    except (ValueError, TypeError):
-        settings = {}
+    def _j(raw):
+        try:
+            return json.loads(raw or "{}")
+        except (ValueError, TypeError):
+            return {}
     return {**s, "online": online, "synced": synced, "disk_pct": disk_pct,
-            "assigned": len(db.assigned_ids(s["id"])), "settings": settings}
+            "assigned": len(db.assigned_ids(s["id"])),
+            "settings": _j(s.get("settings")),
+            "license_info": _j(s.get("license_info")),
+            "ops_pending": db.pending_op_count(s["id"])}
 
 
 @app.get("/api/admin/overview")
@@ -424,16 +510,44 @@ def server_detail(server_id: str, _=A):
         "daily": db.stats_daily(days=14, server_id=server_id),
         "sessions": db.server_sessions_list(server_id, 30),
         "sessions_today": db.server_sessions_today(server_id),
+        # Kiosk kartochkalarida ko'rsatiladigan sessiya hisobi (bugun / 14 kun)
+        "kiosk_sessions": db.kiosk_session_counts(server_id, 1),
+        "kiosk_sessions_14": db.kiosk_session_counts(server_id, 14),
         "logs": db.get_logs(server_id=server_id, limit=50),
+        "ops": db.get_pending_ops(server_id),
+        "stops": db.get_stops(server_id),
+        "branding": {b["kind"]: b for b in db.get_branding(server_id)},
     }
 
 
 @app.patch("/api/admin/servers/{server_id}")
 def server_patch(server_id: str, payload: dict, _=A):
+    """Serverga nom / yo'nalish / izoh beradi (bulutdagi ko'rinadigan nom)."""
     if not db.get_server(server_id):
         raise HTTPException(404, "server topilmadi")
-    db.update_server(server_id, **{k: str(v)[:160] for k, v in payload.items()
-                                   if k in ("name", "route", "note")})
+    name = payload.get("name")
+    if name is not None:
+        name = str(name).strip()[:120]
+        if not name:
+            raise HTTPException(400, "nom bo'sh bo'lmaydi")
+    db.rename_server(
+        server_id, name=name,
+        route=(str(payload["route"])[:160] if "route" in payload else None),
+        note=(str(payload["note"])[:500] if "note" in payload else None))
+    return {"ok": True}
+
+
+@app.patch("/api/admin/servers/{server_id}/kiosk-label")
+def kiosk_label(server_id: str, payload: dict, _=A):
+    """Kioskка nom beradi ("1-vagon, o'ng tomon"). Bu nom bulut panelида
+    device_id o'rniga ko'rinadi — jadvalda kiosklarni ajratish osonlashadi."""
+    device_id = str(payload.get("device_id") or "").strip()
+    if not device_id:
+        raise HTTPException(400, "device_id kerak")
+    if not db.get_server(server_id):
+        raise HTTPException(404, "server topilmadi")
+    db.set_kiosk_label(server_id, device_id,
+                       str(payload.get("label") or "").strip()[:120] or None)
     return {"ok": True}
 
 
@@ -464,25 +578,67 @@ def server_delete(server_id: str, _=A):
 
 @app.post("/api/admin/servers/{server_id}/command")
 async def server_command(server_id: str, payload: dict, _=A):
-    """Bitta serverga buyruq: sync_now | cache_clear | announce | reboot."""
+    """Bitta serverga buyruq: sync_now | cache_clear | announce | reboot.
+
+    `sync_now`dan tashqari hammasi NAVBATGA tushadi (server offlayn bo'lsa yoki
+    `apply_at` berilса) — ya'ni bosilgan tugma yo'qolmaydi."""
     kind = str(payload.get("kind") or "")
     if kind not in ("sync_now", "cache_clear", "announce", "reboot"):
         raise HTTPException(400, "noma'lum buyruq")
-    if not db.get_server(server_id):
+    srv = db.get_server(server_id)
+    if not srv:
         raise HTTPException(404, "server topilmadi")
     if kind == "sync_now":
-        ok = await relay.push_manifest(server_id)
-    else:
-        extra = {}
-        if kind == "announce":
-            extra["text"] = str(payload.get("text") or "")[:300]
-            if not extra["text"]:
-                raise HTTPException(400, "e'lon matni kerak")
-        ok = await relay.send_cmd(server_id, kind, **extra)
-    if not ok:
-        raise HTTPException(409, "server offlayn — buyruq yuborilmadi")
-    db.add_event(f"{db.get_server(server_id)['name']} — buyruq: {kind}", "info")
-    return {"ok": True}
+        # Sinxronizatsiyani navbatga qo'yish keraksiz — server ulanганда
+        # `on_register` allaqachon manifestni oladi.
+        if not await relay.push_manifest(server_id):
+            raise HTTPException(409, "server offlayn — ulanganda o'zi sinxronlanadi")
+        return {"ok": True, "queued": False}
+    extra = {}
+    label = {"cache_clear": "Kesh tozalash", "reboot": "Qayta ishga tushirish"}.get(kind, kind)
+    if kind == "announce":
+        extra["text"] = str(payload.get("text") or "")[:300]
+        if not extra["text"]:
+            raise HTTPException(400, "e'lon matni kerak")
+        label = f"E'lon: {extra['text'][:40]}"
+    r = await _send_or_queue(server_id, kind, extra, label,
+                             _parse_apply_at(payload.get("apply_at")))
+    db.add_event(f"{srv['name']} — {label}" +
+                 (" (navbatда)" if r["queued"] else ""), "info")
+    return r
+
+
+def _parse_apply_at(v):
+    """"2026-08-05T03:00" / "2026-08-05 03:00" -> "2026-08-05 03:00:00".
+    Bo'sh yoki noto'g'ri bo'lsa None (= imkon bo'lishi bilan)."""
+    s = str(v or "").strip().replace("T", " ")
+    if not s:
+        return None
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(s, fmt).strftime("%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            continue
+    raise HTTPException(400, "vaqt formati noto'g'ri (YYYY-MM-DD HH:MM)")
+
+
+async def _send_or_queue(server_id, kind, fields, label, apply_at=None):
+    """Buyruqni YUBORADI yoki navbatga qo'yadi.
+
+    Uch holat bor va uchtasi ham ma'lumotni yo'qotmaydi:
+      * reja berilgan       -> navbatда turadi, vaqti kelganda ketadi;
+      * server offlayn      -> navbatда turadi, ulangan zahoti ketadi;
+      * onlayn va rejasiz   -> darhol yuboriladi.
+    """
+    if apply_at:
+        op = db.queue_op(server_id, kind, fields, label, apply_at)
+        return {"ok": True, "queued": True, "op_id": op, "apply_at": apply_at}
+    if relay.is_online(server_id) and db.is_approved(server_id):
+        if await relay.send_cmd(server_id, kind, **fields):
+            return {"ok": True, "queued": False}
+    op = db.queue_op(server_id, kind, fields, label, None)
+    return {"ok": True, "queued": True, "op_id": op, "apply_at": None,
+            "note": "server hozir offlayn — ulangan zahoti qo'llanadi"}
 
 
 @app.post("/api/admin/servers/{server_id}/settings")
@@ -491,39 +647,65 @@ async def server_settings(server_id: str, payload: dict, _=A):
 
     Ruxsat etilgan kalitlar ro'yxati AGENT tomonida (`REMOTE_SETTINGS`) —
     bulut nimani yuborishidan qat'i nazar, server faqat o'zi ruxsat bergan
-    kalitlarni yozadi. Ya'ni oq ro'yxat poyezd tomonida, ishonch chegarasida."""
-    if not db.get_server(server_id):
+    kalitlarni yozadi. Ya'ni oq ro'yxat poyezd tomonida, ishonch chegarasida.
+
+    `apply_at` berilса o'sha sana/vaqtdan keyin qo'llanadi; server offlayn
+    bo'lsa xato QAYTARILMAYDI — navbatда turadi va ulanganda qo'llanadi."""
+    srv = db.get_server(server_id)
+    if not srv:
         raise HTTPException(404, "server topilmadi")
     values = payload.get("values")
     if not isinstance(values, dict) or not values:
         raise HTTPException(400, "values kerak")
     clean = {str(k)[:64]: ("" if v is None else str(v)[:2000])
              for k, v in list(values.items())[:60]}
-    if not await relay.send_cmd(server_id, "set_settings", values=clean):
-        raise HTTPException(409, "server offlayn — sozlama yuborilmadi")
-    db.add_event(f"{db.get_server(server_id)['name']} — sozlamalar o'zgartirildi "
-                 f"({len(clean)} maydon)", "info")
-    return {"ok": True, "sent": list(clean)}
+    apply_at = _parse_apply_at(payload.get("apply_at"))
+    r = await _send_or_queue(server_id, "set_settings", {"values": clean},
+                             f"{len(clean)} sozlama: {', '.join(list(clean)[:4])}",
+                             apply_at)
+    db.add_event(
+        f"{srv['name']} — sozlamalar " +
+        (f"rejaga qo'yildi ({apply_at})" if apply_at
+         else "navbatda (offlayn)" if r["queued"] else "o'zgartirildi") +
+        f" · {len(clean)} maydon", "info")
+    return {**r, "sent": list(clean)}
+
+
+@app.get("/api/admin/servers/{server_id}/ops")
+def server_ops(server_id: str, _=A):
+    """Shu server uchun kutayotgan/rejalashtirilgan buyruqlar."""
+    return db.get_pending_ops(server_id)
+
+
+@app.delete("/api/admin/ops/{op_id}")
+def op_cancel(op_id: int, _=A):
+    db.cancel_op(op_id)
+    return {"ok": True}
 
 
 @app.post("/api/admin/servers/{server_id}/web")
 async def server_web(server_id: str, payload: dict, _=A):
-    """Veb ilovani (poyezd.uz) masofadan yoqadi/o'chiradi."""
+    """Veb ilovani (poyezd.uz) masofadan yoqadi/o'chiradi (navbatга tushadi)."""
     action = str(payload.get("action") or "")
     if action not in ("start", "stop"):
         raise HTTPException(400, "action = start | stop")
-    if not db.get_server(server_id):
+    srv = db.get_server(server_id)
+    if not srv:
         raise HTTPException(404, "server topilmadi")
-    if not await relay.send_cmd(server_id, "web", action=action):
-        raise HTTPException(409, "server offlayn")
-    db.add_event(f"{db.get_server(server_id)['name']} — veb ilova "
-                 f"{'yoqildi' if action == 'start' else 'ochirildi'}", "info")
-    return {"ok": True}
+    r = await _send_or_queue(
+        server_id, "web", {"action": action},
+        "Veb ilova: " + ("yoqish" if action == "start" else "o'chirish"),
+        _parse_apply_at(payload.get("apply_at")))
+    db.add_event(f"{srv['name']} — veb ilova "
+                 f"{'yoqildi' if action == 'start' else 'ochirildi'}" +
+                 (" (navbatда)" if r["queued"] else ""), "info")
+    return r
 
 
 @app.post("/api/admin/servers/{server_id}/kiosk")
 async def server_kiosk(server_id: str, payload: dict, _=A):
-    """Bitta kioskка buyruq: sync | cache_clear | cache_on | cache_off | forget."""
+    """Bitta kioskка buyruq: sync | cache_clear | cache_on | cache_off | forget.
+    Server offlayn bo'lsa navbatда turadi va ulanganda qo'llanadi."""
     action = str(payload.get("action") or "")
     device_id = str(payload.get("device_id") or "").strip()
     if action not in ("sync", "cache_clear", "cache_on", "cache_off", "forget"):
@@ -532,13 +714,47 @@ async def server_kiosk(server_id: str, payload: dict, _=A):
         raise HTTPException(400, "device_id kerak")
     if not db.get_server(server_id):
         raise HTTPException(404, "server topilmadi")
-    if not await relay.send_cmd(server_id, "kiosk", device_id=device_id,
-                                action=action):
-        raise HTTPException(409, "server offlayn")
+    r = await _send_or_queue(server_id, "kiosk",
+                             {"device_id": device_id, "action": action},
+                             f"Kiosk {device_id}: {action}",
+                             _parse_apply_at(payload.get("apply_at")))
     if action == "forget":
         db.forget_kiosk(server_id, device_id)
-    db.add_event(f"Kiosk {device_id}: {action} (bulutdan)", "info")
-    return {"ok": True}
+    db.add_event(f"Kiosk {device_id}: {action} (bulutdan)" +
+                 (" — navbatда" if r["queued"] else ""), "info")
+    return r
+
+
+@app.post("/api/admin/servers/{server_id}/license")
+async def server_license(server_id: str, payload: dict, _=A):
+    """Litsenziya boshqaruvi: fayl yuborish yoki kiosklarni bloklash/ochish.
+
+        {"text": "<license.key mazmuni>"}   -> faylni serverга o'rnatadi
+        {"blocked": true|false}            -> kiosklarni bloklaydi/ochadi
+    """
+    srv = db.get_server(server_id)
+    if not srv:
+        raise HTTPException(404, "server topilmadi")
+    apply_at = _parse_apply_at(payload.get("apply_at"))
+    if "blocked" in payload:
+        want = "1" if payload["blocked"] else "0"
+        r = await _send_or_queue(
+            server_id, "set_settings", {"values": {"trial_blocked": want}},
+            "Kiosklarni " + ("BLOKLASH" if want == "1" else "blokdan chiqarish"),
+            apply_at)
+        db.add_event(f"{srv['name']} — kiosklar "
+                     f"{'bloklandi' if want == '1' else 'blokdan chiqarildi'}",
+                     "warn" if want == "1" else "ok")
+        return r
+    text = str(payload.get("text") or "").strip()
+    if not text:
+        raise HTTPException(400, "license.key mazmuni yoki blocked kerak")
+    if len(text) > 20000:
+        raise HTTPException(400, "fayl juda katta")
+    r = await _send_or_queue(server_id, "set_license", {"text": text},
+                             "Litsenziya fayli", apply_at)
+    db.add_event(f"{srv['name']} — litsenziya fayli yuborildi", "info")
+    return r
 
 
 # ------------------------------------------------------------- kutubxona
@@ -719,6 +935,306 @@ def storage_usage(_=A):
     return {"files": n, "used": used, "free": free}
 
 
+# =====================================================================
+#  Reklama · Saytlar · Bekatlar (kontent bilan bir xil desired-state)
+# =====================================================================
+@app.get("/api/admin/ads")
+def ads_list(_=A):
+    return db.get_ads()
+
+
+@app.post("/api/admin/ads")
+def ad_create(payload: dict, _=A):
+    """Reklama qo'shadi. Media (rasm yoki video) avval `/api/admin/blob` bilan
+    yuklanadi va sha256 shu yerga beriladi."""
+    data = {
+        "title": str(payload.get("title") or "")[:200],
+        "subtitle": str(payload.get("subtitle") or "")[:300],
+        "link_url": str(payload.get("link_url") or "")[:500],
+        "duration": db.to_int(payload.get("duration"), 10),
+        "placement": (payload.get("placement")
+                      if payload.get("placement") in ("popup", "banner", "both")
+                      else "popup"),
+        "is_active": 0 if payload.get("is_active") is False else 1,
+        "sort_order": db.to_int(payload.get("sort_order")),
+    }
+    for k in ("start_time", "end_time"):
+        if payload.get(k):
+            data[k] = str(payload[k])[:8]
+    if payload.get("interval_min"):
+        data["interval_min"] = db.to_int(payload["interval_min"])
+    p = payload.get("media")
+    if isinstance(p, dict) and p.get("sha256"):
+        sha = str(p["sha256"])
+        if not storage.exists(sha):
+            raise HTTPException(400, "media blob topilmadi (avval yuklang)")
+        data["media_sha"] = sha
+        data["media_name"] = str(p.get("name") or "")[:200]
+        data["media_size"] = storage.size_of(sha)
+    if not data.get("media_sha"):
+        raise HTTPException(400, "reklama uchun rasm yoki video kerak")
+    aid = db.add_ad(data)
+    db.add_event(f"Reklama qo'shildi: {data['title'] or aid}", "info")
+    return {"id": aid}
+
+
+@app.patch("/api/admin/ads/{ad_id}")
+async def ad_patch(ad_id: int, payload: dict, _=A):
+    if not db.get_ad_by_id(ad_id):
+        raise HTTPException(404, "reklama topilmadi")
+    clean = {}
+    for k in ("title", "subtitle", "link_url"):
+        if k in payload:
+            clean[k] = str(payload[k] or "")[:500]
+    for k in ("duration", "interval_min", "sort_order"):
+        if k in payload:
+            clean[k] = db.to_int(payload[k])
+    for k in ("start_time", "end_time"):
+        if k in payload:
+            clean[k] = str(payload[k] or "")[:8] or None
+    if payload.get("placement") in ("popup", "banner", "both"):
+        clean["placement"] = payload["placement"]
+    if "is_active" in payload:
+        clean["is_active"] = 1 if payload["is_active"] else 0
+    p = payload.get("media")
+    if isinstance(p, dict) and p.get("sha256"):
+        sha = str(p["sha256"])
+        if not storage.exists(sha):
+            raise HTTPException(400, "media blob topilmadi")
+        clean.update({"media_sha": sha,
+                      "media_name": str(p.get("name") or "")[:200],
+                      "media_size": storage.size_of(sha)})
+    db.update_ad(ad_id, clean)
+    sids = db.ad_servers(ad_id)
+    db.bump_rev(sids)
+    storage.gc(db.shas_in_use())
+    for sid in sids:
+        await relay.push_manifest(sid)
+    return {"ok": True, "servers_to_sync": len(sids)}
+
+
+@app.delete("/api/admin/ads/{ad_id}")
+async def ad_delete(ad_id: int, _=A):
+    a = db.get_ad_by_id(ad_id)
+    if not a:
+        raise HTTPException(404, "reklama topilmadi")
+    sids = db.ad_servers(ad_id)
+    db.delete_ad(ad_id)
+    db.bump_rev(sids)
+    storage.gc(db.shas_in_use())
+    for sid in sids:
+        await relay.push_manifest(sid)
+    db.add_event(f"Reklama o'chirildi: {a['title'] or ad_id}", "warn")
+    return {"ok": True, "servers": len(sids)}
+
+
+@app.post("/api/admin/ads/{ad_id}/servers")
+async def ad_assign(ad_id: int, payload: dict, _=A):
+    """Reklamani serverlarga tayinlaydi (ro'yxatда yo'qlaridan olib tashlanadi)."""
+    if not db.get_ad_by_id(ad_id):
+        raise HTTPException(404, "reklama topilmadi")
+    want = {str(s) for s in payload.get("server_ids") or []}
+    known = {s["id"] for s in db.get_servers()}
+    want &= known
+    have = set(db.ad_servers(ad_id))
+    add, drop = want - have, have - want
+    if add:
+        db.assign_ads(list(add), [ad_id])
+    if drop:
+        db.unassign_ads(list(drop), [ad_id])
+    for sid in add | drop:
+        await relay.push_manifest(sid)
+    return {"ok": True, "added": len(add), "removed": len(drop)}
+
+
+@app.get("/api/admin/ads/{ad_id}/media")
+def ad_media(ad_id: int, request: Request, _=A):
+    """Reklama faylini panelда ko'rsatish uchun (rasm yoki video)."""
+    a = db.get_ad_by_id(ad_id)
+    if not a or not a.get("media_sha"):
+        raise HTTPException(404, "media yo'q")
+    p = storage.blob_path(a["media_sha"])
+    if not p or not os.path.isfile(p):
+        raise HTTPException(404, "fayl topilmadi")
+    return storage.range_response(p, request, filename=a.get("media_name"))
+
+
+@app.get("/api/admin/sites")
+def sites_list(_=A):
+    return db.get_sites()
+
+
+@app.post("/api/admin/sites")
+async def site_create(payload: dict, _=A):
+    """Sayt qo'shadi. Saytlar ro'yxati BARCHA serverlarga bir xil ketadi."""
+    name = str(payload.get("name") or "").strip()
+    url = str(payload.get("url") or "").strip()
+    if not name or not url:
+        raise HTTPException(400, "nom va URL kerak")
+    sid = db.add_site({
+        "name": name[:120], "url": url[:500],
+        "description": str(payload.get("description") or "")[:1000],
+        "features": str(payload.get("features") or "")[:1000],
+        "icon": str(payload.get("icon") or "")[:64],
+        "sort_order": db.to_int(payload.get("sort_order")),
+    })
+    await _push_all()
+    db.add_event(f"Sayt qo'shildi: {name}", "info")
+    return {"id": sid}
+
+
+@app.patch("/api/admin/sites/{site_id}")
+async def site_patch(site_id: int, payload: dict, _=A):
+    clean = {}
+    for k in ("name", "url", "description", "features", "icon"):
+        if k in payload:
+            clean[k] = str(payload[k] or "")[:1000]
+    if "sort_order" in payload:
+        clean["sort_order"] = db.to_int(payload["sort_order"])
+    db.update_site(site_id, clean)
+    await _push_all()
+    return {"ok": True}
+
+
+@app.delete("/api/admin/sites/{site_id}")
+async def site_delete(site_id: int, _=A):
+    db.delete_site(site_id)
+    await _push_all()
+    return {"ok": True}
+
+
+@app.get("/api/admin/branding/library")
+def branding_library(kind: str = "hero", _=A):
+    """Yuklangan bannerlar ro'yxati (umumiy kutubxona)."""
+    if kind not in db.BRANDING_KINDS:
+        raise HTTPException(400, f"noma'lum tur: {kind}")
+    return db.lib_list(kind)
+
+
+@app.post("/api/admin/branding/library")
+def branding_library_add(payload: dict, _=A):
+    """Kutubxonaga yangi banner qo'shadi (fayl avval `/blob` bilan yuklanadi).
+    Rasm SAQLANIB TURADI — keyin xohlagan serverga tanlab qo'yiladi."""
+    kind = str(payload.get("kind") or "hero")
+    if kind not in db.BRANDING_KINDS:
+        raise HTTPException(400, f"noma'lum tur: {kind}")
+    p = payload.get("media")
+    if not isinstance(p, dict) or not p.get("sha256"):
+        raise HTTPException(400, "media.sha256 kerak")
+    sha = str(p["sha256"])
+    if not storage.exists(sha):
+        raise HTTPException(400, "blob topilmadi (avval yuklang)")
+    lid = db.lib_add(kind, sha, str(p.get("name") or "")[:200],
+                     storage.size_of(sha))
+    return {"id": lid}
+
+
+@app.delete("/api/admin/branding/library/{lib_id}")
+async def branding_library_del(lib_id: int, _=A):
+    """Kutubxonadan o'chiradi. Shu banner faol bo'lgan serverlar standart
+    rasmga qaytadi va yangi manifest oladi."""
+    srv = db.lib_delete(lib_id)
+    for sid in srv:
+        await relay.push_manifest(sid)
+    storage.gc(db.shas_in_use())
+    return {"ok": True, "servers": len(srv)}
+
+
+@app.get("/api/admin/branding/library/{lib_id}/image")
+def branding_library_img(lib_id: int, request: Request, _=A):
+    row = db.lib_get(lib_id)
+    if not row:
+        raise HTTPException(404, "topilmadi")
+    p = storage.blob_path(row["sha"])
+    if not p or not os.path.isfile(p):
+        raise HTTPException(404, "fayl topilmadi")
+    return storage.range_response(p, request, filename=row.get("name"))
+
+
+@app.put("/api/admin/servers/{server_id}/branding")
+async def branding_set(server_id: str, payload: dict, _=A):
+    """Shu server uchun QAYSI banner faol bo'lishini belgilaydi.
+
+        {"kind":"hero","library_id":3}                 -> kutubxonadan tanlaydi
+        {"kind":"hero","media":{"sha256":…,"name":…}}   -> to'g'ridan-to'g'ri
+        {"kind":"hero","media":null}                    -> standart rasmga qaytaradi
+    """
+    if not db.get_server(server_id):
+        raise HTTPException(404, "server topilmadi")
+    kind = str(payload.get("kind") or "hero")
+    if kind not in db.BRANDING_KINDS:
+        raise HTTPException(400, f"noma'lum tur: {kind}")
+
+    lib_id = payload.get("library_id")
+    cleared = False
+    if lib_id:
+        row = db.lib_get(int(lib_id))
+        if not row or row["kind"] != kind:
+            raise HTTPException(404, "kutubxonada topilmadi")
+        db.set_branding(server_id, kind, row["sha"], row["name"], row["size"])
+    elif payload.get("media") is None:
+        db.clear_branding(server_id, kind)
+        cleared = True
+    else:
+        p = payload["media"]
+        if not isinstance(p, dict) or not p.get("sha256"):
+            raise HTTPException(400, "media.sha256 kerak")
+        sha = str(p["sha256"])
+        if not storage.exists(sha):
+            raise HTTPException(400, "blob topilmadi (avval yuklang)")
+        name = str(p.get("name") or "")[:200]
+        db.lib_add(kind, sha, name, storage.size_of(sha))   # kutubxonaga ham
+        db.set_branding(server_id, kind, sha, name, storage.size_of(sha))
+    await relay.push_manifest(server_id)
+    storage.gc(db.shas_in_use())
+    db.add_event(f"{db.get_server(server_id)['name']} — banner "
+                 f"{'standartga qaytarildi' if cleared else 'almashtirildi'}",
+                 "info")
+    return {"ok": True}
+
+
+@app.get("/api/admin/servers/{server_id}/branding/{kind}")
+def branding_get(server_id: str, kind: str, request: Request, _=A):
+    """Panelда joriy brending rasmini ko'rsatish uchun."""
+    row = next((b for b in db.get_branding(server_id) if b["kind"] == kind), None)
+    if not row:
+        raise HTTPException(404, "brending yo'q")
+    p = storage.blob_path(row["sha"])
+    if not p or not os.path.isfile(p):
+        raise HTTPException(404, "fayl topilmadi")
+    return storage.range_response(p, request, filename=row.get("name"))
+
+
+@app.get("/api/admin/servers/{server_id}/stops")
+def stops_list(server_id: str, _=A):
+    return db.get_stops(server_id)
+
+
+@app.put("/api/admin/servers/{server_id}/stops")
+async def stops_replace(server_id: str, payload: dict, _=A):
+    """Bekatlar jadvalini to'liq almashtiradi (har server uchun alohida).
+
+    Jadval odatda to'liq qayta kiritiladi — bittalab tahrirlashdan ko'ra
+    butun ro'yxatni yuborish ancha qulay va xatoga kam joy qoldiradi."""
+    if not db.get_server(server_id):
+        raise HTTPException(404, "server topilmadi")
+    stops = payload.get("stops")
+    if not isinstance(stops, list):
+        raise HTTPException(400, "stops ro'yxati kerak")
+    n = db.replace_stops(server_id, stops)
+    await relay.push_manifest(server_id)
+    db.add_event(f"{db.get_server(server_id)['name']} — bekatlar yangilandi "
+                 f"({n} ta)", "info")
+    return {"ok": True, "n": n}
+
+
+async def _push_all():
+    """Barcha onlayn serverlarga manifest (saytlar hammaga tegishli)."""
+    for s in db.get_servers():
+        if relay.is_online(s["id"]):
+            await relay.push_manifest(s["id"])
+
+
 # --------------------------------------------------------------- tarqatish
 @app.post("/api/admin/deploy")
 async def deploy(payload: dict, _=A):
@@ -735,17 +1251,34 @@ async def deploy(payload: dict, _=A):
     if any(i is None for i in items):
         raise HTTPException(400, "kontent topilmadi")
 
-    db.assign(sids, cids)
+    apply_at = _parse_apply_at(payload.get("apply_at"))
     title = (items[0]["title"] if len(items) == 1
              else f"{len(items)} fayl tarqatilmoqda")
     job = db.create_job("deploy", title, sids, cids, {
         "skip_existing": bool(payload.get("skip_existing", True)),
-        "night_only": bool(payload.get("night_only", False)),
+        "apply_at": apply_at,
     })
+
+    if apply_at:
+        # REJALASHTIRILGAN tarqatish: tayinlov HOZIR qo'yilmaydi (aks holda
+        # heartbeat farqni ko'rib darhol tortib olardi). Vaqti kelganda
+        # `_ops_loop` tayinlab, manifestni yuboradi.
+        for sid in sids:
+            db.queue_op(sid, "deploy_apply",
+                        {"content_ids": cids, "job_id": job},
+                        f"Tarqatish: {title}", apply_at)
+            db.set_target(job, sid, state="queued")
+        db.add_event(f"Tarqatish rejaga qo'yildi ({apply_at}): {title} → "
+                     f"{len(sids)} server", "info")
+        return {"job_id": job, "servers": len(sids), "queued": len(sids),
+                "apply_at": apply_at}
+
+    db.assign(sids, cids)
     await relay.dispatch_job(job, sids)
     offline = [s for s in sids if not relay.is_online(s)]
     db.add_event(f"Tarqatish boshlandi: {title} → {len(sids)} server", "info")
-    return {"job_id": job, "servers": len(sids), "queued": len(offline)}
+    return {"job_id": job, "servers": len(sids), "queued": len(offline),
+            "apply_at": None}
 
 
 @app.post("/api/admin/remove")
@@ -775,6 +1308,18 @@ def jobs_list(active: int = 0, _=A):
 def job_cancel(job_id: int, _=A):
     db.cancel_job(job_id)
     return {"ok": True}
+
+
+@app.post("/api/admin/jobs/{job_id}/retry")
+async def job_retry(job_id: int, _=A):
+    """Xato bo'lgan nishonlarni qaytadan urinadi (masalan disk to'lgan yoki
+    litsenziya muddati tugagan bo'lsa — muammo hal bo'lgach)."""
+    sids = db.retry_job(job_id)
+    if not sids:
+        raise HTTPException(400, "qayta urinish uchun xato nishon yo'q")
+    await relay.dispatch_job(job_id, sids)
+    db.add_event(f"Ish #{job_id} qayta urinildi ({len(sids)} obyekt)", "info")
+    return {"ok": True, "servers": len(sids)}
 
 
 @app.post("/api/admin/sync-all")

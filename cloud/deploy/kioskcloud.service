@@ -1,0 +1,47 @@
+# KioskCloud — markaziy admin paneli (systemd xizmati).
+#
+# O'rnatish:
+#   cp deploy/kioskcloud.service /etc/systemd/system/
+#   nano /etc/systemd/system/kioskcloud.service     # parolni o'zgartiring
+#   systemctl daemon-reload && systemctl enable --now kioskcloud
+#
+# Loglar:  journalctl -u kioskcloud -f
+
+[Unit]
+Description=KioskCloud — markaziy admin paneli
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/kioskcloud
+ExecStart=/opt/kioskcloud/venv/bin/python main.py
+
+# --- Sozlamalar ---
+# Admin paroli. DIQQAT: bu yerda tursa har qayta ishga tushirishda SHUNGA
+# qaytadi. Parolni faqat bir marta qo'yib, keyin bu qatorni olib tashlash
+# ham mumkin (parol bazada xeshlangan holda qoladi).
+Environment=CLOUD_ADMIN_PASS=ALMASHTIRING
+# nginx shu portga proksi qiladi (tashqariga chiqarilmaydi)
+Environment=CLOUD_HOST=127.0.0.1
+Environment=CLOUD_PORT=9000
+# Baza va fayl ombori (zaxira nusxa shu ikkisidan olinadi)
+Environment=CLOUD_DB=/opt/kioskcloud/cloud.db
+Environment=CLOUD_STORAGE=/opt/kioskcloud/storage
+# Bitta faylning chegarasi (8 GB)
+Environment=CLOUD_MAX_UPLOAD=8589934592
+
+Restart=always
+RestartSec=5
+# Katta fayllar bilan ishlaydi — ochiq fayl chegarasi saxiy bo'lsin
+LimitNOFILE=65535
+
+# --- Minimal himoya (xizmat faqat o'z papkasiga yozadi) ---
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/kioskcloud
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin: 0; padding: 0; background: #E2E8F0; }
+  * { box-sizing: border-box; }
+  a { color: #2563EB; text-decoration: none; }
+  a:hover { color: #1D4ED8; text-decoration: underline; }
+  @keyframes pulseDot { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes caretBlink { 0%,49% { opacity: 1; } 50%,100% { opacity: 0; } }
+  @keyframes floatUp { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+</style>
+</helmet>
+
+<section style="padding: 28px 32px 44px; font-family: Manrope, 'Segoe UI', sans-serif; color: #0F172A;">
+
+  <div style="display: flex; align-items: flex-end; flex-wrap: wrap; gap: 16px; margin-bottom: 18px;">
+    <div style="min-width: 0;">
+      <div style="font-family: Unbounded, sans-serif; font-size: 20px; font-weight: 600; letter-spacing: -.5px;">Login sahifasi</div>
+      <div style="font-size: 13px; color: #475569; margin-top: 6px; line-height: 1.6; max-width: 620px;">Login + parol. Hozir <b>cloud/main.py</b> faqat parol qabul qiladi — quyida server tomonida nima o'zgarishi kerakligi ko'rsatilgan. Brend transportga bog'lanmagan: temir yo'l, avtobus, aviatsiya yoki mehmonxona — bir xil.</div>
+    </div>
+    <div style="flex: 1;"></div>
+    <div style="display: flex; align-items: center; gap: 5px; background: #fff; border: 1px solid #CBD5E1; border-radius: 12px; padding: 5px;">
+      <sc-for list="{{ stateTabs }}" as="s" hint-placeholder-count="4">
+        <div onClick="{{ s.go }}" style="{{ s.style }}">{{ s.label }}</div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 26px; align-items: flex-start;">
+
+    <div id="1a" style="flex: 1 1 620px; min-width: 480px;">
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+        <span style="background: #0F172A; color: #fff; font-size: 11px; font-weight: 800; padding: 4px 9px; border-radius: 7px; letter-spacing: .5px;">1a</span>
+        <div style="font-size: 14px; font-weight: 800;">Ikki panel — brend + forma</div>
+        <div style="font-size: 12px; color: #64748B;">desktop uchun</div>
+      </div>
+
+      <div style="border-radius: 20px; overflow: hidden; box-shadow: 0 20px 50px rgba(15,23,42,.18); display: flex; min-height: 476px; background: #fff;">
+
+        <div style="width: 45%; flex: 0 0 45%; background: #0F172A; padding: 32px 30px; display: flex; flex-direction: column; position: relative; overflow: hidden;">
+          <div style="position: absolute; inset: 0; opacity: .5; background-image: radial-gradient(circle at 82% 12%, rgba(37,99,235,.5), transparent 46%), radial-gradient(circle at 8% 88%, rgba(37,99,235,.22), transparent 40%);"></div>
+          <div style="position: relative; display: flex; align-items: center; gap: 11px;">
+            <div style="width: 38px; height: 38px; border-radius: 11px; background: #2563EB; display: grid; place-items: center; color: #fff; font-family: Unbounded, sans-serif; font-weight: 700; font-size: 17px;">K</div>
+            <div>
+              <div style="color: #fff; font-family: Unbounded, sans-serif; font-size: 14px; font-weight: 600; letter-spacing: -.2px;">KioskCloud</div>
+              <div style="color: #64748B; font-size: 10.5px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase;">Markaziy boshqaruv</div>
+            </div>
+          </div>
+
+          <div style="position: relative; flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 26px 0;">
+            <div style="color: #fff; font-family: Unbounded, sans-serif; font-size: 21px; font-weight: 600; line-height: 1.4; letter-spacing: -.5px;">Barcha kiosklar<br />bitta panelda</div>
+            <div style="color: #94A3B8; font-size: 12.5px; line-height: 1.7; margin-top: 14px;">Obyektlaringiz bulutga o'zi ulanadi — oq IP, port yoki VPN kerak emas.</div>
+            <div style="display: flex; flex-direction: column; gap: 11px; margin-top: 22px;">
+              <sc-for list="{{ points }}" as="p" hint-placeholder-count="3">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <span style="{{ p.icon }}"></span>
+                  <span style="color: #CBD5E1; font-size: 12.5px; font-weight: 600;">{{ p.text }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="position: relative; background: #1E293B; border-radius: 13px; padding: 13px 15px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: #22C55E; animation: pulseDot 2s infinite;"></span>
+              <span style="color: #E2E8F0; font-size: 11.5px; font-weight: 700;">Bulut ishlayapti</span>
+              <span style="flex: 1;"></span>
+              <span style="color: #64748B; font-size: 11px; font-weight: 700;">v1.0</span>
+            </div>
+            <div style="color: #64748B; font-size: 11px; line-height: 1.6; margin-top: 7px;">Sessiya 12 soat amal qiladi. Bulut qayta ishga tushsa hamma qaytadan kiradi.</div>
+          </div>
+        </div>
+
+        <div style="flex: 1; min-width: 0; padding: 40px 38px; display: flex; flex-direction: column; justify-content: center;">
+          <div style="font-family: Unbounded, sans-serif; font-size: 19px; font-weight: 600; letter-spacing: -.4px;">Kirish</div>
+          <div style="font-size: 12.5px; color: #64748B; margin-top: 7px; line-height: 1.6;">Davom etish uchun login va parolni kiriting.</div>
+
+          <sc-if value="{{ showErr }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; align-items: flex-start; gap: 9px; background: #FEE2E2; border-radius: 11px; padding: 11px 13px; margin-top: 18px;">
+              <span style="{{ errIcon }}"></span>
+              <div style="min-width: 0;">
+                <div style="color: #B91C1C; font-size: 12.5px; font-weight: 800;">{{ errTitle }}</div>
+                <div style="color: #B91C1C; font-size: 11.5px; margin-top: 3px; line-height: 1.5; opacity: .9;">{{ errSub }}</div>
+              </div>
+            </div>
+          </sc-if>
+
+          <div style="margin-top: 20px;">
+            <div style="font-size: 12px; font-weight: 800; margin-bottom: 7px;">Login</div>
+            <div style="{{ userInputStyle }}">
+              <span style="{{ userIcon }}"></span>
+              <div style="flex: 1; min-width: 0; font-size: 13.5px; color: #0F172A;">{{ userVal }}</div>
+              <span style="{{ userCaret }}"></span>
+            </div>
+          </div>
+          <div style="margin-top: 14px;">
+            <div style="font-size: 12px; font-weight: 800; margin-bottom: 7px;">Parol</div>
+            <div style="{{ inputStyle }}">
+              <span style="{{ lockIcon }}"></span>
+              <div style="flex: 1; min-width: 0; font-size: 14px; letter-spacing: 3px; color: #0F172A;">{{ dots }}</div>
+              <span style="{{ caretStyle }}"></span>
+              <span onClick="{{ toggleEye }}" style="{{ eyeIcon }}"></span>
+            </div>
+            <div style="{{ hintStyle }}">{{ hintText }}</div>
+          </div>
+          <div onClick="{{ toggleRemember }}" style="display: flex; align-items: center; gap: 10px; margin-top: 15px; cursor: pointer;">
+            <span style="{{ rememberBox }}"><span style="{{ rememberTick }}"></span></span>
+            <span style="font-size: 12.5px; font-weight: 600; color: #334155;">Meni eslab qol</span>
+            <span style="flex: 1;"></span>
+            <span style="font-size: 12px; font-weight: 700; color: #94A3B8;">{{ sessionLabel }}</span>
+          </div>
+
+          <div style="{{ btnStyle }}">
+            <sc-if value="{{ busy }}" hint-placeholder-val="{{ false }}">
+              <span style="width: 15px; height: 15px; border: 2px solid rgba(255,255,255,.35); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite;"></span>
+            </sc-if>
+            <span>{{ btnLabel }}</span>
+          </div>
+
+          <div style="height: 1px; background: #E2E8F0; margin: 26px 0 18px;"></div>
+          <div style="display: flex; align-items: flex-start; gap: 9px;">
+            <span style="{{ helpIcon }}"></span>
+            <div style="font-size: 11.5px; color: #94A3B8; line-height: 1.65;">Parolni bilmasangiz — bulut serverida <code style="background: #F1F5F9; border-radius: 4px; padding: 1px 5px; font-size: 11px;">py tools/set_password.py</code> buyrug'i bilan yangilanadi.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="1b" style="flex: 0 1 420px; min-width: 380px;">
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+        <span style="background: #0F172A; color: #fff; font-size: 11px; font-weight: 800; padding: 4px 9px; border-radius: 7px; letter-spacing: .5px;">1b</span>
+        <div style="font-size: 14px; font-weight: 800;">Bitta karta</div>
+        <div style="font-size: 12px; color: #64748B;">mobil bilan bir xil</div>
+      </div>
+
+      <div style="border-radius: 20px; overflow: hidden; box-shadow: 0 20px 50px rgba(15,23,42,.18); background: #0F172A; padding: 46px 30px; min-height: 476px; display: flex; align-items: center; justify-content: center; position: relative;">
+        <div style="position: absolute; inset: 0; opacity: .55; background-image: radial-gradient(circle at 50% 0%, rgba(37,99,235,.42), transparent 52%);"></div>
+
+        <div style="position: relative; width: 100%; max-width: 342px; background: #fff; border-radius: 20px; padding: 30px; box-shadow: 0 24px 60px rgba(0,0,0,.35);">
+          <div style="width: 44px; height: 44px; border-radius: 13px; background: #2563EB; display: grid; place-items: center; color: #fff; font-family: Unbounded, sans-serif; font-weight: 700; font-size: 19px; margin-bottom: 18px;">K</div>
+          <div style="font-family: Unbounded, sans-serif; font-size: 19px; font-weight: 600; letter-spacing: -.4px;">KioskCloud</div>
+          <div style="font-size: 12.5px; color: #64748B; margin-top: 7px; line-height: 1.6;">Markaziy boshqaruv paneli. Davom etish uchun login va parolni kiriting.</div>
+
+          <sc-if value="{{ showErr }}" hint-placeholder-val="{{ false }}">
+            <div style="background: #FEE2E2; color: #B91C1C; border-radius: 10px; padding: 10px 12px; font-size: 12px; font-weight: 700; margin-top: 18px; line-height: 1.5;">{{ errTitle }} — {{ errSub }}</div>
+          </sc-if>
+
+          <div style="margin-top: 18px;">
+            <div style="font-size: 12px; font-weight: 800; margin-bottom: 7px;">Login</div>
+            <div style="{{ userInputStyle }}">
+              <span style="{{ userIcon }}"></span>
+              <div style="flex: 1; min-width: 0; font-size: 13.5px;">{{ userVal }}</div>
+              <span style="{{ userCaret }}"></span>
+            </div>
+          </div>
+          <div style="margin-top: 13px;">
+            <div style="font-size: 12px; font-weight: 800; margin-bottom: 7px;">Parol</div>
+            <div style="{{ inputStyle }}">
+              <span style="{{ lockIcon }}"></span>
+              <div style="flex: 1; min-width: 0; font-size: 14px; letter-spacing: 3px;">{{ dots }}</div>
+              <span style="{{ caretStyle }}"></span>
+              <span onClick="{{ toggleEye }}" style="{{ eyeIcon }}"></span>
+            </div>
+          </div>
+          <div onClick="{{ toggleRemember }}" style="display: flex; align-items: center; gap: 10px; margin-top: 14px; cursor: pointer;">
+            <span style="{{ rememberBox }}"><span style="{{ rememberTick }}"></span></span>
+            <span style="font-size: 12.5px; font-weight: 600; color: #334155;">Meni eslab qol</span>
+          </div>
+
+          <div style="{{ btnStyle }}">
+            <sc-if value="{{ busy }}" hint-placeholder-val="{{ false }}">
+              <span style="width: 15px; height: 15px; border: 2px solid rgba(255,255,255,.35); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite;"></span>
+            </sc-if>
+            <span>{{ btnLabel }}</span>
+          </div>
+
+          <div style="font-size: 11px; color: #94A3B8; text-align: center; margin-top: 16px; line-height: 1.6;">{{ hintText }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex: 0 0 292px; min-width: 262px;">
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+        <span style="background: #475569; color: #fff; font-size: 11px; font-weight: 800; padding: 4px 9px; border-radius: 7px; letter-spacing: .5px;">1c</span>
+        <div style="font-size: 14px; font-weight: 800;">Telefonda</div>
+      </div>
+      <div style="background: #0F172A; border-radius: 34px; padding: 9px; box-shadow: 0 20px 50px rgba(15,23,42,.2);">
+        <div style="background: #0F172A; border-radius: 26px; overflow: hidden; height: 458px; display: flex; flex-direction: column; padding: 16px; position: relative;">
+          <div style="position: absolute; inset: 0; opacity: .55; background-image: radial-gradient(circle at 50% 4%, rgba(37,99,235,.42), transparent 56%);"></div>
+          <div style="position: relative; display: flex; align-items: center; font-size: 10.5px; color: #94A3B8; font-weight: 700;">
+            <span>9:41</span><span style="flex: 1;"></span><span>LTE ▮</span>
+          </div>
+          <div style="position: relative; flex: 1; display: flex; align-items: center;">
+            <div style="width: 100%; background: #fff; border-radius: 18px; padding: 22px 20px;">
+              <div style="width: 38px; height: 38px; border-radius: 11px; background: #2563EB; display: grid; place-items: center; color: #fff; font-family: Unbounded, sans-serif; font-weight: 700; font-size: 16px; margin-bottom: 14px;">K</div>
+              <div style="font-family: Unbounded, sans-serif; font-size: 16px; font-weight: 600; letter-spacing: -.3px;">KioskCloud</div>
+              <div style="font-size: 11.5px; color: #64748B; margin-top: 6px; line-height: 1.55;">Login va parolni kiriting.</div>
+              <div style="display: flex; align-items: center; gap: 9px; border: 1.5px solid #CBD5E1; border-radius: 11px; padding: 11px 13px; margin-top: 14px; min-height: 46px;">
+                <span style="{{ userIcon }}"></span>
+                <div style="flex: 1; font-size: 12.5px;">{{ userVal }}</div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 9px; border: 1.5px solid #CBD5E1; border-radius: 11px; padding: 11px 13px; margin-top: 9px; min-height: 46px;">
+                <span style="{{ lockIcon }}"></span>
+                <div style="flex: 1; font-size: 13px; letter-spacing: 3px;">{{ dots }}</div>
+                <span style="{{ eyeIcon }}"></span>
+              </div>
+              <div style="background: #2563EB; color: #fff; border-radius: 11px; padding: 13px; text-align: center; font-size: 13px; font-weight: 800; margin-top: 12px; min-height: 46px; display: grid; place-items: center;">Kirish</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 13px; padding: 14px 16px; margin-top: 14px; font-size: 12px; color: #475569; line-height: 1.65;">Kirish tugmasi 46px — barmoq uchun yetarli. Parol maydoni <code style="background: #F1F5F9; border-radius: 4px; padding: 1px 4px; font-size: 11px;">autocomplete="current-password"</code> bilan, brauzer parol menejeri ishlaydi.</div>
+    </div>
+  </div>
+
+  <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; padding: 20px 24px; margin-top: 26px;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <span style="{{ usersIcon }}"></span>
+      <div style="font-family: Unbounded, sans-serif; font-size: 15px; font-weight: 600; letter-spacing: -.3px;">Login uchun server tomoni o'zgaradi</div>
+    </div>
+    <div style="font-size: 12.5px; color: #64748B; line-height: 1.7; margin-top: 8px; max-width: 780px;">Hozir <code style="background: #F1F5F9; border-radius: 4px; padding: 1px 5px; font-size: 11.5px;">cloud/security.py</code> bitta global parol xeshini saqlaydi va <code style="background: #F1F5F9; border-radius: 4px; padding: 1px 5px; font-size: 11.5px;">check_password(plain)</code> faqat parolni tekshiradi. Login qo'shilsa foydalanuvchilar jadvali kerak bo'ladi — shu bilan birga kim nima qilganini ham ko'rsatish mumkin bo'ladi.</div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(232px, 1fr)); gap: 12px; margin-top: 18px;">
+      <sc-for list="{{ authSteps }}" as="a" hint-placeholder-count="4">
+        <div style="border: 1px solid #E2E8F0; border-radius: 13px; padding: 14px 16px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="width: 22px; height: 22px; border-radius: 7px; background: #EFF6FF; color: #2563EB; display: grid; place-items: center; font-size: 11px; font-weight: 800;">{{ a.n }}</span>
+            <div style="font-size: 12.5px; font-weight: 800;">{{ a.title }}</div>
+          </div>
+          <div style="font-size: 11.5px; color: #64748B; line-height: 1.6; margin-top: 8px;">{{ a.body }}</div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="background: #0F172A; color: #93C5FD; border-radius: 12px; padding: 13px 16px; font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 11.5px; line-height: 1.8; margin-top: 16px; white-space: pre-wrap;">{{ authCode }}</div>
+  </div>
+
+  <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; padding: 20px 24px; margin-top: 16px;">
+    <div style="font-family: Unbounded, sans-serif; font-size: 15px; font-weight: 600; letter-spacing: -.3px;">Transportga bog'lanmagan atamalar</div>
+    <div style="font-size: 12.5px; color: #64748B; line-height: 1.7; margin-top: 8px; max-width: 760px;">Hozirgi panelda "Poyezd 076Ф", "Vagon 3" yozilgan. Mahsulotni avtobus parki, aviakompaniya yoki mehmonxonaga ham sotmoqchi bo'lsangiz — bu atamalar sozlama bo'lishi kerak, kodda qattiq yozilmasin.</div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(216px, 1fr)); gap: 12px; margin-top: 18px;">
+      <sc-for list="{{ terms }}" as="t" hint-placeholder-count="4">
+        <div style="border: 1px solid #E2E8F0; border-radius: 13px; padding: 14px 16px;">
+          <div style="font-size: 11px; font-weight: 800; color: #94A3B8; text-transform: uppercase; letter-spacing: .5px;">{{ t.field }}</div>
+          <div style="font-size: 13px; font-weight: 800; margin-top: 7px;">{{ t.neutral }}</div>
+          <div style="font-size: 11.5px; color: #64748B; line-height: 1.6; margin-top: 7px;">{{ t.examples }}</div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="background: #0F172A; color: #93C5FD; border-radius: 12px; padding: 13px 16px; font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 11.5px; line-height: 1.8; margin-top: 16px; white-space: pre-wrap;">{{ termCode }}</div>
+  </div>
+
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1560, &quot;height&quot;: 1080}}">
+const P = {
+  lock: '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  eye: '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
+  eyeOff: '<path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/>',
+  alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  help: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
+  user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  cloud: '<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9"/>',
+  shield: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
+  refresh: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+};
+function maskUrl(name, sw) {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="' +
+    (sw || 2) + '" stroke-linecap="round" stroke-linejoin="round">' + P[name] + '</svg>';
+  return "url('data:image/svg+xml," + encodeURIComponent(svg) + "')";
+}
+function icon(name, size, color, sw) {
+  const u = maskUrl(name, sw);
+  return "display:inline-block;width:" + size + "px;height:" + size + "px;flex:0 0 " + size +
+    "px;background-color:" + color + ";-webkit-mask:" + u + " center/contain no-repeat;mask:" + u + " center/contain no-repeat";
+}
+
+const ACC = "#2563EB";
+
+class Component extends DCLogic {
+  state = { view: "idle", eye: false, remember: false };
+
+  ic(n, s, c, w) { return icon(n, s, c, w); }
+
+  renderVals() {
+    const v = this.state.view;
+    const nouser = v === "nouser";
+    const err = v === "wrong", blocked = v === "blocked", busy = v === "busy";
+    const filled = v !== "empty";
+    const remember = this.state.remember;
+    const bad = err || nouser || blocked;   // qaysi maydon xato ekani oshkor qilinmaydi
+
+    return {
+      stateTabs: [["idle", "Odatiy"], ["wrong", "Parol xato"], ["nouser", "Login xato"], ["blocked", "Bloklangan"], ["busy", "Yuklanmoqda"]]
+        .map(([id, label]) => ({
+          label,
+          go: () => this.setState({ view: id }),
+          style: "border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;" +
+            (v === id ? "background:" + ACC + ";color:#fff" : "background:transparent;color:#64748B"),
+        })),
+
+      points: [
+        ["cloud", "Obyekt o'zi ulanadi — oq IP kerak emas"],
+        ["refresh", "Uzilsa navbatda turadi, o'zi davom etadi"],
+        ["shield", "Har bir buyruq imzolangan (Ed25519)"],
+      ].map(([n, text]) => ({ text, icon: this.ic(n, 16, "#60A5FA", 1.9) })),
+
+      lockIcon: this.ic("lock", 15, "#94A3B8", 1.9),
+      userIcon: this.ic("user", 15, "#94A3B8", 1.9),
+      userVal: nouser ? "operator2" : "admin",
+      userCaret: "display:none",
+      userInputStyle: "display:flex;align-items:center;gap:10px;border-radius:11px;padding:12px 14px;min-height:46px;background:#fff;border:1.5px solid " +
+        (bad ? "#EF4444;box-shadow:0 0 0 3px rgba(239,68,68,.12)" : "#CBD5E1"),
+      rememberBox: "width:19px;height:19px;flex:0 0 19px;border-radius:6px;display:grid;place-items:center;border:1.5px solid " +
+        (remember ? ACC + ";background:" + ACC : "#CBD5E1;background:#fff"),
+      rememberTick: remember ? this.ic("check", 12, "#fff", 3.2) : "display:none",
+      toggleRemember: () => this.setState(s => ({ remember: !s.remember })),
+      sessionLabel: remember ? "30 kun" : "12 soat",
+      eyeIcon: this.ic(this.state.eye ? "eyeOff" : "eye", 16, "#94A3B8", 1.8) + ";cursor:pointer",
+      errIcon: this.ic("alert", 16, "#B91C1C", 2),
+      helpIcon: this.ic("help", 15, "#CBD5E1", 1.9) + ";margin-top:1px",
+      toggleEye: () => this.setState(s => ({ eye: !s.eye })),
+
+      dots: !filled ? "" : this.state.eye ? "kiosk-2026" : "••••••••••",
+      caretStyle: filled ? "display:none" : "width:1.5px;height:17px;background:" + ACC + ";animation:caretBlink 1.1s step-end infinite",
+
+      inputStyle: "display:flex;align-items:center;gap:10px;border-radius:11px;padding:12px 14px;min-height:46px;background:#fff;border:1.5px solid " +
+        (bad ? "#EF4444;box-shadow:0 0 0 3px rgba(239,68,68,.12)"
+             : filled ? ACC + ";box-shadow:0 0 0 3px rgba(37,99,235,.12)" : "#CBD5E1"),
+
+      showErr: err || blocked || nouser,
+      errTitle: blocked ? "Vaqtincha bloklandi" : "Login yoki parol xato",
+      errSub: blocked
+        ? "8 marta xato kiritildi. 4 daqiqa 12 soniyadan keyin qayta urinib ko'ring."
+        : "Yana 5 marta urinish qoldi, keyin 5 daqiqaga bloklanadi. Qaysi maydon xato ekani ataylab aytilmaydi.",
+
+      busy,
+      btnLabel: busy ? "Tekshirilmoqda…" : blocked ? "Kutish — 4:12" : "Kirish",
+      btnStyle: "display:flex;align-items:center;justify-content:center;gap:9px;border-radius:11px;padding:13px;font-size:13.5px;font-weight:800;margin-top:18px;min-height:46px;" +
+        (blocked ? "background:#F1F5F9;color:#94A3B8;cursor:not-allowed"
+          : "background:" + (busy ? "#1D4ED8" : ACC) + ";color:#fff;cursor:pointer"),
+
+      hintText: blocked
+        ? "Blok IP bo'yicha qo'yiladi — boshqa tarmoqdan kirish mumkin."
+        : remember
+          ? "Sessiya 30 kun saqlanadi (cookie diskda). Umumiy kompyuterda belgilamang."
+          : "Sessiya 12 soat. Bulut qayta ishga tushsa qaytadan kirish kerak.",
+      hintStyle: "font-size:11px;color:" + (blocked ? "#B45309" : "#94A3B8") + ";margin-top:8px;line-height:1.55",
+
+      usersIcon: this.ic("users", 18, "#2563EB", 1.9),
+      authSteps: [
+        { n: "1", title: "admin_users jadvali", body: "username (unikal), pass_hash (pbkdf2), role, is_active, created_at, last_login. Mavjud global parol birinchi foydalanuvchi sifatida ko'chiriladi — eski parol ishlashda davom etadi." },
+        { n: "2", title: "login endpoint", body: "POST /api/admin/login endi {username, password} qabul qiladi. Xato bo'lsa qaysi maydon xato ekani aytilmaydi — login ro'yxatini taxmin qilishning oldi olinadi." },
+        { n: "3", title: "Sessiyaga user_id", body: "Hozir sessiya faqat token. Unga user_id qo'shiladi — shundan keyin loglarda «kim» ko'rinadi va Audit ekranini qilish mumkin bo'ladi." },
+        { n: "4", title: "Urinish chegarasi", body: "Hozir IP bo'yicha (8 → 5 daqiqa). Login qo'shilsa login+IP juftligi bo'yicha ham hisoblanadi — bitta hisobni tashqaridan bloklab qo'yishning oldi olinadi." },
+      ],
+      authCode: "-- cloud/db.py\nCREATE TABLE admin_users (\n  id INTEGER PRIMARY KEY, username TEXT UNIQUE NOT NULL,\n  pass_hash TEXT NOT NULL, role TEXT DEFAULT 'admin',\n  is_active INTEGER DEFAULT 1, last_login TEXT);\n\n# cloud/security.py\ndef check_login(username, plain):   # check_password() o'rniga\n    u = db.admin_user(username)\n    if not u or not u['is_active']: return None\n    return u['id'] if verify(u['pass_hash'], plain) else None\n\n# cloud/main.py — POST /api/admin/login\nuid = security.check_login(payload['username'], payload['password'])\nif not uid: raise HTTPException(403, \"login yoki parol xato\")\ntoken = security.new_session(uid)   # sessiyada user_id",
+      terms: [
+        { field: "servers.kind", neutral: "Obyekt turi", examples: "poyezd · avtobus · samolyot · kema · bino" },
+        { field: "servers.name", neutral: "Obyekt nomi", examples: "«076Ф» · «Mercedes 42-A» · «HY-891» — erkin matn" },
+        { field: "server_kiosks.zone", neutral: "Zona nomi", examples: "vagon · salon · sektor · qavat · xona" },
+        { field: "servers.route", neutral: "Yo'nalish", examples: "Toshkent → Xiva · yoki bo'sh (statsionar obyektlar)" },
+      ],
+      termCode: "-- cloud/db.py: servers jadvaliga\nALTER TABLE servers ADD COLUMN kind TEXT DEFAULT 'generic';\nALTER TABLE servers ADD COLUMN zone_label TEXT DEFAULT 'Zona';\n\n// static/app.js — qattiq yozilgan matn o'rniga\nconst L = { train: {obj:'Poyezd', zone:'Vagon'},\n           bus:   {obj:'Avtobus', zone:'Salon'},\n           air:   {obj:'Reys',    zone:'Salon'},\n           generic:{obj:'Obyekt', zone:'Zona'} }[srv.kind];",
+    };
+  }
+}
+</script>
+</body>
+</html>

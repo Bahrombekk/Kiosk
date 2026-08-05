@@ -27,59 +27,197 @@
 <sc-if value="{{ isWide }}" hint-placeholder-val="{{ true }}">
 <div style="display: flex; height: 100vh; width: 100%; overflow: hidden; font-family: Manrope, 'Segoe UI', sans-serif; color: #0F172A; background: #F1F5F9;">
 
-  <div style="width: 248px; flex: 0 0 248px; background: #0F172A; display: flex; flex-direction: column; padding: 20px 14px;">
-    <div style="display: flex; align-items: center; gap: 11px; padding: 4px 8px 22px;">
-      <div style="width: 38px; height: 38px; border-radius: 11px; background: #2563EB; display: grid; place-items: center; color: #fff; font-family: Unbounded, sans-serif; font-weight: 700; font-size: 17px;">K</div>
-      <div>
-        <div style="color: #fff; font-family: Unbounded, sans-serif; font-size: 14px; font-weight: 600; letter-spacing: -.2px;">KioskCloud</div>
-        <div style="color: #64748B; font-size: 10.5px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase;">Markaziy boshqaruv</div>
+  <sc-if value="{{ isFleetMode }}" hint-placeholder-val="{{ false }}">
+    <div style="display: flex; height: 100%; flex: 0 0 auto;">
+
+      <div style="width: 62px; flex: 0 0 62px; background: #0F172A; display: flex; flex-direction: column; align-items: center; padding: 16px 0; gap: 4px; border-right: 1px solid #1E293B;">
+        <div style="width: 34px; height: 34px; border-radius: 11px; background: #2563EB; display: grid; place-items: center; color: #fff; font-family: Unbounded, sans-serif; font-weight: 700; font-size: 15px; box-shadow: 0 4px 14px rgba(37,99,235,.45); margin-bottom: 12px;">K</div>
+        <sc-for list="{{ railItems }}" as="r" hint-placeholder-count="8">
+          <div onClick="{{ r.go }}" style="{{ r.style }}">
+            <span style="{{ r.mark }}"></span>
+            <span style="{{ r.icon }}"></span>
+            <span style="{{ r.dot }}"></span>
+          </div>
+        </sc-for>
+        <div style="flex: 1;"></div>
+        <sc-for list="{{ modeOptions }}" as="m" hint-placeholder-count="3">
+          <div onClick="{{ m.go }}" style="{{ m.railStyle }}"><span style="{{ m.icon }}"></span></div>
+        </sc-for>
+        <div style="width: 30px; height: 30px; border-radius: 10px; background: linear-gradient(140deg, #334155, #1E293B); color: #E2E8F0; display: grid; place-items: center; font-size: 10.5px; font-weight: 800; margin-top: 8px;">BB</div>
+      </div>
+
+      <div style="width: 244px; flex: 0 0 244px; background: #0F172A; display: flex; flex-direction: column; border-right: 1px solid #1E293B; box-shadow: inset 6px 0 12px -6px rgba(0,0,0,.5);">
+        <div style="padding: 16px 14px 12px;">
+          <div style="display: flex; align-items: baseline; gap: 8px;">
+            <div style="color: #fff; font-family: Unbounded, sans-serif; font-size: 13.5px; font-weight: 600; letter-spacing: -.2px;">Park</div>
+            <div style="color: #64748B; font-size: 11px; font-weight: 700;">50 obyekt</div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; background: #1E293B; border-radius: 10px; padding: 8px 11px; margin-top: 12px;">
+            <span style="{{ searchIcon }}"></span>
+            <span style="color: #64748B; font-size: 12px;">Nom yoki yo'nalish…</span>
+          </div>
+          <div style="display: flex; gap: 5px; margin-top: 10px;">
+            <sc-for list="{{ fleetFilters }}" as="ff" hint-placeholder-count="3">
+              <div onClick="{{ ff.go }}" style="{{ ff.style }}">{{ ff.label }}</div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="flex: 1; overflow-y: auto; overflow-x: hidden; padding: 0 8px 10px;">
+          <sc-for list="{{ fleetGroups }}" as="fg" hint-placeholder-count="2">
+            <div style="margin-bottom: 12px;">
+              <div style="display: flex; align-items: center; gap: 7px; padding: 6px 8px 7px;">
+                <span style="{{ fg.dot }}"></span>
+                <span style="color: #94A3B8; font-size: 10px; font-weight: 800; letter-spacing: .7px; text-transform: uppercase;">{{ fg.label }}</span>
+                <span style="color: #94A3B8; font-size: 10px; font-weight: 800;">{{ fg.count }}</span>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 2px;">
+                <sc-for list="{{ fg.items }}" as="s" hint-placeholder-count="5">
+                  <div onClick="{{ s.open }}" style="{{ s.rowStyle }}" style-hover="background: #1E293B;">
+                    <span style="{{ s.mark }}"></span>
+                    <div style="flex: 1; min-width: 0;">
+                      <div style="{{ s.nameStyle }}">{{ s.name }}</div>
+                      <div style="color: #64748B; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px;">{{ s.route }}</div>
+                    </div>
+                    <div style="text-align: right;">
+                      <div style="{{ s.kioskStyle }}">{{ s.kiosksShort }}</div>
+                      <div style="{{ s.syncStyle }}">{{ s.syncLabel }}</div>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="border-top: 1px solid #1E293B; padding: 12px 14px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: #22C55E; box-shadow: 0 0 0 3px rgba(34,197,94,.16); animation: pulseDot 2.4s infinite;"></span>
+            <span style="color: #E2E8F0; font-size: 11.5px; font-weight: 700;">42 onlayn</span>
+            <span style="flex: 1;"></span>
+            <span style="color: #94A3B8; font-size: 11px; font-weight: 700;">3 navbatda</span>
+          </div>
+          <div style="height: 5px; border-radius: 999px; background: #334155; overflow: hidden; margin-top: 9px;">
+            <div style="height: 100%; width: 84%; border-radius: 999px; background: #22C55E;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <div style="{{ sideStyle }}">
+
+    <div style="{{ logoRow }}">
+      <div style="width: 36px; height: 36px; flex: 0 0 36px; border-radius: 11px; background: #2563EB; display: grid; place-items: center; color: #fff; font-family: Unbounded, sans-serif; font-weight: 700; font-size: 16px; box-shadow: 0 4px 14px rgba(37,99,235,.45);">K</div>
+      <div style="{{ logoText }}">
+        <div style="color: #fff; font-family: Unbounded, sans-serif; font-size: 13.5px; font-weight: 600; letter-spacing: -.2px; white-space: nowrap;">KioskCloud</div>
+        <div style="color: #64748B; font-size: 10.5px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; margin-top: 2px; white-space: nowrap;">Markaziy boshqaruv</div>
+      </div>
+      <div onClick="{{ toggleRail }}" style="{{ railBtn }}">
+        <span style="{{ railIcon }}"></span>
       </div>
     </div>
 
-    <div style="display: flex; flex-direction: column; gap: 3px; overflow-y: auto; overflow-x: hidden; min-height: 0;">
-      <sc-for list="{{ nav }}" as="n" hint-placeholder-count="7">
+    <div onClick="{{ toggleRail }}" style="{{ railBtnOpen }}" style-hover="background: #334155;">
+      <span style="{{ railIconOpen }}"></span>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 2px; overflow-y: auto; overflow-x: hidden; min-height: 0; padding: 4px 0 6px;">
+      <sc-for list="{{ navItems }}" as="n" hint-placeholder-count="8">
         <div onClick="{{ n.go }}" style="{{ n.style }}">
+          <span style="{{ n.mark }}"></span>
           <span style="{{ n.icon }}"></span>
-          <span style="flex: 1;">{{ n.label }}</span>
+          <span style="{{ n.labelStyle }}">{{ n.label }}</span>
           <span style="{{ n.badgeStyle }}">{{ n.badge }}</span>
         </div>
       </sc-for>
     </div>
 
-    <div style="flex: 1;"></div>
+    <div style="flex: 1; min-height: 8px;"></div>
 
-    <div style="background: #1E293B; border-radius: 14px; padding: 14px;">
-      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-        <span style="width: 8px; height: 8px; border-radius: 50%; background: #22C55E; animation: pulseDot 2s infinite;"></span>
-        <span style="color: #E2E8F0; font-size: 12px; font-weight: 700;">Bulut ishlayapti</span>
+    <div style="{{ statusCard }}">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: #22C55E; box-shadow: 0 0 0 3px rgba(34,197,94,.16); animation: pulseDot 2.4s infinite;"></span>
+        <span style="{{ statusText }}">Bulut ishlayapti</span>
+        <span style="flex: 1;"></span>
+        <span style="{{ statusText }}">42<span style="color: #64748B; font-weight: 600;">/50</span></span>
       </div>
-      <div style="color: #94A3B8; font-size: 11px; line-height: 1.6;">42 / 50 server onlayn<br />SIM-internet orqali ulangan</div>
-      <div style="height: 1px; background: #334155; margin: 12px 0;"></div>
-      <div style="display: flex; align-items: center; gap: 9px;">
-        <div style="width: 28px; height: 28px; border-radius: 50%; background: #334155; color: #E2E8F0; display: grid; place-items: center; font-size: 11px; font-weight: 800;">BB</div>
-        <div style="flex: 1; min-width: 0;">
-          <div style="color: #E2E8F0; font-size: 12px; font-weight: 700;">Bahrombek</div>
-          <div style="color: #64748B; font-size: 10.5px;">Super admin</div>
-        </div>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 15px;"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+      <div style="{{ statusBarWrap }}">
+        <div style="height: 100%; width: 84%; border-radius: 999px; background: #22C55E;"></div>
       </div>
+      <div style="{{ statusNote }}">8 ta server SIM-signalsiz — navbat saqlanmoqda</div>
+    </div>
+
+    <div style="{{ modeSwitchWrap }}">
+      <sc-for list="{{ modeOptions }}" as="m" hint-placeholder-count="3">
+        <div onClick="{{ m.go }}" style="{{ m.style }}"><span style="{{ m.icon }}"></span></div>
+      </sc-for>
+    </div>
+
+    <div onClick="{{ noop }}" style="{{ userRow }}" style-hover="background: #334155;">
+      <div style="width: 30px; height: 30px; flex: 0 0 30px; border-radius: 10px; background: linear-gradient(140deg, #334155, #1E293B); color: #E2E8F0; display: grid; place-items: center; font-size: 11px; font-weight: 800;">BB</div>
+      <div style="{{ userText }}">
+        <div style="color: #E2E8F0; font-size: 12px; font-weight: 700; white-space: nowrap;">Bahrombek</div>
+        <div style="color: #64748B; font-size: 10px; white-space: nowrap; margin-top: 1px;">Super admin · 12 soat</div>
+      </div>
+      <span style="{{ outIcon }}"></span>
     </div>
   </div>
 
   <div style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
 
-    <div style="height: 68px; flex: 0 0 68px; background: #fff; border-bottom: 1px solid #E2E8F0; display: flex; align-items: center; gap: 16px; padding: 0 26px;">
+    <sc-if value="{{ isTopMode }}" hint-placeholder-val="{{ false }}">
+      <div style="flex: 0 0 auto; background: #0F172A;">
+        <div style="display: flex; align-items: center; gap: 18px; padding: 0 22px; height: 56px;">
+          <div style="display: flex; align-items: center; gap: 10px; flex: 0 0 auto;">
+            <div style="width: 30px; height: 30px; border-radius: 9px; background: #2563EB; display: grid; place-items: center; color: #fff; font-family: Unbounded, sans-serif; font-weight: 700; font-size: 14px;">K</div>
+            <div style="color: #fff; font-family: Unbounded, sans-serif; font-size: 13px; font-weight: 600; letter-spacing: -.2px; white-space: nowrap;">KioskCloud</div>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 2px; min-width: 0; flex: 0 1 auto;">
+            <sc-for list="{{ topNav }}" as="t" hint-placeholder-count="8">
+              <div onClick="{{ t.go }}" style="{{ t.style }}">
+                <span style="{{ t.icon }}"></span>
+                <span style="{{ t.labelStyle }}">{{ t.label }}</span>
+                <span style="{{ t.badgeStyle }}">{{ t.badge }}</span>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="flex: 1;"></div>
+
+          <div style="display: flex; align-items: center; gap: 9px; background: #1E293B; border-radius: 10px; padding: 7px 11px; flex: 0 1 250px; min-width: 88px;">
+            <span style="{{ searchIcon }}"></span>
+            <span style="color: #94A3B8; font-size: 12.5px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ searchHint }}</span>
+            <span style="background: #334155; color: #94A3B8; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 5px; white-space: nowrap;">⌘K</span>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 9px; flex: 0 0 auto;">
+            <span style="width: 7px; height: 7px; border-radius: 50%; background: #22C55E; box-shadow: 0 0 0 3px rgba(34,197,94,.16); animation: pulseDot 2.4s infinite;"></span>
+            <span style="color: #94A3B8; font-size: 11.5px; font-weight: 700; white-space: nowrap;">42/50</span>
+            <div style="display: flex; gap: 3px; background: #1E293B; border-radius: 9px; padding: 3px;">
+              <sc-for list="{{ modeOptions }}" as="m" hint-placeholder-count="3">
+                <div onClick="{{ m.go }}" style="{{ m.topStyle }}"><span style="{{ m.icon }}"></span></div>
+              </sc-for>
+            </div>
+            <div style="width: 28px; height: 28px; border-radius: 9px; background: linear-gradient(140deg, #334155, #1E293B); color: #E2E8F0; display: grid; place-items: center; font-size: 10.5px; font-weight: 800;">BB</div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <div style="{{ headerStyle }}">
       <div style="min-width: 0;">
-        <div style="font-size: 17px; font-weight: 800; letter-spacing: -.3px;">{{ pageTitle }}</div>
+        <div style="font-family: Unbounded, sans-serif; font-size: 17px; font-weight: 600; letter-spacing: -.3px;">{{ pageTitle }}</div>
         <div style="font-size: 12px; color: #64748B;">{{ pageSub }}</div>
       </div>
       <div style="flex: 1;"></div>
-      <div style="display: flex; align-items: center; gap: 8px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 8px 12px; width: 260px;">
+      <div style="{{ headSearch }}">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 15px;"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
         <span style="color: #94A3B8; font-size: 13px;">Server, kiosk yoki kontent…</span>
       </div>
-      <div onClick="{{ openUpload }}" style="background: #fff; border: 1px solid #E2E8F0; color: #334155; border-radius: 10px; padding: 9px 16px; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px;" style-hover="background: #F8FAFC; border-color: #CBD5E1;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 15px;"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"></path><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"></path><path d="M7 3v4a1 1 0 0 0 1 1h7"></path></svg><span>Kontent yuklash</span></div>
-      <div onClick="{{ openDeploy }}" style="background: #2563EB; color: #fff; border-radius: 10px; padding: 9px 16px; font-size: 13px; font-weight: 700; cursor: pointer;" style-hover="background: #1D4ED8;">Tarqatish</div>
+      <div onClick="{{ openUpload }}" style="background: #fff; border: 1px solid #E2E8F0; color: #334155; border-radius: 11px; padding: 9px 16px; font-size: 13px; font-weight: 700; cursor: pointer; transition: .12s; display: flex; align-items: center; gap: 8px;" style-hover="background: #F8FAFC; border-color: #CBD5E1;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 15px;"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"></path><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"></path><path d="M7 3v4a1 1 0 0 0 1 1h7"></path></svg><span>Kontent yuklash</span></div>
+      <div onClick="{{ openDeploy }}" style="background: #2563EB; color: #fff; border-radius: 11px; padding: 9px 16px; font-size: 13px; font-weight: 700; cursor: pointer; transition: .12s;" style-hover="background: #1D4ED8;">Tarqatish</div>
     </div>
 
     <div style="flex: 1; overflow: auto; padding: 24px 26px 40px;">
@@ -88,10 +226,10 @@
         <div>
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(212px, 1fr)); gap: 16px;">
             <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="4">
-              <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; padding: 18px 20px;">
+              <div style="background: #fff; border-radius: 16px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04); padding: 18px 20px;">
                 <div style="font-size: 12px; color: #64748B; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;">{{ k.label }}</div>
                 <div style="display: flex; align-items: baseline; gap: 8px; margin-top: 10px;">
-                  <div style="font-family: Unbounded, sans-serif; font-size: 27px; font-weight: 600; letter-spacing: -1px;">{{ k.value }}</div>
+                  <div style="font-family: Unbounded, sans-serif; font-size: 26px; font-weight: 600; letter-spacing: -.8px;">{{ k.value }}</div>
                   <div style="{{ k.deltaStyle }}">{{ k.delta }}</div>
                 </div>
                 <div style="font-size: 11.5px; color: #94A3B8; margin-top: 6px;">{{ k.note }}</div>
@@ -99,27 +237,27 @@
             </sc-for>
           </div>
 
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 16px; margin-top: 16px;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(430px, 1fr)); gap: 16px; margin-top: 16px;">
 
-            <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; overflow: hidden;">
+            <div style="background: #fff; border-radius: 16px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04); overflow: hidden;">
               <div style="display: flex; align-items: center; padding: 16px 20px; border-bottom: 1px solid #F1F5F9;">
                 <div>
-                  <div style="font-size: 14.5px; font-weight: 800;">Serverlar holati</div>
+                  <div style="font-size: 14px; font-weight: 800; letter-spacing: -.1px;">Serverlar holati</div>
                   <div style="font-size: 11.5px; color: #94A3B8;">Har bir poyezd serveri va uning kiosklari</div>
                 </div>
                 <div style="flex: 1;"></div>
                 <div onClick="{{ goServers }}" style="font-size: 12px; font-weight: 700; color: #2563EB; cursor: pointer;">Barchasi →</div>
               </div>
               <sc-for list="{{ topServers }}" as="s" hint-placeholder-count="6">
-                <div onClick="{{ s.open }}" style="display: flex; align-items: center; gap: 14px; padding: 13px 20px; border-bottom: 1px solid #F8FAFC; cursor: pointer;" style-hover="background: #F8FAFC;">
+                <div onClick="{{ s.open }}" style="display: flex; align-items: center; gap: 14px; padding: 13px 20px; border-bottom: 1px solid #F1F5F9; cursor: pointer;" style-hover="background: #F8FAFC;">
                   <span style="{{ s.dotStyle }}"></span>
-                  <div style="flex: 1.4; min-width: 0;">
+                  <div style="flex: 1.4; min-width: 104px;">
                     <div style="font-size: 13.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ s.name }}</div>
-                    <div style="font-size: 11px; color: #94A3B8;">{{ s.route }}</div>
+                    <div style="font-size: 11px; color: #94A3B8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px;">{{ s.route }}</div>
                   </div>
-                  <div style="width: 84px; flex: 0 0 84px; font-size: 12px; color: #475569; font-weight: 600;">{{ s.kiosksLabel }}</div>
+                  <div style="width: 84px; flex: 0 0 84px; font-size: 12px; color: #475569; font-weight: 600; white-space: nowrap;">{{ s.kiosksLabel }}</div>
                   <div style="flex: 1; min-width: 72px;">
-                    <div style="height: 7px; border-radius: 4px; background: #F1F5F9; overflow: hidden;">
+                    <div style="height: 7px; border-radius: 999px; background: #F1F5F9; overflow: hidden;">
                       <div style="{{ s.barStyle }}"></div>
                     </div>
                   </div>
@@ -130,9 +268,9 @@
             </div>
 
             <div style="display: flex; flex-direction: column; gap: 16px;">
-              <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; padding: 18px 20px;">
+              <div style="background: #fff; border-radius: 16px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04); padding: 18px 20px;">
                 <div style="display: flex; align-items: center;">
-                  <div style="font-size: 14.5px; font-weight: 800;">Tarqatish navbati</div>
+                  <div style="font-size: 14px; font-weight: 800; letter-spacing: -.1px;">Tarqatish navbati</div>
                   <div style="flex: 1;"></div>
                   <div style="background: #DBEAFE; color: #1D4ED8; font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 999px;">3 faol</div>
                 </div>
@@ -147,7 +285,7 @@
                         </div>
                         <div style="font-size: 11.5px; font-weight: 700; color: #475569;">{{ q.pctLabel }}</div>
                       </div>
-                      <div style="height: 6px; border-radius: 3px; background: #F1F5F9; margin-top: 7px; overflow: hidden;">
+                      <div style="height: 6px; border-radius: 999px; background: #F1F5F9; margin-top: 7px; overflow: hidden;">
                         <div style="{{ q.barStyle }}"></div>
                       </div>
                     </div>
@@ -156,7 +294,7 @@
                 <div onClick="{{ goQueue }}" style="margin-top: 16px; text-align: center; border: 1px solid #E2E8F0; border-radius: 10px; padding: 8px; font-size: 12.5px; font-weight: 700; color: #334155; cursor: pointer;" style-hover="background: #F8FAFC;">Navbatni ochish</div>
               </div>
 
-              <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; padding: 18px 20px; flex: 1;">
+              <div style="background: #fff; border-radius: 16px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04); padding: 18px 20px; flex: 1;">
                 <div style="font-size: 14.5px; font-weight: 800; margin-bottom: 14px;">So'nggi hodisalar</div>
                 <div style="display: flex; flex-direction: column; gap: 13px;">
                   <sc-for list="{{ events }}" as="e" hint-placeholder-count="5">
@@ -182,18 +320,18 @@
               <div onClick="{{ f.go }}" style="{{ f.style }}">{{ f.label }}</div>
             </sc-for>
           </div>
-          <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; overflow: hidden;">
-            <div style="display: flex; align-items: center; gap: 14px; padding: 12px 20px; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; font-size: 11px; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: .5px;">
-              <div style="flex: 1.6; min-width: 138px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Server / poyezd</div>
-              <div style="flex: 0 0 88px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Kiosklar</div>
-              <div style="{{ hSync }}">Sinxronizatsiya</div>
+          <div style="background: #fff; border-radius: 16px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04); overflow: hidden; padding-top: 14px;">
+            <div style="display: flex; align-items: center; gap: 14px; padding: 4px 20px 11px; border-bottom: 1px solid #E2E8F0; font-size: 11px; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: .5px;">
+              <div style="flex: 1.6; min-width: 138px; white-space: nowrap;">Server / poyezd</div>
+              <div style="flex: 0 0 88px; white-space: nowrap;">Kiosklar</div>
+              <div style="{{ hSync }}">{{ syncHdr }}</div>
               <div style="{{ hDisk }}">Disk</div>
-              <div style="flex: 0 0 92px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Litsenziya</div>
+              <div style="flex: 0 0 92px; white-space: nowrap;">Litsenziya</div>
               <div style="{{ hSeen }}">Oxirgi ko'rilgan</div>
               <div style="flex: 0 0 116px; text-align: right;">Amallar</div>
             </div>
             <sc-for list="{{ servers }}" as="s" hint-placeholder-count="8">
-              <div style="display: flex; align-items: center; gap: 14px; padding: 14px 20px; border-bottom: 1px solid #F8FAFC;" style-hover="background: #F8FAFC;">
+              <div style="display: flex; align-items: center; gap: 14px; padding: 14px 20px; border-bottom: 1px solid #F1F5F9;" style-hover="background: #F8FAFC;">
                 <div onClick="{{ s.open }}" style="flex: 1.6; min-width: 138px; display: flex; align-items: center; gap: 11px; cursor: pointer;">
                   <span style="{{ s.dotStyle }}"></span>
                   <div style="min-width: 0;">
@@ -203,13 +341,13 @@
                 </div>
                 <div style="flex: 0 0 88px; font-size: 12.5px; color: #334155; font-weight: 600; white-space: nowrap;">{{ s.kiosksLabel }}</div>
                 <div style="{{ hSync }}">
-                  <div style="height: 7px; border-radius: 4px; background: #F1F5F9; overflow: hidden;">
+                  <div style="height: 7px; border-radius: 999px; background: #F1F5F9; overflow: hidden;">
                     <div style="{{ s.barStyle }}"></div>
                   </div>
                   <div style="font-size: 10.5px; color: #94A3B8; margin-top: 4px; white-space: nowrap; overflow: hidden;">{{ s.syncText }}</div>
                 </div>
                 <div style="{{ hDisk }}">
-                  <div style="height: 7px; border-radius: 4px; background: #F1F5F9; overflow: hidden;">
+                  <div style="height: 7px; border-radius: 999px; background: #F1F5F9; overflow: hidden;">
                     <div style="{{ s.diskStyle }}"></div>
                   </div>
                   <div style="font-size: 10.5px; color: #94A3B8; margin-top: 4px; white-space: nowrap; overflow: hidden;">{{ s.diskText }}</div>
@@ -217,9 +355,9 @@
                 <div style="flex: 0 0 92px;"><span style="{{ s.licStyle }}">{{ s.lic }}</span></div>
                 <div style="{{ cSeen }}">{{ s.seen }}</div>
                 <div style="flex: 0 0 116px; display: flex; justify-content: flex-end; gap: 6px;">
-                  <span style="width: 30px; height: 30px; border-radius: 8px; border: 1px solid #E2E8F0; background: #F8FAFC; display: grid; place-items: center; cursor: pointer;" style-hover="background: #EFF6FF; border-color: #93C5FD;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 14px;"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg></span>
-                  <span style="width: 30px; height: 30px; border-radius: 8px; border: 1px solid #E2E8F0; background: #F8FAFC; display: grid; place-items: center; cursor: pointer;" style-hover="background: #EFF6FF; border-color: #93C5FD;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 14px;"><path d="m3 11 18-5v12L3 14v-3z"></path><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"></path></svg></span>
-                  <span onClick="{{ s.open }}" style="width: 30px; height: 30px; border-radius: 8px; border: 1px solid #E2E8F0; background: #F8FAFC; display: grid; place-items: center; cursor: pointer;" style-hover="background: #EFF6FF; border-color: #93C5FD;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 14px;"><path d="m9 18 6-6-6-6"></path></svg></span>
+                  <span style="width: 30px; height: 30px; border-radius: 9px; border: 1px solid #E2E8F0; background: #fff; display: grid; place-items: center; cursor: pointer;" style-hover="background: #EFF6FF; border-color: #93C5FD;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 14px;"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg></span>
+                  <span style="width: 30px; height: 30px; border-radius: 9px; border: 1px solid #E2E8F0; background: #fff; display: grid; place-items: center; cursor: pointer;" style-hover="background: #EFF6FF; border-color: #93C5FD;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 14px;"><path d="m3 11 18-5v12L3 14v-3z"></path><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"></path></svg></span>
+                  <span onClick="{{ s.open }}" style="width: 30px; height: 30px; border-radius: 9px; border: 1px solid #E2E8F0; background: #fff; display: grid; place-items: center; cursor: pointer;" style-hover="background: #EFF6FF; border-color: #93C5FD;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 14px;"><path d="m9 18 6-6-6-6"></path></svg></span>
                 </div>
               </div>
             </sc-for>
@@ -231,36 +369,35 @@
         <div>
           <div onClick="{{ goServers }}" style="font-size: 12.5px; font-weight: 700; color: #2563EB; cursor: pointer; margin-bottom: 14px;">← Serverlar ro'yxati</div>
 
-          <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; padding: 20px 22px; display: flex; align-items: center; gap: 22px;">
+          <div style="background: #fff; border-radius: 16px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04); padding: 20px 22px; display: flex; align-items: center; flex-wrap: wrap; gap: 18px 22px;">
             <div style="width: 52px; height: 52px; border-radius: 14px; background: #0F172A; color: #fff; display: grid; place-items: center; "><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 24px;"><path d="M8 3.1V7a4 4 0 0 0 8 0V3.1"></path><path d="m9 15-1-1"></path><path d="m15 15 1-1"></path><path d="M9 19c-2.8 0-5-2.2-5-5v-4a8 8 0 0 1 16 0v4c0 2.8-2.2 5-5 5Z"></path><path d="m8 19-2 3"></path><path d="m16 19 2 3"></path></svg></div>
-            <div style="min-width: 0;">
-              <div style="display: flex; align-items: center; gap: 10px;">
-                <div style="font-family: Unbounded, sans-serif; font-size: 19px; font-weight: 600; letter-spacing: -.5px;">{{ detail.name }}</div>
+            <div style="flex: 1 1 220px; min-width: 0;">
+              <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px;">
+                <div style="font-family: Unbounded, sans-serif; font-size: 19px; font-weight: 600; letter-spacing: -.5px; white-space: nowrap;">{{ detail.name }}</div>
                 <span style="{{ detail.badgeStyle }}">{{ detail.badge }}</span>
               </div>
               <div style="font-size: 12px; color: #64748B; margin-top: 4px;">{{ detail.meta }}</div>
             </div>
-            <div style="flex: 1;"></div>
-            <div style="display: flex; gap: 8px;">
-              <div style="background: #2563EB; color: #fff; border-radius: 10px; padding: 9px 15px; font-size: 12.5px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px;" style-hover="background: #1D4ED8;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 15px;"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg><span>Hoziroq sinxronla</span></div>
-              <div style="background: #fff; border: 1px solid #E2E8F0; color: #334155; border-radius: 10px; padding: 9px 15px; font-size: 12.5px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px;" style-hover="background: #F8FAFC;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 15px;"><path d="m3 11 18-5v12L3 14v-3z"></path><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"></path></svg><span>E'lon</span></div>
-              <div style="background: #fff; border: 1px solid #E2E8F0; color: #334155; border-radius: 10px; padding: 9px 15px; font-size: 12.5px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px;" style-hover="background: #F8FAFC;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 15px;"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" x2="10" y1="11" y2="17"></line><line x1="14" x2="14" y1="11" y2="17"></line></svg><span>Kesh tozalash</span></div>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+              <div style="background: #2563EB; color: #fff; border-radius: 10px; padding: 9px 15px; font-size: 12.5px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; white-space: nowrap;" style-hover="background: #1D4ED8;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 15px;"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg><span>Hoziroq sinxronla</span></div>
+              <div style="background: #fff; border: 1px solid #E2E8F0; color: #334155; border-radius: 10px; padding: 9px 15px; font-size: 12.5px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; white-space: nowrap;" style-hover="background: #F8FAFC;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 15px;"><path d="m3 11 18-5v12L3 14v-3z"></path><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"></path></svg><span>E'lon</span></div>
+              <div style="background: #fff; border: 1px solid #E2E8F0; color: #334155; border-radius: 10px; padding: 9px 15px; font-size: 12.5px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; white-space: nowrap;" style-hover="background: #F8FAFC;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 15px;"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" x2="10" y1="11" y2="17"></line><line x1="14" x2="14" y1="11" y2="17"></line></svg><span>Kesh tozalash</span></div>
             </div>
           </div>
 
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 14px; margin-top: 16px;">
             <sc-for list="{{ detail.stats }}" as="d" hint-placeholder-count="4">
-              <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 14px; padding: 15px 18px;">
+              <div style="background: #fff; border-radius: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04); padding: 15px 18px;">
                 <div style="font-size: 11.5px; color: #64748B; font-weight: 700;">{{ d.label }}</div>
                 <div style="font-size: 21px; font-weight: 800; margin-top: 6px; letter-spacing: -.5px;">{{ d.value }}</div>
               </div>
             </sc-for>
           </div>
 
-          <div style="font-size: 14.5px; font-weight: 800; margin: 24px 0 12px;">Kiosklar ({{ detail.kioskCount }})</div>
+          <div style="font-family: Unbounded, sans-serif; font-size: 15px; font-weight: 600; letter-spacing: -.3px; margin: 26px 0 12px;">Kiosklar ({{ detail.kioskCount }})</div>
           <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 14px;">
             <sc-for list="{{ detail.kiosks }}" as="k" hint-placeholder-count="6">
-              <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; padding: 16px 18px;" style-hover="border-color: #93C5FD;">
+              <div style="background: #fff; border-radius: 16px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04); padding: 16px 18px; transition: box-shadow .15s, transform .15s;" style-hover="box-shadow: 0 4px 8px rgba(15,23,42,.07), 0 12px 28px rgba(15,23,42,.09); transform: translateY(-2px);">
                 <div style="display: flex; align-items: center; gap: 10px;">
                   <span style="{{ k.dotStyle }}"></span>
                   <div style="font-size: 13.5px; font-weight: 800;">{{ k.name }}</div>
@@ -285,16 +422,16 @@
                 </div>
                 <div style="display: flex; gap: 6px; margin-top: 14px;">
                   <div style="flex: 1; text-align: center; border: 1px solid #E2E8F0; border-radius: 9px; padding: 7px; font-size: 11.5px; font-weight: 700; color: #334155; cursor: pointer;" style-hover="background: #F8FAFC;">Sinxronla</div>
-                  <div style="flex: 1; text-align: center; border: 1px solid #E2E8F0; border-radius: 9px; padding: 7px; font-size: 11.5px; font-weight: 700; color: #334155; cursor: pointer;" style-hover="background: #F8FAFC;">Qayta yuklash</div>
+                  <div style="flex: 1; text-align: center; border: 1px dashed #CBD5E1; border-radius: 9px; padding: 7px; font-size: 11.5px; font-weight: 700; color: #94A3B8; cursor: not-allowed;">Qayta yuklash · rejada</div>
                   <div style="width: 34px; text-align: center; border: 1px solid #FECACA; border-radius: 9px; padding: 7px; font-size: 11.5px; font-weight: 700; cursor: pointer; display: grid; place-items: center;" style-hover="background: #FEF2F2;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 14px;"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></div>
                 </div>
               </div>
             </sc-for>
           </div>
 
-          <div style="font-size: 14.5px; font-weight: 800; margin: 26px 0 12px;">Foydalanuvchi sessiyalari (bugun)</div>
-          <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; overflow: hidden;">
-            <div style="display: flex; gap: 14px; padding: 11px 20px; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; font-size: 11px; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: .5px;">
+          <div style="font-family: Unbounded, sans-serif; font-size: 15px; font-weight: 600; letter-spacing: -.3px; margin: 28px 0 12px;">Foydalanuvchi sessiyalari (bugun)</div>
+          <div style="background: #fff; border-radius: 16px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04); overflow: hidden; padding-top: 14px;">
+            <div style="display: flex; gap: 14px; padding: 4px 20px 11px; border-bottom: 1px solid #E2E8F0; font-size: 11px; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: .5px;">
               <div style="width: 120px;">Kiosk</div>
               <div style="width: 130px;">Boshlangan</div>
               <div style="width: 90px;">Davomiylik</div>
@@ -302,7 +439,7 @@
               <div style="width: 70px;">Til</div>
             </div>
             <sc-for list="{{ detail.sessions }}" as="u" hint-placeholder-count="6">
-              <div style="display: flex; gap: 14px; padding: 12px 20px; border-bottom: 1px solid #F8FAFC; font-size: 12.5px;">
+              <div style="display: flex; gap: 14px; padding: 12px 20px; border-bottom: 1px solid #F1F5F9; font-size: 12.5px;">
                 <div style="width: 120px; font-weight: 700;">{{ u.kiosk }}</div>
                 <div style="width: 130px; color: #64748B;">{{ u.started }}</div>
                 <div style="width: 90px; color: #334155; font-weight: 600;">{{ u.dur }}</div>
@@ -334,7 +471,7 @@
               <div onClick="{{ c.toggle }}" style="{{ c.cardStyle }}">
                 <div style="{{ c.coverStyle }}">
                   <span style="{{ c.icon }}"></span>
-                  <span style="{{ c.checkStyle }}"></span>
+                  <span style="{{ c.checkStyle }}"><span style="{{ c.checkTick }}"></span></span>
                   <span style="position: absolute; left: 10px; bottom: 10px; background: rgba(15,23,42,.72); color: #fff; font-size: 10.5px; font-weight: 700; padding: 3px 7px; border-radius: 6px;">{{ c.dur }}</span>
                 </div>
                 <div style="padding: 12px 13px 14px;">
@@ -350,7 +487,7 @@
           </div>
 
           <sc-if value="{{ hasSelection }}" hint-placeholder-val="{{ false }}">
-            <div style="position: fixed; left: 50%; transform: translateX(-50%); bottom: 26px; background: #0F172A; color: #fff; border-radius: 14px; padding: 12px 14px 12px 20px; display: flex; align-items: center; gap: 18px; box-shadow: 0 18px 40px rgba(15,23,42,.28); z-index: 40;">
+            <div style="position: fixed; left: 50%; transform: translateX(-50%); bottom: 26px; background: #0F172A; color: #fff; border-radius: 14px; padding: 12px 14px 12px 20px; display: flex; align-items: center; gap: 18px; box-shadow: 0 10px 24px rgba(15,23,42,.22), 0 24px 56px rgba(15,23,42,.18); z-index: 40;">
               <div style="font-size: 13px; font-weight: 700;">{{ selectionLabel }}</div>
               <div style="width: 1px; height: 22px; background: #334155;"></div>
               <div onClick="{{ clearSelection }}" style="font-size: 12.5px; color: #94A3B8; font-weight: 600; cursor: pointer;">Bekor qilish</div>
@@ -362,32 +499,79 @@
       </sc-if>
 
       <sc-if value="{{ isQueue }}" hint-placeholder-val="{{ false }}">
-        <div style="display: flex; flex-direction: column; gap: 12px;">
-          <div style="background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 14px; padding: 14px 18px; display: flex; align-items: center; gap: 12px;">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 17px;"><path d="M12 20h.01"></path><path d="M2 8.82a15 15 0 0 1 20 0"></path><path d="M5 12.859a10 10 0 0 1 14 0"></path><path d="M8.5 16.429a5 5 0 0 1 7 0"></path></svg>
-            <div style="font-size: 12.5px; color: #1E40AF; line-height: 1.5;">Offlayn serverlar navbatda saqlanadi — SIM-internet tiklanishi bilan yuklash <b>avtomatik</b> davom etadi. Uzilgan fayl boshidan emas, to'xtagan joyidan (Range) yuklanadi.</div>
-          </div>
-          <sc-for list="{{ jobs }}" as="j" hint-placeholder-count="5">
-            <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; padding: 16px 20px;">
-              <div style="display: flex; align-items: center; gap: 12px;">
-                <span style="{{ j.iconStyle }}"><span style="{{ j.icon }}"></span></span>
+        <div>
+          <div style="display: flex; align-items: stretch; flex-wrap: wrap; gap: 12px;">
+            <div style="flex: 1 1 320px; min-width: 0; background: #fff; border-radius: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04); padding: 14px 18px; display: flex; align-items: center; gap: 22px; flex-wrap: wrap;">
+              <sc-for list="{{ qSummary }}" as="q" hint-placeholder-count="4">
                 <div style="min-width: 0;">
-                  <div style="font-size: 13.5px; font-weight: 800;">{{ j.title }}</div>
-                  <div style="font-size: 11.5px; color: #94A3B8; margin-top: 2px;">{{ j.sub }}</div>
+                  <div style="display: flex; align-items: center; gap: 7px;">
+                    <span style="{{ q.dot }}"></span>
+                    <span style="font-size: 11px; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: .4px; white-space: nowrap;">{{ q.label }}</span>
+                  </div>
+                  <div style="font-family: Unbounded, sans-serif; font-size: 20px; font-weight: 600; letter-spacing: -.6px; margin-top: 5px;">{{ q.value }}</div>
                 </div>
-                <div style="flex: 1;"></div>
-                <span style="{{ j.stateStyle }}">{{ j.state }}</span>
-                <div style="font-size: 12px; color: #64748B; width: 96px; text-align: right;">{{ j.eta }}</div>
-                <div style="border: 1px solid #E2E8F0; border-radius: 9px; padding: 6px 12px; font-size: 11.5px; font-weight: 700; color: #334155; cursor: pointer;" style-hover="background: #F8FAFC;">{{ j.action }}</div>
+              </sc-for>
+            </div>
+            <div style="flex: 1 1 300px; min-width: 240px; background: #EFF6FF; border-radius: 14px; padding: 13px 16px; display: flex; align-items: flex-start; gap: 10px;">
+              <span style="{{ wifiIcon }}"></span>
+              <div style="font-size: 11.5px; color: #1E40AF; line-height: 1.6;">Offlayn obyektlar navbatda turadi — SIM-internet tiklanishi bilan <b>o'zi</b> davom etadi, fayl to'xtagan joyidan (Range).</div>
+            </div>
+          </div>
+
+          <sc-for list="{{ qGroups }}" as="g" hint-placeholder-count="3">
+            <div style="margin-top: 20px;">
+              <div onClick="{{ g.toggle }}" style="display: flex; align-items: center; gap: 9px; margin-bottom: 10px; cursor: pointer;">
+                <span style="{{ g.dot }}"></span>
+                <div style="font-family: Unbounded, sans-serif; font-size: 13.5px; font-weight: 600; letter-spacing: -.2px;">{{ g.label }}</div>
+                <div style="font-size: 11.5px; font-weight: 700; color: #94A3B8;">{{ g.count }}</div>
+                <div style="flex: 1; height: 1px; background: #E2E8F0;"></div>
+                <span style="{{ g.chevron }}"></span>
               </div>
-              <div style="height: 8px; border-radius: 4px; background: #F1F5F9; margin-top: 14px; overflow: hidden;">
-                <div style="{{ j.barStyle }}"></div>
-              </div>
-              <div style="display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap;">
-                <sc-for list="{{ j.targets }}" as="t" hint-placeholder-count="4">
-                  <span style="{{ t.style }}">{{ t.label }}</span>
-                </sc-for>
-              </div>
+
+              <sc-if value="{{ g.open }}" hint-placeholder-val="{{ true }}">
+                <div style="background: #fff; border-radius: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04); overflow: hidden;">
+                  <sc-for list="{{ g.items }}" as="j" hint-placeholder-count="3">
+                    <div style="{{ j.rowStyle }}" style-hover="background: #F8FAFC;">
+                      <div style="flex: 1 1 240px; min-width: 190px; display: flex; align-items: center; gap: 11px;">
+                        <span style="{{ j.iconStyle }}"><span style="{{ j.icon }}"></span></span>
+                        <div style="flex: 1; min-width: 0;">
+                          <div style="font-size: 12.5px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ j.title }}</div>
+                          <div style="font-size: 10.5px; color: #94A3B8; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ j.sub }}</div>
+                        </div>
+                      </div>
+
+                      <div style="flex: 1 1 220px; min-width: 160px;">
+                        <div style="display: flex; height: 9px; border-radius: 999px; overflow: hidden; background: #F1F5F9;">
+                          <sc-for list="{{ j.segs }}" as="s" hint-placeholder-count="3">
+                            <div style="{{ s.style }}"></div>
+                          </sc-for>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 9px; margin-top: 7px; flex-wrap: wrap;">
+                          <sc-for list="{{ j.legend }}" as="l" hint-placeholder-count="3">
+                            <div style="display: flex; align-items: center; gap: 5px;">
+                              <span style="{{ l.dot }}"></span>
+                              <span style="font-size: 10.5px; font-weight: 700; color: #64748B; white-space: nowrap;">{{ l.text }}</span>
+                            </div>
+                          </sc-for>
+                        </div>
+                      </div>
+
+                      <div style="flex: 0 0 auto; margin-left: auto; display: flex; align-items: center; gap: 14px;">
+                        <div style="text-align: right;">
+                          <div style="{{ j.pctStyle }}">{{ j.pctLabel }}</div>
+                          <div style="font-size: 10.5px; color: #94A3B8; margin-top: 2px; white-space: nowrap;">{{ j.targetLabel }}</div>
+                        </div>
+                        <div style="text-align: right; min-width: 84px;">
+                          <div style="font-size: 11px; color: #64748B; font-weight: 600; white-space: nowrap;">{{ j.eta }}</div>
+                        </div>
+                        <div style="{{ j.actionStyle }}" style-hover="background: #F1F5F9; border-color: #CBD5E1;">{{ j.action }}</div>
+                      </div>
+                    </div>
+                  </sc-for>
+
+                  <div style="{{ g.moreStyle }}" onClick="{{ g.showAll }}">{{ g.moreLabel }}</div>
+                </div>
+              </sc-if>
             </div>
           </sc-for>
         </div>
@@ -395,51 +579,233 @@
 
       <sc-if value="{{ isStats }}" hint-placeholder-val="{{ false }}">
         <div>
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(212px, 1fr)); gap: 16px;">
-            <sc-for list="{{ statKpis }}" as="k" hint-placeholder-count="4">
-              <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; padding: 18px 20px;">
-                <div style="font-size: 12px; color: #64748B; font-weight: 700;">{{ k.label }}</div>
-                <div style="font-family: Unbounded, sans-serif; font-size: 25px; font-weight: 600; margin-top: 8px; letter-spacing: -1px;">{{ k.value }}</div>
-                <div style="font-size: 11.5px; color: #94A3B8; margin-top: 4px;">{{ k.note }}</div>
+          <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin-bottom: 16px;">
+            <div style="display: flex; gap: 3px; background: #fff; border-radius: 10px; padding: 3px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04);">
+              <sc-for list="{{ periodTabs }}" as="p" hint-placeholder-count="4">
+                <div onClick="{{ p.go }}" style="{{ p.style }}">{{ p.label }}</div>
+              </sc-for>
+            </div>
+            <div style="display: flex; gap: 3px; background: #fff; border-radius: 10px; padding: 3px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04);">
+              <sc-for list="{{ srcTabs }}" as="p" hint-placeholder-count="3">
+                <div onClick="{{ p.go }}" style="{{ p.style }}">{{ p.label }}</div>
+              </sc-for>
+            </div>
+            <div style="flex: 1;"></div>
+            <div style="display: flex; align-items: center; gap: 8px; background: #FFFBEB; border-radius: 10px; padding: 7px 12px;">
+              <span style="{{ clockIcon }}"></span>
+              <span style="font-size: 11.5px; color: #92400E; font-weight: 600;">2 obyekt hali yubormagan</span>
+            </div>
+            <div style="border: 1px solid #E2E8F0; background: #fff; border-radius: 10px; padding: 7px 13px; font-size: 11.5px; font-weight: 700; color: #334155; cursor: pointer;" style-hover="background: #F8FAFC;">CSV</div>
+          </div>
+
+          <div style="background: #0F172A; border-radius: 16px; padding: 22px 24px; overflow: hidden; position: relative;">
+            <div style="position: absolute; inset: 0; opacity: .6; background-image: radial-gradient(circle at 88% 6%, rgba(37,99,235,.42), transparent 46%);"></div>
+            <div style="position: relative; display: flex; align-items: flex-start; flex-wrap: wrap; gap: 28px;">
+              <div style="flex: 1 1 300px; min-width: 260px;">
+                <div style="color: #64748B; font-size: 10.5px; font-weight: 800; letter-spacing: .7px; text-transform: uppercase;">Asosiy topilma</div>
+                <div style="color: #fff; font-family: Unbounded, sans-serif; font-size: 19px; font-weight: 600; line-height: 1.4; letter-spacing: -.4px; margin-top: 10px;">{{ headline }}</div>
+                <div style="color: #94A3B8; font-size: 12.5px; line-height: 1.7; margin-top: 10px;">{{ headlineSub }}</div>
+              </div>
+              <div style="flex: 1 1 300px; min-width: 260px;">
+                <div style="display: flex; height: 34px; border-radius: 9px; overflow: hidden; gap: 2px;">
+                  <sc-for list="{{ sources }}" as="s" hint-placeholder-count="2">
+                    <div style="{{ s.segStyle }}">
+                      <span style="{{ s.segLabel }}">{{ s.share }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 11px; margin-top: 16px;">
+                  <sc-for list="{{ sources }}" as="s" hint-placeholder-count="2">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                      <span style="{{ s.icon }}"></span>
+                      <div style="flex: 1; min-width: 0;">
+                        <div style="color: #E2E8F0; font-size: 12.5px; font-weight: 700;">{{ s.name }}</div>
+                        <div style="color: #64748B; font-size: 10.5px; margin-top: 2px;">{{ s.meta }}</div>
+                      </div>
+                      <div style="color: #fff; font-size: 15px; font-weight: 800;">{{ s.value }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-top: 14px;">
+            <sc-for list="{{ insights }}" as="n" hint-placeholder-count="3">
+              <div style="{{ n.cardStyle }}">
+                <div style="display: flex; align-items: center; gap: 9px;">
+                  <span style="{{ n.icon }}"></span>
+                  <div style="{{ n.tagStyle }}">{{ n.tag }}</div>
+                </div>
+                <div style="font-size: 13px; font-weight: 800; line-height: 1.45; margin-top: 11px;">{{ n.text }}</div>
+                <div style="font-size: 11.5px; color: #64748B; line-height: 1.6; margin-top: 7px;">{{ n.action }}</div>
               </div>
             </sc-for>
           </div>
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; margin-top: 16px;">
-            <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; padding: 20px 22px;">
-              <div style="font-size: 14.5px; font-weight: 800;">Kunlik sessiyalar — 14 kun</div>
-              <div style="display: flex; align-items: flex-end; gap: 8px; height: 190px; margin-top: 22px;">
-                <sc-for list="{{ chart }}" as="b" hint-placeholder-count="14">
-                  <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px;">
-                    <div style="{{ b.style }}"></div>
-                    <div style="font-size: 10px; color: #94A3B8;">{{ b.label }}</div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; margin-top: 14px; align-items: start;">
+
+            <div style="background: #fff; border-radius: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04); padding: 18px 20px;">
+              <div style="font-size: 14px; font-weight: 800; letter-spacing: -.1px;">Yo'lovchi nima qildi</div>
+              <div style="font-size: 11.5px; color: #94A3B8; margin-top: 3px;">{{ periodLabel }} · har qadamda qancha qolgani</div>
+              <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 18px;">
+                <sc-for list="{{ funnel }}" as="s" hint-placeholder-count="4">
+                  <div>
+                    <div style="display: flex; align-items: baseline; gap: 8px;">
+                      <span style="font-size: 12.5px; font-weight: 700; flex: 1; min-width: 0;">{{ s.label }}</span>
+                      <span style="font-size: 14px; font-weight: 800;">{{ s.value }}</span>
+                      <span style="{{ s.dropStyle }}">{{ s.drop }}</span>
+                    </div>
+                    <div style="height: 9px; border-radius: 999px; background: #F1F5F9; margin-top: 7px; overflow: hidden;">
+                      <div style="{{ s.barStyle }}"></div>
+                    </div>
                   </div>
                 </sc-for>
               </div>
             </div>
-            <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; padding: 20px 22px;">
-              <div style="font-size: 14.5px; font-weight: 800;">Eng ko'p ko'rilgan</div>
-              <div style="display: flex; flex-direction: column; gap: 15px; margin-top: 18px;">
-                <sc-for list="{{ topContent }}" as="t" hint-placeholder-count="6">
-                  <div>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                      <span style="font-size: 12.5px; font-weight: 700; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ t.title }}</span>
-                      <span style="font-size: 12px; font-weight: 700; color: #64748B;">{{ t.views }}</span>
-                    </div>
-                    <div style="height: 6px; border-radius: 3px; background: #F1F5F9; margin-top: 6px; overflow: hidden;">
-                      <div style="{{ t.barStyle }}"></div>
-                    </div>
+
+            <div style="background: #fff; border-radius: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04); padding: 18px 20px;">
+              <div style="display: flex; align-items: baseline; flex-wrap: wrap; gap: 9px;">
+                <div style="font-size: 14px; font-weight: 800; letter-spacing: -.1px;">Qaysi soatlarda</div>
+                <div style="font-size: 11.5px; color: #94A3B8;">reklama vaqtini shunga qarab qo'yiladi</div>
+              </div>
+              <div style="display: flex; gap: 2px; margin-top: 18px; align-items: flex-end;">
+                <sc-for list="{{ hours }}" as="h" hint-placeholder-count="24">
+                  <div style="flex: 1; min-width: 0;">
+                    <div style="{{ h.cellStyle }}"></div>
+                    <div style="{{ h.labelStyle }}">{{ h.label }}</div>
                   </div>
                 </sc-for>
               </div>
+              <div style="display: flex; align-items: center; gap: 12px; margin-top: 16px; flex-wrap: wrap;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span style="width: 9px; height: 9px; border-radius: 3px; background: #F1F5F9;"></span>
+                  <span style="width: 9px; height: 9px; border-radius: 3px; background: #BFDBFE;"></span>
+                  <span style="width: 9px; height: 9px; border-radius: 3px; background: #2563EB;"></span>
+                  <span style="font-size: 10.5px; font-weight: 700; color: #94A3B8; margin-left: 3px;">kam → ko'p</span>
+                </div>
+                <div style="flex: 1;"></div>
+                <div style="font-size: 11.5px; font-weight: 700; color: #334155;">Eng gavjum: {{ peakHour }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="background: #fff; border-radius: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04); padding: 18px 20px; margin-top: 14px;">
+            <div style="display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px;">
+              <div style="font-size: 14px; font-weight: 800; letter-spacing: -.1px;">Kontent qamrovi</div>
+              <div style="font-size: 11.5px; color: #94A3B8;">yuklangan 24 fayldan qanchasi ochilgan</div>
+              <div style="flex: 1;"></div>
+              <div style="display: flex; gap: 3px; background: #F8FAFC; border-radius: 9px; padding: 3px;">
+                <sc-for list="{{ covTabs }}" as="c" hint-placeholder-count="2">
+                  <div onClick="{{ c.go }}" style="{{ c.style }}">{{ c.label }}</div>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 14px; margin-top: 16px; flex-wrap: wrap;">
+              <div style="flex: 1 1 220px; min-width: 180px; display: flex; height: 10px; border-radius: 999px; overflow: hidden; gap: 2px;">
+                <div style="flex: 9; border-radius: 999px; background: #2563EB;"></div>
+                <div style="flex: 15; border-radius: 999px; background: #E2E8F0;"></div>
+              </div>
+              <div style="font-size: 12px; font-weight: 700; color: #334155;">9 ochilgan · <span style="color: #94A3B8;">15 hech kim ochmagan</span></div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 11px; margin-top: 18px;">
+              <sc-for list="{{ coverage }}" as="c" hint-placeholder-count="8">
+                <div style="display: flex; align-items: center; gap: 11px;">
+                  <span style="{{ c.rankStyle }}">{{ c.rank }}</span>
+                  <span style="{{ c.typeStyle }}">{{ c.type }}</span>
+                  <div style="flex: 1; min-width: 0;">
+                    <div style="font-size: 12.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ c.title }}</div>
+                    <div style="height: 5px; border-radius: 999px; background: #F1F5F9; margin-top: 6px; overflow: hidden;">
+                      <div style="{{ c.barStyle }}"></div>
+                    </div>
+                  </div>
+                  <div style="flex: 0 0 96px; text-align: right;">
+                    <div style="{{ c.valStyle }}">{{ c.value }}</div>
+                    <div style="font-size: 10px; color: #94A3B8; margin-top: 2px;">{{ c.note }}</div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; margin-top: 14px; align-items: start;">
+            <div style="background: #fff; border-radius: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04); padding: 18px 20px;">
+              <div style="display: flex; align-items: baseline; gap: 10px;">
+                <div style="font-size: 14px; font-weight: 800; letter-spacing: -.1px;">Kunlik sessiyalar</div>
+                <div style="font-size: 11.5px; color: #94A3B8;">{{ chartNote }}</div>
+              </div>
+              <div style="position: relative; margin-top: 18px; padding-left: 28px;">
+                <sc-for list="{{ gridLines }}" as="g" hint-placeholder-count="3">
+                  <div style="{{ g.style }}"><span style="{{ g.labelStyle }}">{{ g.label }}</span></div>
+                </sc-for>
+                <div style="position: relative; display: flex; align-items: flex-end; gap: 4px; height: 108px;">
+                  <sc-for list="{{ chart }}" as="b" hint-placeholder-count="14">
+                    <div style="flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 5px; min-width: 0;">
+                      <div style="{{ b.valStyle }}">{{ b.value }}</div>
+                      <div style="{{ b.style }}"></div>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="display: flex; gap: 4px; margin-top: 7px;">
+                  <sc-for list="{{ chart }}" as="b" hint-placeholder-count="14">
+                    <div style="{{ b.labelStyle }}">{{ b.label }}</div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+
+            <div style="background: #fff; border-radius: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04); padding: 18px 20px;">
+              <div style="display: flex; align-items: baseline; gap: 10px;">
+                <div style="font-size: 14px; font-weight: 800; letter-spacing: -.1px;">Obyektlar bo'yicha</div>
+                <div style="font-size: 11.5px; color: #94A3B8;">18 qurilma · 1 obyekt</div>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 11px; margin-top: 16px;">
+                <sc-for list="{{ byServer }}" as="s" hint-placeholder-count="4">
+                  <div style="display: flex; align-items: center; gap: 11px;">
+                    <span style="{{ s.dot }}"></span>
+                    <div style="flex: 1; min-width: 0; font-size: 12.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ s.name }}</div>
+                    <div style="flex: 0 0 86px; height: 6px; border-radius: 999px; background: #F1F5F9; overflow: hidden;">
+                      <div style="{{ s.barStyle }}"></div>
+                    </div>
+                    <div style="flex: 0 0 30px; text-align: right; font-size: 12.5px; font-weight: 800;">{{ s.value }}</div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="height: 1px; background: #F1F5F9; margin: 18px 0 14px;"></div>
+              <div onClick="{{ toggleDevices }}" style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                <span style="{{ devIcon }}"></span>
+                <div style="flex: 1; min-width: 0;">
+                  <div style="font-size: 12.5px; font-weight: 800;">Qurilmalar ro'yxati</div>
+                  <div style="font-size: 11px; color: #94A3B8; margin-top: 2px;">18 ta · eng faoli 30 sessiya</div>
+                </div>
+                <span style="{{ devChevron }}"></span>
+              </div>
+              <sc-if value="{{ devicesOpen }}" hint-placeholder-val="{{ false }}">
+                <div style="max-height: 210px; overflow-y: auto; margin-top: 12px;">
+                  <sc-for list="{{ devices }}" as="d" hint-placeholder-count="8">
+                    <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid #F1F5F9;">
+                      <span style="{{ d.srcStyle }}">{{ d.src }}</span>
+                      <div style="flex: 1; min-width: 0; font-size: 11.5px; font-weight: 700; font-family: 'SF Mono', Menlo, Consolas, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ d.id }}</div>
+                      <div style="flex: 0 0 58px; height: 5px; border-radius: 999px; background: #F1F5F9; overflow: hidden;">
+                        <div style="{{ d.barStyle }}"></div>
+                      </div>
+                      <div style="flex: 0 0 22px; text-align: right; font-size: 11.5px; font-weight: 800;">{{ d.sessions }}</div>
+                      <div style="flex: 0 0 74px; text-align: right; font-size: 10.5px; color: #94A3B8; white-space: nowrap;">{{ d.last }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
             </div>
           </div>
         </div>
       </sc-if>
 
       <sc-if value="{{ isLogs }}" hint-placeholder-val="{{ false }}">
-        <div style="background: #0F172A; border-radius: 16px; padding: 18px 20px; font-family: 'SF Mono', Menlo, Consolas, monospace;">
+        <div style="background: #0F172A; border-radius: 16px; padding: 8px 20px 14px; font-family: 'SF Mono', Menlo, Consolas, monospace; box-shadow: 0 8px 24px rgba(15,23,42,.18);">
           <sc-for list="{{ logs }}" as="l" hint-placeholder-count="12">
-            <div style="display: flex; gap: 14px; padding: 6px 0; font-size: 12px; line-height: 1.5;">
+            <div style="display: flex; gap: 14px; padding: 9px 0; font-size: 12px; line-height: 1.5; border-bottom: 1px solid #1E293B;">
               <span style="color: #475569; width: 132px; flex: 0 0 132px;">{{ l.time }}</span>
               <span style="{{ l.levelStyle }}">{{ l.level }}</span>
               <span style="color: #64748B; width: 118px; flex: 0 0 118px;">{{ l.source }}</span>
@@ -469,7 +835,7 @@
               <div style="flex: 1; overflow: hidden; padding: 14px;">
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                   <sc-for list="{{ mobileKpis }}" as="m" hint-placeholder-count="4">
-                    <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 14px; padding: 12px 14px;">
+                    <div style="background: #fff; border-radius: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04); padding: 12px 14px;">
                       <div style="font-size: 10.5px; color: #64748B; font-weight: 700;">{{ m.label }}</div>
                       <div style="font-size: 19px; font-weight: 800; margin-top: 4px;">{{ m.value }}</div>
                     </div>
@@ -478,7 +844,7 @@
                 <div style="font-size: 12px; font-weight: 800; margin: 16px 4px 9px;">Diqqat talab qiladi</div>
                 <div style="display: flex; flex-direction: column; gap: 9px;">
                   <sc-for list="{{ mobileAlerts }}" as="a" hint-placeholder-count="4">
-                    <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 14px; padding: 12px 14px; display: flex; align-items: center; gap: 11px;">
+                    <div style="background: #fff; border-radius: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04); padding: 12px 14px; display: flex; align-items: center; gap: 11px;">
                       <span style="{{ a.dotStyle }}"></span>
                       <div style="flex: 1; min-width: 0;">
                         <div style="font-size: 12.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ a.name }}</div>
@@ -513,14 +879,14 @@
 
       <sc-if value="{{ isPlan }}" hint-placeholder-val="{{ false }}">
         <div style="max-width: 980px;">
-          <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; padding: 24px 28px;">
+          <div style="background: #fff; border-radius: 16px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04); padding: 24px 28px;">
             <div style="font-family: Unbounded, sans-serif; font-size: 17px; font-weight: 600; letter-spacing: -.4px;">Server tomonida nima o'zgaradi</div>
             <div style="font-size: 13px; color: #64748B; line-height: 1.7; margin-top: 8px;">Hozir har bir poyezd serveri mustaqil (FastAPI + SQLite + PyQt admin). Markaziy panel ishlashi uchun serverlar bulutga <b>o'zi ulanadi</b> (outbound WebSocket) — poyezdda statik IP yoki port-forward kerak emas, SIM-internet yetadi.</div>
           </div>
           <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 16px;">
             <sc-for list="{{ planSteps }}" as="p" hint-placeholder-count="6">
-              <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; padding: 18px 22px; display: flex; gap: 18px;">
-                <div style="width: 30px; height: 30px; flex: 0 0 30px; border-radius: 9px; background: #EFF6FF; color: #2563EB; display: grid; place-items: center; font-size: 13px; font-weight: 800;">{{ p.n }}</div>
+              <div style="background: #fff; border-radius: 16px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04); padding: 18px 22px; display: flex; gap: 18px;">
+                <div style="width: 30px; height: 30px; flex: 0 0 30px; border-radius: 10px; background: #EFF6FF; color: #2563EB; display: grid; place-items: center; font-size: 13px; font-weight: 800;">{{ p.n }}</div>
                 <div style="min-width: 0;">
                   <div style="font-size: 14px; font-weight: 800;">{{ p.title }}</div>
                   <div style="font-size: 12.5px; color: #475569; line-height: 1.7; margin-top: 6px;">{{ p.body }}</div>
@@ -559,7 +925,7 @@
           <sc-if value="{{ step1 }}" hint-placeholder-val="{{ true }}">
             <div style="display: flex; flex-direction: column; gap: 10px;">
               <sc-for list="{{ deployContent }}" as="c" hint-placeholder-count="4">
-                <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 14px; padding: 13px 16px; display: flex; align-items: center; gap: 14px;">
+                <div style="background: #fff; border-radius: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04); padding: 13px 16px; display: flex; align-items: center; gap: 14px;">
                   <span style="width: 22px; height: 22px; border-radius: 7px; background: #2563EB; color: #fff; display: grid; place-items: center;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 13px;"><path d="M20 6 9 17l-5-5"></path></svg></span>
                   <div style="width: 42px; height: 42px; border-radius: 10px; background: #F1F5F9; display: grid; place-items: center;"><span style="{{ c.icon }}"></span></div>
                   <div style="flex: 1; min-width: 0;">
@@ -584,7 +950,7 @@
               <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                 <sc-for list="{{ pickServers }}" as="s" hint-placeholder-count="8">
                   <div onClick="{{ s.toggle }}" style="{{ s.rowStyle }}">
-                    <span style="{{ s.boxStyle }}"></span>
+                    <span style="{{ s.boxStyle }}"><span style="{{ s.boxTick }}"></span></span>
                     <span style="{{ s.dotStyle }}"></span>
                     <div style="flex: 1; min-width: 0;">
                       <div style="font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ s.name }}</div>
@@ -599,7 +965,7 @@
 
           <sc-if value="{{ step3 }}" hint-placeholder-val="{{ false }}">
             <div>
-              <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; padding: 20px 22px;">
+              <div style="background: #fff; border-radius: 16px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04); padding: 20px 22px;">
                 <div style="font-size: 14px; font-weight: 800;">Tarqatish xulosasi</div>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(212px, 1fr)); gap: 16px; margin-top: 16px;">
                   <sc-for list="{{ summary }}" as="s" hint-placeholder-count="4">
@@ -610,7 +976,7 @@
                   </sc-for>
                 </div>
               </div>
-              <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; padding: 20px 22px; margin-top: 12px; display: flex; flex-direction: column; gap: 14px;">
+              <div style="background: #fff; border-radius: 16px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04); padding: 20px 22px; margin-top: 12px; display: flex; flex-direction: column; gap: 14px;">
                 <sc-for list="{{ options }}" as="o" hint-placeholder-count="3">
                   <div style="display: flex; align-items: flex-start; gap: 12px;">
                     <span style="{{ o.toggleStyle }}"><span style="{{ o.knobStyle }}"></span></span>
@@ -712,7 +1078,7 @@
                 </div>
                 <div style="font-size: 11.5px; color: #64748B; white-space: nowrap;">68% · 1.2 / 1.8 GB</div>
               </div>
-              <div style="height: 6px; border-radius: 3px; background: #E2E8F0; margin-top: 10px; overflow: hidden;">
+              <div style="height: 6px; border-radius: 999px; background: #E2E8F0; margin-top: 10px; overflow: hidden;">
                 <div style="{{ mediaBar }}"></div>
               </div>
               <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 9px; font-size: 10.5px; color: #94A3B8;">
@@ -782,7 +1148,7 @@
         <div>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <sc-for list="{{ mobileKpis }}" as="m" hint-placeholder-count="4">
-              <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 14px; padding: 14px 16px;">
+              <div style="background: #fff; border-radius: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04); padding: 14px 16px;">
                 <div style="font-size: 11px; color: #64748B; font-weight: 700;">{{ m.label }}</div>
                 <div style="font-size: 22px; font-weight: 800; margin-top: 4px; letter-spacing: -.5px;">{{ m.value }}</div>
               </div>
@@ -791,7 +1157,7 @@
           <div style="font-size: 13px; font-weight: 800; margin: 20px 4px 10px;">Diqqat talab qiladi</div>
           <div style="display: flex; flex-direction: column; gap: 10px;">
             <sc-for list="{{ mobileAlerts }}" as="a" hint-placeholder-count="4">
-              <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 14px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; min-height: 64px;">
+              <div style="background: #fff; border-radius: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04); padding: 14px 16px; display: flex; align-items: center; gap: 12px; min-height: 64px;">
                 <span style="{{ a.dotStyle }}"></span>
                 <div style="flex: 1; min-width: 0;">
                   <div style="font-size: 13.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ a.name }}</div>
@@ -808,7 +1174,7 @@
       <sc-if value="{{ mServers }}" hint-placeholder-val="{{ false }}">
         <div style="display: flex; flex-direction: column; gap: 10px;">
           <sc-for list="{{ servers }}" as="s" hint-placeholder-count="8">
-            <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 14px; padding: 14px 16px;">
+            <div style="background: #fff; border-radius: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04); padding: 14px 16px;">
               <div style="display: flex; align-items: center; gap: 11px;">
                 <span style="{{ s.dotStyle }}"></span>
                 <div style="flex: 1; min-width: 0;">
@@ -817,7 +1183,7 @@
                 </div>
                 <div style="font-size: 12px; font-weight: 700; color: #334155;">{{ s.syncLabel }}</div>
               </div>
-              <div style="height: 7px; border-radius: 4px; background: #F1F5F9; margin-top: 11px; overflow: hidden;">
+              <div style="height: 7px; border-radius: 999px; background: #F1F5F9; margin-top: 11px; overflow: hidden;">
                 <div style="{{ s.barStyle }}"></div>
               </div>
               <div style="display: flex; align-items: center; gap: 10px; margin-top: 11px;">
@@ -831,18 +1197,20 @@
 
       <sc-if value="{{ mQueue }}" hint-placeholder-val="{{ false }}">
         <div style="display: flex; flex-direction: column; gap: 10px;">
-          <sc-for list="{{ jobs }}" as="j" hint-placeholder-count="5">
-            <div style="background: #fff; border: 1px solid #E2E8F0; border-radius: 14px; padding: 14px 16px;">
+          <sc-for list="{{ mJobs }}" as="j" hint-placeholder-count="5">
+            <div style="background: #fff; border-radius: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04); padding: 14px 16px;">
               <div style="display: flex; align-items: center; gap: 11px;">
                 <span style="{{ j.iconStyle }}"><span style="{{ j.icon }}"></span></span>
                 <div style="flex: 1; min-width: 0;">
                   <div style="font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ j.title }}</div>
-                  <div style="font-size: 11.5px; color: #94A3B8; margin-top: 2px;">{{ j.sub }}</div>
+                  <div style="font-size: 11.5px; color: #94A3B8; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ j.sub }}</div>
                 </div>
-                <span style="{{ j.stateStyle }}">{{ j.state }}</span>
+                <div style="{{ j.pctStyle }}">{{ j.pctLabel }}</div>
               </div>
-              <div style="height: 7px; border-radius: 4px; background: #F1F5F9; margin-top: 12px; overflow: hidden;">
-                <div style="{{ j.barStyle }}"></div>
+              <div style="display: flex; gap: 2px; height: 14px; align-items: flex-end; margin-top: 12px;">
+                <sc-for list="{{ j.cells }}" as="c" hint-placeholder-count="12">
+                  <span style="{{ c.style }}"></span>
+                </sc-for>
               </div>
             </div>
           </sc-for>
@@ -933,6 +1301,21 @@ const P = {
   refresh: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
   plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  chevronLeft: '<path d="m15 18-6-6 6-6"/>',
+  chevronRight: '<path d="m9 18 6-6-6-6"/>',
+  chevronDown: '<path d="m6 9 6 6 6-6"/>',
+  menu: '<path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/>',
+  layers: '<path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="M2 12.18a1 1 0 0 0 .6.92l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 .6-.93"/><path d="M2 17.18a1 1 0 0 0 .6.92l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 .6-.93"/>',
+  panelTop: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/>',
+  monitor: '<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  trending: '<path d="M16 7h6v6"/><path d="m22 7-8.5 8.5-5-5L2 17"/>',
+  monitor: '<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  trending: '<path d="M16 7h6v6"/><path d="m22 7-8.5 8.5-5-5L2 17"/>',
+  logOut: '<path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>',
   image: '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>',
   music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
 };
@@ -957,9 +1340,23 @@ const UT = {
 };
 const UTK = ["movie", "cartoon", "music", "book", "audiobook"];
 
+// icon, title, sub, state, pct, eta, action, target counts
+const JOBS = [
+  ["clapperboard", "Ilon vodiysi", "1 fayl · 1.8 GB", "running", 68, "~14 daq qoldi", "To'xtatish", { done: 4, running: 2, queued: 2, pending: 4, error: 0 }],
+  ["bookOpen", "Kitob to'plami — 12 fayl", "12 fayl · 28 MB", "running", 94, "~2 daq qoldi", "To'xtatish", { done: 47, running: 0, queued: 3, pending: 0, error: 0 }],
+  ["headphones", "Alpomish — audiokitob", "1 fayl · 420 MB", "running", 0, "onlayn kutilmoqda", "Bekor qilish", { done: 0, running: 0, queued: 8, pending: 0, error: 0 }],
+  ["clapperboard", "Sahroda uch kun", "1 fayl · 2.2 GB", "running", 12, "~48 daq qoldi", "To'xtatish", { done: 6, running: 4, queued: 11, pending: 29, error: 0 }],
+  ["music", "Musiqa to'plami — 42 trek", "42 fayl · 380 MB", "running", 41, "~9 daq qoldi", "To'xtatish", { done: 210, running: 12, queued: 34, pending: 156, error: 2 }],
+  ["music", "Yangi treklar — 8 fayl", "8 fayl · 74 MB", "error", 0, "litsenziya tugagan", "Qayta urinish", { done: 0, running: 0, queued: 0, pending: 0, error: 1 }],
+  ["clapperboard", "Zumrad va Qimmat", "1 fayl · 740 MB", "done", 100, "5 daq oldin", "Hisobot", { done: 50, running: 0, queued: 0, pending: 0, error: 0 }],
+  ["bookOpen", "O'tkan kunlar", "1 fayl · 2.4 MB", "done", 100, "1 soat oldin", "Hisobot", { done: 50, running: 0, queued: 0, pending: 0, error: 0 }],
+  ["headphones", "Mehrobdan chayon", "1 fayl · 310 MB", "done", 100, "3 soat oldin", "Hisobot", { done: 48, running: 0, queued: 0, pending: 0, error: 2 }],
+];
+
+
 class Component extends DCLogic {
   ic(name, size, color, sw) { return icon(name, size, color, sw); }
-  state = { page: "dash", server: 0, type: "all", sel: {}, deploy: false, dstep: 1, upload: false, picked: {}, sfilter: "all", vw: 1440, mtab: "home", cover: true, utype: "movie", flags: {} };
+  state = { page: "dash", server: 0, type: "all", sel: {}, deploy: false, dstep: 1, upload: false, picked: {}, sfilter: "all", vw: 1440, mtab: "home", cover: true, utype: "movie", flags: {}, rail: false, sbmode: "menu", period: "14", statSrc: "all", cov: "top", devOpen: false, qOpen: {} , period: "14", statSrc: "all", cov: "top", devOpen: false, qOpen: {} };
 
   componentDidMount() {
     this._onResize = () => this.setState({ vw: window.innerWidth });
@@ -971,8 +1368,8 @@ class Component extends DCLogic {
   go(page) { return () => this.setState({ page }); }
 
   chip(active) {
-    return "border-radius:999px;padding:7px 16px;font-size:12.5px;font-weight:700;cursor:pointer;border:1px solid " +
-      (active ? ACC + ";background:" + ACC + ";color:#fff" : "#E2E8F0;background:#fff;color:#64748B");
+    return "border-radius:999px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;transition:.12s;border:1px solid " +
+      (active ? "#0F172A;background:#0F172A;color:#fff" : "#E2E8F0;background:#fff;color:#475569");
   }
   dot(state) {
     const c = state === "online" ? OK : state === "sync" ? ACC : state === "offline" ? "#CBD5E1" : WARN;
@@ -983,7 +1380,7 @@ class Component extends DCLogic {
     return "font-size:10.5px;font-weight:800;padding:3px 9px;border-radius:999px;color:" + text + ";background:" + bg;
   }
   bar(pct, color) {
-    return "height:100%;width:" + pct + "%;border-radius:4px;background:" + color;
+    return "height:100%;width:" + pct + "%;border-radius:999px;background:" + color;
   }
 
   servers() {
@@ -1018,11 +1415,12 @@ class Component extends DCLogic {
         icon: this.ic(icon, 34, fg, 1.6),
         typeStyle: this.pill(fg, bg),
         deployed: deployed + " / 50 serverda",
-        cardStyle: "background:#fff;border-radius:16px;overflow:hidden;cursor:pointer;transition:.12s;border:2px solid " +
-          (on ? ACC : "#E2E8F0") + (on ? ";box-shadow:0 0 0 4px rgba(37,99,235,.12)" : ""),
+        cardStyle: "background:#fff;border-radius:16px;overflow:hidden;cursor:pointer;transition:box-shadow .15s,transform .15s,border-color .12s;border:2px solid " +
+          (on ? ACC : "#E2E8F0") + (on ? ";box-shadow:0 0 0 4px rgba(37,99,235,.14)" : ";box-shadow:0 1px 2px rgba(15,23,42,.06),0 4px 12px rgba(15,23,42,.04)"),
         coverStyle: "position:relative;height:132px;background:" + bg + ";display:grid;place-items:center",
         checkStyle: "position:absolute;top:10px;right:10px;width:22px;height:22px;border-radius:7px;display:grid;place-items:center;font-size:12px;font-weight:800;" +
-          (on ? "background:" + ACC + ";border:2px solid " + ACC + ";" + this.ic("check", 12, "#fff", 3.2) : "background:rgba(255,255,255,.85);border:2px solid #CBD5E1"),
+          (on ? "background:" + ACC + ";border:2px solid " + ACC : "background:rgba(255,255,255,.85);border:2px solid #CBD5E1"),
+        checkTick: on ? this.ic("check", 12, "#fff", 3.2) : "display:none",
         toggle: () => this.setState(s => ({ sel: { ...s.sel, [i]: !s.sel[i] } })),
       };
     });
@@ -1030,6 +1428,15 @@ class Component extends DCLogic {
 
   renderVals() {
     const st = this.state;
+    // cloud/static/app.js: job.state = running | done | error
+    // target.state = pending | queued (offlayn) | running | done | error
+    const jobTotals = {
+      running: JOBS.filter(j => j[3] === "running").length,
+      error: JOBS.filter(j => j[3] === "error").length,
+      queued: JOBS.reduce((a, j) => a + j[7].queued, 0),
+      total: JOBS.length,
+    };
+
     const servers = this.servers();
     const all = this.content();
     const selIds = Object.keys(st.sel).filter(k => st.sel[k]);
@@ -1050,7 +1457,7 @@ class Component extends DCLogic {
       ["dash", "Boshqaruv", "dashboard", ""],
       ["servers", "Serverlar", "server", "50"],
       ["content", "Kontent", "clapperboard", ""],
-      ["queue", "Navbat", "send", "3"],
+      ["queue", "Navbat", "send", String(jobTotals.running)],
       ["stats", "Statistika", "barChart", ""],
       ["logs", "Loglar", "fileText", ""],
       ["mobile", "Mobil", "phone", ""],
@@ -1063,15 +1470,22 @@ class Component extends DCLogic {
     const kioskNames = ["Vagon 1", "Vagon 2", "Vagon 3", "Vagon 4", "Vagon 5", "Vagon 6", "Vagon 7", "Vagon 8", "Vagon 9", "Vagon 10"];
 
     const ut = st.utype;
+    const rail = st.rail;
+    const fleet = st.sbmode === "fleet";
+    const top = st.sbmode === "top";
+    const tight = st.vw < 1320;
+    const per = st.period;
+    const cov = st.cov;
     const narrow = st.vw < 760;
     const compact = st.vw < 1180;
     const NW = "white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
     const mTitles = { home: "Monitoring", servers: "Serverlar", queue: "Navbat", logs: "Loglar" };
 
-    return {
+    const V = {
       isWide: !narrow, isNarrow: narrow,
-      hSync: compact ? "flex:0 1 104px;min-width:66px;" + NW : "flex:0 1 130px;min-width:78px;" + NW,
-      hDisk: compact ? "display:none" : "flex:0 1 118px;min-width:72px;" + NW,
+      syncHdr: compact ? "Sinx." : "Sinxronizatsiya",
+      hSync: compact ? "flex:0 0 78px;white-space:nowrap" : "flex:0 1 130px;min-width:88px;white-space:nowrap",
+      hDisk: compact ? "display:none" : "flex:0 1 118px;min-width:80px;white-space:nowrap",
       hSeen: compact ? "display:none" : "flex:0 1 118px;min-width:0;" + NW,
       cSeen: compact ? "display:none" : "flex:0 1 118px;min-width:0;font-size:12px;color:#64748B;" + NW,
       mTitle: mTitles[st.mtab],
@@ -1091,15 +1505,132 @@ class Component extends DCLogic {
       isContent: st.page === "content", isQueue: st.page === "queue", isStats: st.page === "stats",
       isLogs: st.page === "logs", isMobile: st.page === "mobile", isPlan: st.page === "plan",
 
-      nav: navDefs.map(([id, label, icon, badge]) => ({
-        label, badge,
-        icon: this.ic(icon, 16, active === id ? "#FFFFFF" : "#94A3B8", 1.9),
-        go: this.go(id),
-        style: "display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:10px;font-size:13.5px;font-weight:600;cursor:pointer;" +
-          (active === id ? "background:" + ACC + ";color:#fff" : "background:transparent;color:#94A3B8"),
-        badgeStyle: badge ? "font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:999px;" +
-          (active === id ? "background:rgba(255,255,255,.22);color:#fff" : "background:#1E293B;color:#94A3B8") : "display:none",
+      isFleetMode: fleet,
+      isTopMode: top,
+      searchIcon: this.ic("search", 14, "#64748B", 2),
+      searchHint: tight ? "Qidirish…" : "Obyekt, kontent yoki buyruq…",
+      headerStyle: "height:68px;flex:0 0 68px;background:#fff;border-bottom:1px solid #E2E8F0;display:flex;align-items:center;gap:16px;padding:0 26px",
+      headSearch: top ? "display:none" : "display:flex;align-items:center;gap:8px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:11px;padding:8px 12px;width:260px",
+
+      modeOptions: [["menu", "menu"], ["fleet", "layers"], ["top", "panelTop"]].map(([id, ic]) => {
+        const on = st.sbmode === id;
+        return {
+          go: () => this.setState({ sbmode: id }),
+          icon: this.ic(ic, 15, on ? "#fff" : "#64748B", 1.9),
+          style: "flex:1;height:28px;border-radius:8px;display:grid;place-items:center;cursor:pointer;transition:background .12s;" +
+            (on ? "background:" + ACC : "background:transparent"),
+          railStyle: "width:30px;height:30px;border-radius:9px;display:grid;place-items:center;cursor:pointer;" +
+            (on ? "background:" + ACC : "background:transparent"),
+          topStyle: "width:26px;height:26px;border-radius:7px;display:grid;place-items:center;cursor:pointer;" +
+            (on ? "background:" + ACC : "background:transparent"),
+        };
+      }),
+      modeSwitchWrap: rail || fleet ? "display:none" : "display:flex;gap:3px;background:#1E293B;border-radius:11px;padding:3px;margin-bottom:8px",
+
+      topNav: navDefs.map(([id, label, ic, badge]) => {
+        const on = active === id;
+        return {
+          label, badge,
+          go: this.go(id),
+          icon: this.ic(ic, 15, on ? "#fff" : "#64748B", 1.9),
+          style: "position:relative;display:flex;align-items:center;gap:7px;border-radius:9px;font-size:12.5px;font-weight:700;cursor:pointer;transition:background .12s;flex:0 0 auto;padding:" +
+            (tight ? "8px 9px" : "7px 11px") + ";" +
+            (on ? "background:rgba(37,99,235,.2);color:#fff" : "background:transparent;color:#94A3B8"),
+          labelStyle: tight ? "display:none" : "white-space:nowrap",
+          badgeStyle: !badge ? "display:none"
+            : tight
+              ? "position:absolute;top:3px;right:3px;min-width:14px;height:14px;padding:0 3px;border-radius:999px;background:#334155;color:#E2E8F0;font-size:8.5px;font-weight:800;display:grid;place-items:center"
+              : "font-size:9.5px;font-weight:800;padding:1px 6px;border-radius:999px;background:#334155;color:#E2E8F0",
+        };
+      }),
+
+      railItems: navDefs.map(([id, label, ic]) => {
+        const on = active === id;
+        return {
+          go: this.go(id),
+          icon: this.ic(ic, 18, on ? "#93C5FD" : "#64748B", 1.9),
+          style: "position:relative;width:38px;height:38px;border-radius:11px;display:grid;place-items:center;cursor:pointer;transition:background .12s;" +
+            (on ? "background:rgba(37,99,235,.18)" : "background:transparent"),
+          mark: on ? "position:absolute;left:-12px;top:50%;transform:translateY(-50%);width:3px;height:18px;border-radius:0 3px 3px 0;background:" + ACC : "display:none",
+          dot: (id === "queue") ? "position:absolute;top:7px;right:7px;width:6px;height:6px;border-radius:50%;background:#F59E0B" : "display:none",
+        };
+      }),
+
+      fleetFilters: [["all", "Barchasi"], ["attn", "Diqqat 5"], ["off", "Offlayn 8"]].map(([id, label]) => ({
+        label,
+        go: () => this.setState({ sfilter: id }),
+        style: "flex:1;text-align:center;border-radius:8px;padding:6px 4px;font-size:10.5px;font-weight:700;cursor:pointer;white-space:nowrap;" +
+          (st.sfilter === id ? "background:#1E293B;color:#E2E8F0" : "background:transparent;color:#64748B"),
       })),
+
+      fleetGroups: [
+        ["Diqqat talab qiladi", "#F59E0B", servers.filter(s => s.state !== "online")],
+        ["Onlayn", "#22C55E", servers.filter(s => s.state === "online")],
+      ].map(([label, col, items]) => ({
+        label,
+        count: items.length + " ta",
+        dot: "width:6px;height:6px;flex:0 0 6px;border-radius:50%;background:" + col,
+        items: items.map(s => {
+          const on = st.page === "detail" && st.server === s.i;
+          return {
+            name: s.name, route: s.route, syncLabel: s.syncLabel,
+            kiosksShort: s.synced + "/" + s.total,
+            open: s.open,
+            rowStyle: "position:relative;display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;cursor:pointer;transition:background .12s;" +
+              (on ? "background:rgba(37,99,235,.18)" : "background:transparent"),
+            mark: on ? "position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:20px;border-radius:0 3px 3px 0;background:" + ACC : "display:none",
+            nameStyle: "font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:" + (on ? "#fff" : "#CBD5E1"),
+            kioskStyle: "font-size:11px;font-weight:800;color:" + (s.state === "offline" ? "#64748B" : "#E2E8F0"),
+            syncStyle: "font-size:9.5px;font-weight:700;margin-top:2px;color:" +
+              (s.state === "offline" ? "#64748B" : s.pct === 100 ? "#22C55E" : "#93C5FD"),
+          };
+        }),
+      })),
+
+      sideStyle: (fleet || top) ? "display:none" : "width:" + (rail ? 76 : 248) + "px;flex:0 0 " + (rail ? 76 : 248) + "px;background:#0F172A;display:flex;flex-direction:column;padding:18px " +
+        (rail ? "12px" : "14px") + ";transition:width .18s;border-right:1px solid #1E293B",
+      logoRow: "display:flex;align-items:center;gap:9px;padding:2px 0 16px;" + (rail ? "justify-content:center" : ""),
+      logoText: rail ? "display:none" : "flex:1;min-width:0",
+      railBtn: "width:26px;height:26px;flex:0 0 26px;border-radius:8px;display:grid;place-items:center;cursor:pointer;background:#1E293B;" + (rail ? "display:none" : ""),
+      railIcon: this.ic("chevronLeft", 14, "#64748B", 2.2),
+      railBtnOpen: rail
+        ? "width:30px;height:30px;border-radius:9px;display:grid;place-items:center;cursor:pointer;background:#1E293B;margin:0 auto 14px;transition:background .12s"
+        : "display:none",
+      railIconOpen: this.ic("chevronRight", 15, "#94A3B8", 2.2),
+      toggleRail: () => this.setState(s => ({ rail: !s.rail })),
+      noop: () => {},
+
+      navItems: navDefs.map(([id, lbl, ic, badge]) => {
+        const on = active === id;
+        return {
+          label: lbl, badge,
+          go: this.go(id),
+          icon: this.ic(ic, 17, on ? "#93C5FD" : "#64748B", 1.9),
+          style: "position:relative;display:flex;align-items:center;gap:11px;padding:10px " +
+            (rail ? "0" : "12px") + ";border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;transition:background .12s;" +
+            (rail ? "justify-content:center;" : "") +
+            (on ? "background:rgba(37,99,235,.16);color:#fff" : "background:transparent;color:#94A3B8"),
+          mark: on
+            ? "position:absolute;left:" + (rail ? "2px" : "0") + ";top:50%;transform:translateY(-50%);width:3px;height:17px;border-radius:0 3px 3px 0;background:" + ACC
+            : "display:none",
+          labelStyle: rail ? "display:none" : "flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis",
+          badgeStyle: badge && !rail
+            ? "font-size:10px;font-weight:800;padding:2px 7px;border-radius:999px;" +
+              (on ? "background:rgba(255,255,255,.22);color:#fff" : "background:#334155;color:#E2E8F0")
+            : "display:none",
+        };
+      }),
+
+      statusCard: rail
+        ? "display:flex;justify-content:center;padding:10px 0 12px"
+        : "background:#1E293B;border-radius:13px;padding:12px 13px;margin-bottom:8px",
+      statusText: rail ? "display:none" : "color:#E2E8F0;font-size:11.5px;font-weight:700;white-space:nowrap",
+      statusBarWrap: rail ? "display:none" : "height:5px;border-radius:999px;background:#334155;overflow:hidden;margin-top:10px",
+      statusNote: rail ? "display:none" : "color:#94A3B8;font-size:11px;line-height:1.6;margin-top:8px",
+      userRow: "display:flex;align-items:center;gap:10px;padding:9px " + (rail ? "0" : "10px") +
+        ";border-radius:12px;cursor:pointer;transition:background .12s;" + (rail ? "justify-content:center" : ""),
+      userText: rail ? "display:none" : "flex:1;min-width:0",
+      outIcon: rail ? "display:none" : this.ic("logOut", 15, "#475569", 1.9) + ";cursor:pointer",
 
       goServers: this.go("servers"), goQueue: this.go("queue"),
       openDeploy: () => this.setState({ deploy: true, dstep: 1, upload: false }),
@@ -1111,7 +1642,7 @@ class Component extends DCLogic {
       kpis: [
         { label: "Onlayn serverlar", value: "42 / 50", delta: "▲ 3", note: "8 tasi SIM-signalsiz", deltaStyle: "font-size:12px;font-weight:800;color:" + OK },
         { label: "Faol kiosklar", value: "318", delta: "▲ 12", note: "74 vagonda o'rnatilgan", deltaStyle: "font-size:12px;font-weight:800;color:" + OK },
-        { label: "Navbatdagi vazifa", value: "3", delta: "2 kutmoqda", note: "12.4 GB yuborilmoqda", deltaStyle: "font-size:12px;font-weight:800;color:" + ACC },
+        { label: "Navbatdagi vazifa", value: String(jobTotals.running), delta: jobTotals.error + " xato", note: "12.4 GB yuborilmoqda", deltaStyle: "font-size:12px;font-weight:800;color:" + BAD },
         { label: "Diqqat talab", value: "5", delta: "▼ 1", note: "disk to'lgan / litsenziya", deltaStyle: "font-size:12px;font-weight:800;color:" + BAD },
       ],
 
@@ -1121,6 +1652,7 @@ class Component extends DCLogic {
       serverFilters: [["all", "Barchasi · 50"], ["online", "Onlayn · 42"], ["offline", "Offlayn · 8"], ["attn", "Diqqat · 5"]]
         .map(([id, label]) => ({ label, style: this.chip(st.sfilter === id), go: () => this.setState({ sfilter: id }) })),
 
+      queueCount: jobTotals.running,
       queuePreview: [
         { icon: this.ic("clapperboard", 15, "#475569"), title: "Ilon vodiysi — 1.8 GB", sub: "12 serverga", pctLabel: "68%", barStyle: this.bar(68, ACC) },
         { icon: this.ic("megaphone", 15, "#475569"), title: "Yangi reklama paketi", sub: "50 serverga", pctLabel: "94%", barStyle: this.bar(94, ACC) },
@@ -1181,44 +1713,231 @@ class Component extends DCLogic {
       }),
       clearSelection: () => this.setState({ sel: {} }),
 
-      jobs: [
-        ["clapperboard", "Ilon vodiysi — 1.8 GB", "12 serverga · 4 ta tugadi", "Yuklanmoqda", ACC, 68, "~14 daq", "To'xtatish",
-          [["Poyezd 076Ф", "ok"], ["Poyezd 010Ф", "ok"], ["Poyezd 054Ф", "run"], ["Poyezd 122Ф", "run"], ["+8", "idle"]]],
-        ["megaphone", "Reklama paketi (3 fayl)", "50 serverga · 47 ta tugadi", "Yakunlanmoqda", ACC, 94, "~2 daq", "To'xtatish",
-          [["47 server", "ok"], ["3 offlayn", "wait"]]],
-        ["headphones", "Alpomish — audiokitob", "8 offlayn serverga", "Navbatda", "#64748B", 0, "onlayn kutilmoqda", "Bekor qilish",
-          [["Poyezd 038Ф", "wait"], ["Poyezd 018Ф", "wait"], ["+6", "idle"]]],
-        ["trash", "Eski reklamalarni o'chirish", "50 serverdan", "Bajarildi", OK, 100, "5 daq oldin", "Hisobot",
-          [["50 server", "ok"]]],
-        ["music", "Musiqa to'plami — 42 trek", "Poyezd 018Ф", "Xato: litsenziya tugagan", BAD, 34, "to'xtadi", "Qayta urinish",
-          [["Poyezd 018Ф", "err"]]],
-      ].map(([icon, title, sub, state, col, pct, eta, action, targets]) => ({
-        title, sub, state, eta, action,
-        icon: this.ic(icon, 17, "#475569"),
-        iconStyle: "width:36px;height:36px;flex:0 0 36px;border-radius:11px;background:#F1F5F9;display:grid;place-items:center;font-size:16px",
-        stateStyle: this.pill(col === OK ? "#047857" : col === BAD ? "#B91C1C" : col === ACC ? "#1D4ED8" : "#475569",
-          col === OK ? "#D1FAE5" : col === BAD ? "#FEE2E2" : col === ACC ? "#DBEAFE" : "#F1F5F9"),
-        barStyle: "height:100%;width:" + pct + "%;border-radius:4px;background:" + (pct === 0 ? "#CBD5E1" : col) +
-          (state === "Yuklanmoqda" ? ";background-image:linear-gradient(115deg,rgba(255,255,255,.28) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.28) 50%,rgba(255,255,255,.28) 75%,transparent 75%);background-size:28px 28px;animation:barFlow .9s linear infinite" : ""),
-        targets: targets.map(([label, s]) => ({
-          label,
-          style: this.pill(s === "ok" ? "#047857" : s === "err" ? "#B91C1C" : s === "run" ? "#1D4ED8" : "#475569",
-            s === "ok" ? "#D1FAE5" : s === "err" ? "#FEE2E2" : s === "run" ? "#DBEAFE" : "#F1F5F9"),
-        })),
+      wifiIcon: this.ic("wifi", 16, "#2563EB", 2) + ";margin-top:1px",
+      qSummary: [
+        ["Ketmoqda", ACC, String(jobTotals.running)],
+        ["Offlayn nishon", WARN, String(jobTotals.queued)],
+        ["Xato", BAD, String(jobTotals.error)],
+        ["Yuborilmoqda", "#0F172A", "12.4 GB"],
+      ].map(([label, c, value]) => ({
+        label, value,
+        dot: "width:7px;height:7px;flex:0 0 7px;border-radius:50%;background:" + c,
       })),
 
-      statKpis: [
-        { label: "Bugungi sessiyalar", value: "18 420", note: "o'rtacha 14 daq" },
-        { label: "Ko'rilgan video", value: "6 108", note: "eng ko'p: kino" },
-        { label: "Tinglangan audio", value: "3 947", note: "audiokitob ustun" },
-        { label: "QR o'tishlar", value: "812", note: "my.gov.uz yetakchi" },
-      ],
-      chart: [42, 55, 48, 61, 73, 88, 96, 70, 64, 78, 84, 91, 99, 86].map((v, i) => ({
-        label: (22 + i) % 31 + 1 + "",
-        style: "width:100%;border-radius:6px 6px 3px 3px;height:" + v + "%;background:" + (i === 13 ? ACC : "#BFDBFE"),
+      qGroups: (() => {
+        const J = JOBS;
+        const CELL = { done: "#047857", running: ACC, queued: WARN, pending: "#CBD5E1", error: BAD };
+        const WORD = { done: "tugadi", running: "ketmoqda", queued: "offlayn", pending: "kutmoqda", error: "xato" };
+        const ORDER = ["done", "running", "queued", "pending", "error"];
+        const GROUPS = [
+          ["running", "Ketmoqda", ACC],
+          ["error", "Xato", BAD],
+          ["done", "Tugagan", OK],
+        ];
+        const CAP = 3;
+        return GROUPS.map(([key, label, col]) => {
+          const all = J.filter(j => j[3] === key);
+          const expanded = !!st.qOpen[key + ":all"];
+          const collapsed = st.qOpen[key] === false;
+          const items = expanded ? all : all.slice(0, CAP);
+          const hidden = all.length - items.length;
+          return {
+            label, count: all.length + " ta",
+            open: !collapsed,
+            dot: "width:8px;height:8px;flex:0 0 8px;border-radius:50%;background:" + col +
+              (key === "running" ? ";animation:pulseDot 1.6s infinite" : ""),
+            chevron: this.ic(collapsed ? "chevronRight" : "chevronDown", 15, "#94A3B8", 2.2),
+            toggle: () => this.setState(s => ({ qOpen: { ...s.qOpen, [key]: collapsed } })),
+            moreStyle: hidden > 0
+              ? "border-top:1px solid #F1F5F9;padding:11px;text-align:center;font-size:11.5px;font-weight:700;color:#2563EB;cursor:pointer"
+              : "display:none",
+            moreLabel: "yana " + hidden + " ta vazifa",
+            showAll: () => this.setState(s => ({ qOpen: { ...s.qOpen, [key + ":all"]: true } })),
+            items: items.map(([ic, title, sub, , pct, eta, action, c], idx) => {
+              const total = ORDER.reduce((a, k) => a + c[k], 0);
+              const present = ORDER.filter(k => c[k] > 0);
+              return {
+                title, eta, action,
+                sub: sub,
+                icon: this.ic(ic, 16, key === "error" ? "#B91C1C" : "#475569"),
+                iconStyle: "width:34px;height:34px;flex:0 0 34px;border-radius:10px;display:grid;place-items:center;background:" +
+                  (key === "error" ? "#FEE2E2" : "#F1F5F9"),
+                rowStyle: "display:flex;align-items:center;flex-wrap:wrap;gap:12px 18px;padding:14px 18px;transition:background .12s;" +
+                  (idx > 0 ? "border-top:1px solid #F1F5F9;" : ""),
+                segs: present.map(kind => ({
+                  style: "flex:" + c[kind] + ";min-width:3px;background:" + CELL[kind] +
+                    (kind === "running" ? ";background-image:linear-gradient(115deg,rgba(255,255,255,.4) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.4) 50%,rgba(255,255,255,.4) 75%,transparent 75%);background-size:14px 14px;animation:barFlow .9s linear infinite" : ""),
+                })),
+                legend: present.map(kind => ({
+                  text: c[kind] + " " + WORD[kind],
+                  dot: "width:6px;height:6px;flex:0 0 6px;border-radius:2px;background:" + CELL[kind],
+                })),
+                pctLabel: pct === 0 ? "—" : pct + "%",
+                pctStyle: "font-size:15px;font-weight:800;letter-spacing:-.3px;color:" +
+                  (key === "error" ? BAD : key === "done" ? "#047857" : pct === 0 ? "#94A3B8" : "#0F172A"),
+                targetLabel: c.done + " / " + total + " nishon",
+                actionStyle: "border:1px solid #E2E8F0;border-radius:9px;padding:8px 13px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;transition:.12s;color:" +
+                  (key === "error" ? "#B91C1C" : "#334155"),
+              };
+            }),
+          };
+        }).filter(g => g.items.length || g.count !== "0 ta");
+      })(),
+
+      clockIcon: this.ic("clock", 15, "#B45309", 2),
+      periodTabs: [["7", "7 kun"], ["14", "14 kun"], ["30", "30 kun"], ["90", "90 kun"]].map(([id, label]) => ({
+        label,
+        go: () => this.setState({ period: id }),
+        style: "border-radius:8px;padding:6px 12px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;transition:.12s;" +
+          (per === id ? "background:#0F172A;color:#fff" : "background:transparent;color:#64748B"),
       })),
-      topContent: [["Ilon vodiysi", "2 140"], ["Zumrad va Qimmat", "1 870"], ["Alpomish (audio)", "1 412"], ["O'tkan kunlar", "1 108"], ["Sherzod — Yurak", "904"], ["Sahroda uch kun", "731"]]
-        .map(([title, views], i) => ({ title, views, barStyle: this.bar(100 - i * 14, i === 0 ? ACC : "#BFDBFE") })),
+      srcTabs: [["all", "Kiosk + veb"], ["kiosk", "Kiosk ekrani"], ["web", "Veb"]].map(([id, label]) => ({
+        label,
+        go: () => this.setState({ statSrc: id }),
+        style: "border-radius:8px;padding:6px 12px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;transition:.12s;" +
+          (st.statSrc === id ? "background:#0F172A;color:#fff" : "background:transparent;color:#64748B"),
+      })),
+      periodLabel: "oxirgi " + per + " kun",
+
+      headline: "Yo'lovchilar deyarli faqat o'z telefonidan kiradi — vagon ekrani bo'sh turadi",
+      headlineSub: "92 sessiyaning 90 tasi veb orqali (17 qurilma), kiosk ekranidan faqat 2 ta. Ya'ni Wi-Fi va QR ishlayapti, lekin ekranning o'zi ko'zga tashlanmayapti yoki noqulay joyda.",
+
+      sources: [
+        ["globe", "Veb (telefon/brauzer)", "17 qurilma · 5 836 event", "90", "98%", 98, ACC, "#93C5FD"],
+        ["monitor", "Kiosk ekrani (vagonda)", "1 qurilma · 105 event", "2", "2%", 4, "#334155", "#94A3B8"],
+      ].map(([ic, name, meta, value, share, w, col, icCol]) => ({
+        name, meta, value, share,
+        icon: this.ic(ic, 17, icCol, 1.9),
+        segStyle: "flex:" + w + ";min-width:44px;border-radius:9px;background:" + col +
+          ";display:flex;align-items:center;justify-content:center",
+        segLabel: "font-size:12px;font-weight:800;color:" + (col === ACC ? "#fff" : "#E2E8F0"),
+      })),
+
+      insights: [
+        ["alert", "E'tibor", BAD, "#FEE2E2", "Kontentning 15 fayli 14 kun ichida bir marta ham ochilmagan",
+          "Diskda 3.2 GB egallaydi. Qamrov ro'yxatidan ko'rib, o'chirish yoki muqovasini almashtirish kerak."],
+        ["trending", "Naqsh", ACC, "#DBEAFE", "Kirishlarning 71% i 19:00–23:00 orasida",
+          "Reklama oralig'ini shu vaqtga zichlashtirsa, xuddi shu byudjetga ko'proq ko'rish tushadi."],
+        ["megaphone", "Nomutanosiblik", WARN, "#FEF3C7", "Reklama 5 382 marta ko'rsatilgan, kontent esa 72 marta ochilgan",
+          "Har bir kontent ochilishiga 75 ta reklama — popup oralig'i juda tez, yo'lovchini bezdirayotgan bo'lishi mumkin."],
+      ].map(([ic, tag, col, bg, text, action]) => ({
+        tag, text, action,
+        icon: this.ic(ic, 16, col, 2),
+        tagStyle: "font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;padding:3px 8px;border-radius:999px;color:" +
+          (col === BAD ? "#B91C1C" : col === WARN ? "#B45309" : "#1D4ED8") + ";background:" + bg,
+        cardStyle: "background:#fff;border-radius:14px;box-shadow:0 1px 2px rgba(15,23,42,.06),0 4px 12px rgba(15,23,42,.04);padding:16px 18px;border-top:3px solid " + col,
+      })),
+
+      funnel: [
+        ["Sessiya boshlandi", "92", "", 100],
+        ["Bo'limga o'tdi", "81", "−12%", 88],
+        ["Kontent ochdi", "72", "−11%", 78],
+        ["Oxirigacha ko'rdi", "31", "−57%", 34],
+      ].map(([label, value, drop, pct], i) => ({
+        label, value, drop,
+        dropStyle: drop
+          ? "font-size:11px;font-weight:800;flex:0 0 46px;text-align:right;color:" + (pct < 40 ? BAD : "#94A3B8")
+          : "display:none",
+        barStyle: this.bar(pct, i === 3 ? BAD : i === 0 ? ACC : "#93C5FD"),
+      })),
+
+      hours: (() => {
+        const v = [0,0,0,0,0,0,1,2,3,2,1,2,3,2,1,2,4,6,9,14,18,16,9,3];
+        const max = Math.max.apply(null, v);
+        return v.map((n, h) => {
+          const t = n / max;
+          const bg = n === 0 ? "#F8FAFC" : t < .25 ? "#EFF6FF" : t < .5 ? "#BFDBFE" : t < .8 ? "#60A5FA" : ACC;
+          return {
+            label: h % 6 === 0 ? String(h) : "",
+            cellStyle: "height:" + (16 + Math.round(t * 30)) + "px;border-radius:3px;background:" + bg,
+            labelStyle: "text-align:center;font-size:9px;font-weight:700;color:#CBD5E1;margin-top:5px;height:11px",
+          };
+        });
+      })(),
+      peakHour: "20:00 — 18 sessiya",
+
+      covTabs: [["top", "Ochilganlar"], ["never", "Ochilmaganlar"]].map(([id, label]) => ({
+        label,
+        go: () => this.setState({ cov: id }),
+        style: "border-radius:7px;padding:5px 11px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;" +
+          (cov === id ? "background:#fff;color:#0F172A;box-shadow:0 1px 2px rgba(15,23,42,.1)" : "background:transparent;color:#64748B"),
+      })),
+      coverage: (cov === "top"
+        ? [["Baron 1", "Kino", 16, 100, "ochilishi"], ["Бегущий по лезвию", "Kino", 6, 38, "ochilishi"],
+           ["Sarob", "Kitob", 6, 38, "ochilishi"], ["Panoh", "Kitob", 4, 25, "ochilishi"],
+           ["O'tmishdan ertaklar", "Audiokitob", 4, 25, "ochilishi"], ["Dyuna", "Kino", 4, 25, "ochilishi"],
+           ["Sezen Aksu", "Musiqa", 3, 19, "ochilishi"], ["271871578", "Musiqa", 2, 13, "nomsiz fayl"]]
+        : [["Sahroda uch kun", "Kino", 0, 0, "1.9 GB"], ["Alpomish", "Audiokitob", 0, 0, "420 MB"],
+           ["Mehrobdan chayon", "Audiokitob", 0, 0, "310 MB"], ["O'tkan kunlar", "Kitob", 0, 0, "2.4 MB"],
+           ["Zumrad va Qimmat", "Multfilm", 0, 0, "740 MB"], ["Sherzod — Yurak", "Musiqa", 0, 0, "9 MB"],
+           ["Ikki eshik orasi", "Kitob", 0, 0, "3.1 MB"], ["+8 fayl", "—", 0, 0, "1.4 GB"]]
+      ).map(([title, type, value, pct, note], i) => ({
+        title, type, note,
+        rank: cov === "top" ? String(i + 1) : "0",
+        value: cov === "top" ? String(value) : "—",
+        rankStyle: "width:19px;height:19px;flex:0 0 19px;border-radius:6px;display:grid;place-items:center;font-size:10px;font-weight:800;" +
+          (cov === "never" ? "background:#FEE2E2;color:#B91C1C"
+            : i === 0 ? "background:" + ACC + ";color:#fff" : "background:#F1F5F9;color:#94A3B8"),
+        typeStyle: this.pill(
+          type === "Kino" ? "#1D4ED8" : type === "Kitob" ? "#B45309" : type === "Musiqa" ? "#047857" : type === "Multfilm" ? "#7C3AED" : "#0F766E",
+          type === "Kino" ? "#DBEAFE" : type === "Kitob" ? "#FEF3C7" : type === "Musiqa" ? "#D1FAE5" : type === "Multfilm" ? "#EDE9FE" : "#CCFBF1"),
+        barStyle: this.bar(cov === "top" ? pct : 100, cov === "never" ? "#F1F5F9" : i === 0 ? ACC : "#BFDBFE"),
+        valStyle: "font-size:13px;font-weight:800;color:" + (cov === "never" ? "#CBD5E1" : "#0F172A"),
+      })),
+
+      chartNote: "jami 5 941 event",
+      gridLines: [0, 50, 100].map(p => ({
+        label: p === 0 ? "0" : Math.round(72 * p / 100) + "",
+        style: "position:absolute;left:0;right:0;bottom:" + (19 + 108 * p / 100) + "px;height:1px;background:" +
+          (p === 0 ? "#CBD5E1" : "#F1F5F9"),
+        labelStyle: "position:absolute;left:-28px;top:-7px;width:22px;text-align:right;font-size:9px;font-weight:700;color:#CBD5E1",
+      })),
+      chart: (() => {
+        const raw = [0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 72];
+        const max = Math.max.apply(null, raw) || 1;
+        return raw.map((v, i) => {
+          const today = i === raw.length - 1;
+          const zero = v === 0;
+          return {
+            label: (22 + i) % 31 + 1 + "",
+            value: zero ? "" : String(v),
+            valStyle: zero ? "display:none" : "font-size:9.5px;font-weight:800;color:" + (today ? ACC : "#94A3B8"),
+            style: "width:100%;border-radius:4px 4px 2px 2px;height:" +
+              (zero ? "3px" : Math.max(6, Math.round(v / max * 100)) + "%") +
+              ";background:" + (zero ? "#E2E8F0" : today ? ACC : "#BFDBFE"),
+            labelStyle: "flex:1;min-width:0;text-align:center;font-size:9px;font-weight:700;color:" +
+              (today ? "#0F172A" : "#CBD5E1"),
+          };
+        });
+      })(),
+
+      byServer: [["Poyezd 076Ф", 92, 100]].map(([name, value, pct]) => ({
+        name, value,
+        dot: "width:7px;height:7px;flex:0 0 7px;border-radius:50%;background:" + ACC,
+        barStyle: this.bar(pct, ACC),
+      })),
+
+      devicesOpen: st.devOpen,
+      toggleDevices: () => this.setState(s => ({ devOpen: !s.devOpen })),
+      devIcon: this.ic("users", 16, "#64748B", 1.9),
+      devChevron: this.ic(st.devOpen ? "chevronLeft" : "chevronRight", 14, "#94A3B8", 2.2),
+      devices: [
+        ["748f543a9b53", "veb", 30, 100, "08-04 09:36"],
+        ["819a81cc3885", "veb", 12, 40, "07-21 04:30"],
+        ["d91023efa23e", "veb", 8, 27, "07-21 06:17"],
+        ["b45f9e4acde9", "veb", 4, 13, "07-21 07:43"],
+        ["0838df5c9976", "veb", 3, 10, "07-21 08:48"],
+        ["GPUPC", "kiosk", 2, 7, "08-04 14:19"],
+        ["6ad8f8f7a44c", "veb", 2, 7, "07-22 10:29"],
+        ["b9e8d90c407c", "veb", 2, 7, "07-21 05:34"],
+        ["243fe4ac6956", "veb", 2, 7, "07-21 07:56"],
+        ["ec4e69d6a2d4", "veb", 1, 3, "07-23 06:45"],
+      ].map(([id, src, sessions, pct, last]) => ({
+        id: src === "kiosk" ? id : "…" + id.slice(-6),
+        src, sessions, last,
+        srcStyle: this.pill(src === "kiosk" ? "#0F172A" : "#1D4ED8", src === "kiosk" ? "#F1F5F9" : "#DBEAFE"),
+        barStyle: this.bar(pct, src === "kiosk" ? "#0F172A" : "#BFDBFE"),
+      })),
 
       logs: [
         ["14:22:41", "INFO", "sync", "Poyezd 076Ф · KIOSK-101 — 'Ilon vodiysi' keshga yozildi (1.8 GB)"],
@@ -1292,7 +2011,8 @@ class Component extends DCLogic {
           stateStyle: this.pill(s.state === "offline" ? "#475569" : "#047857", s.state === "offline" ? "#F1F5F9" : "#D1FAE5"),
           rowStyle: "display:flex;align-items:center;gap:11px;padding:12px 14px;border-radius:13px;cursor:pointer;background:#fff;border:1.5px solid " + (on ? ACC : "#E2E8F0"),
           boxStyle: "width:20px;height:20px;flex:0 0 20px;border-radius:6px;display:grid;place-items:center;font-size:11px;font-weight:800;" +
-            (on ? "background:" + ACC + ";" + this.ic("check", 12, "#fff", 3.2) : "background:#fff;border:2px solid #CBD5E1"),
+            (on ? "background:" + ACC : "background:#fff;border:2px solid #CBD5E1"),
+          boxTick: on ? this.ic("check", 12, "#fff", 3.2) : "display:none",
           toggle: () => this.setState(p => ({ picked: { ...p.picked, [s.i]: p.picked[s.i] === false } })),
         };
       }),
@@ -1365,6 +2085,8 @@ class Component extends DCLogic {
         : st.cover ? "Muqova kiosk kartochkasi va tafsilot ekranida ishlatiladi"
         : "Muqova tanlanmagan — kioskda bo'sh kartochka bo'lib ko'rinadi",
     };
+    V.mJobs = [].concat.apply([], V.qGroups.map(g => g.items));
+    return V;
   }
 }
 </script>

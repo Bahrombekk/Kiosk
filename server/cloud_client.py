@@ -77,6 +77,10 @@ REMOTE_SETTINGS = {
     "media_cache", "cache_limit_gb",
     # SOS va ko'rinish
     "sos_enabled", "sos_numbers", "default_theme",
+    # Sinov muddati / bloklash — bu VENDOR boshqaruvi (bulut sizning
+    # nazoratingizda). Litsenziya FAYLI esa alohida `set_license` buyrug'i
+    # bilan keladi va imzosi tekshiriladi.
+    "trial_enabled", "trial_start", "trial_days", "trial_blocked",
     # Veb ilova
     "web_enabled",
     # Wi-Fi (qiymat yoziladi; qo'llanishi uchun server qayta ishga tushadi)
@@ -105,6 +109,25 @@ class _CloudLogHandler(logging.Handler):
             })
         except Exception:                                        # noqa: BLE001
             pass
+
+
+def _fresh(ts, seconds):
+    """`ts` ("YYYY-MM-DD HH:MM:SS") shu necha soniya ichidami."""
+    if not ts:
+        return False
+    try:
+        t = time.strptime(str(ts)[:19], "%Y-%m-%d %H:%M:%S")
+    except (ValueError, TypeError):
+        return False
+    return (time.time() - time.mktime(t)) <= seconds
+
+
+def db_int(v, default=0):
+    """Bulutdan kelgan qiymatni butun songa o'giradi (bo'sh/xato -> default)."""
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return default
 
 
 def cloud_log(msg, level="INFO", source="cloud"):
@@ -299,6 +322,17 @@ class CloudClient:
             "license": lstate,
             "license_note": (f"{lic['days_left']} kun qoldi"
                              if lic.get("days_left") is not None else ""),
+            # To'liq litsenziya holati — bulut panelda ko'rsatadi va yangi
+            # license.key yasash uchun Qurilma ID (hw) shu yerдan olinadi.
+            "license_info": {
+                "hw_id": lic.get("hw_id"),
+                "present": lic.get("present"), "valid": lic.get("valid"),
+                "reason": lic.get("reason"), "customer": lic.get("customer"),
+                "issued": lic.get("issued"), "expires": lic.get("expires"),
+                "days_left": lic.get("days_left"),
+                "max_kiosks": lic.get("max_kiosks"),
+                "blocked": lic.get("blocked"),
+            },
             "applied_rev": self.applied_rev,
             "queue_active": 1 if self.job_id else 0,
             "queue_pending": 0,
@@ -318,7 +352,14 @@ class CloudClient:
                 "ip": k.get("ip"), "platform": k.get("platform"),
                 "cached_n": k.get("cached_n"),
                 "disk_total": k.get("disk_total"), "disk_free": k.get("disk_free"),
-                "online": k.get("device_id") in online_ids,
+                # Lokal kesh yoqilganmi — busiz bulutда holat ko'rinmasdi va
+                # o'chirilgan keshni QAYTA YOQIB bo'lmasdi.
+                "cache_enabled": 1 if k.get("cache_enabled", 1) else 0,
+                # Onlayn: WS ulanishi BOR yoki oxirgi heartbeat 30 soniya
+                # ichida (kiosk 5 soniyada yuboradi — qisqa uzilishда
+                # "offlayn" deb ko'rsatmaymiz).
+                "online": (k.get("device_id") in online_ids
+                           or _fresh(k.get("last_seen"), 30)),
                 "last_seen": k.get("last_seen"),
             } for k in kiosks],
         }
@@ -432,7 +473,7 @@ class CloudClient:
                 log.info("Bulut: server TASDIQLANDI — sinxronizatsiya boshlanadi")
                 cloud_log("Server bulutda tasdiqlandi")
         elif kind in ("stats_ack", "logs_ack", "settings_ack", "web_ack",
-                      "kiosk_ack"):
+                      "kiosk_ack", "license_ack"):
             pass                                  # xabar tasdiqlari — e'tibor yo'q
         else:
             log.debug("Bulut: noma'lum xabar %s", kind)
@@ -457,6 +498,8 @@ class CloudClient:
             await self._web_cmd(sock, str(cmd.get("action") or ""))
         elif kind == "kiosk":
             await self._kiosk_cmd(sock, cmd)
+        elif kind == "set_license":
+            await self._set_license(sock, cmd.get("text"))
         elif kind == "reboot":
             # Ataylab bajarilmaydi: masofadan qayta ishga tushirish poyezdda
             # kioskni ishlamay qoldirish xavfini tug'diradi. Faqat qayd etamiz.
@@ -512,6 +555,43 @@ class CloudClient:
         cloud_log(f"Veb ilova bulutdan {'yoqildi' if action == 'start' else 'ochirildi'}")
         await self._send(sock, {"type": "web_ack", "action": action,
                                 "running": self.web.is_running()})
+
+    async def _set_license(self, sock, text):
+        """Bulutdan kelgan `license.key` mazmunini o'rnatadi.
+
+        Fayl VENDOR imzosi bilan tekshiriladi (`licensing.install_file`) —
+        ya'ni bulut o'zboshimchalik bilan litsenziya "yasab" bermaydi; imzosi
+        yaroqsiz fayl mavjud YAROQLI litsenziyani almashtirmaydi."""
+        text = str(text or "").strip()
+        if not text:
+            return
+        tmp = os.path.join(config.BASE_DIR, "license.incoming")
+        try:
+            with open(tmp, "w", encoding="ascii", errors="ignore") as f:
+                f.write(text + "\n")
+            st = await asyncio.to_thread(licensing.install_file, tmp)
+            ok = bool(st.get("valid"))
+            msg = ("Litsenziya o'rnatildi: "
+                   + (f"{st.get('customer') or '-'}, muddat "
+                      f"{st.get('expires') or 'cheksiz'}, kiosk limiti "
+                      f"{st.get('max_kiosks') or 'cheksiz'}" if ok
+                      else f"YAROQSIZ — {st.get('reason')}"))
+            log.info("Bulut: %s", msg)
+            cloud_log(msg, "INFO" if ok else "ERROR")
+            db.log_action("cloud_license", msg[:200])
+            await self._send(sock, {"type": "license_ack", "valid": ok,
+                                    "reason": st.get("reason")})
+        except Exception as e:                                   # noqa: BLE001
+            log.warning("Bulut: litsenziya o'rnatilmadi (%s)", e)
+            cloud_log(f"Litsenziya o'rnatilmadi: {e}", "ERROR")
+            await self._send(sock, {"type": "license_ack", "valid": False,
+                                    "reason": str(e)[:200]})
+        finally:
+            try:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+            except OSError:
+                pass
 
     async def _kiosk_cmd(self, sock, cmd):
         """Bitta kioskка tegishli buyruq (bulut paneldagi kiosk qatoridan)."""
@@ -624,6 +704,17 @@ class CloudClient:
             else:
                 db.add_content(row)
 
+        # 4) Reklama, saytlar va bekatlar (kontent bilan bir xil mantiq:
+        #    faqat origin='cloud' yozuvlar boshqariladi, qo'lда qo'shilganlarga
+        #    tegilmaydi)
+        await self._apply_ads(cmd.get("ads"))
+        await self._apply_branding(cmd.get("branding"))
+        self._apply_simple("sites", cmd.get("sites"), (
+            "name", "url", "description", "features", "icon", "sort_order"))
+        self._apply_simple("route_stops", cmd.get("stops"), (
+            "name", "arrival_time", "departure_time", "latitude", "longitude",
+            "distance_km", "sort_order", "direction"))
+
         db.set_setting(K_REV, str(rev))
         await wsmod.manager.broadcast({"type": "catalog_update"})
         await self._send(sock, {"type": "applied", "rev": rev})
@@ -634,6 +725,130 @@ class CloudClient:
         self.job_id = None
         log.info("Bulut: manifest qo'llanildi (rev=%s)", rev)
         cloud_log(f"Sinxronizatsiya tugadi — rev {rev}, {len(want)} kontent")
+
+    # -------------------------------------- reklama / sayt / bekat qo'llash
+    async def _apply_ads(self, ads):
+        """Bulutdan kelgan reklama ro'yxatini qo'llaydi (media faylini ham
+        tortadi). Ro'yxatда yo'q bulut reklamalari o'chiriladi."""
+        if not isinstance(ads, list):
+            return
+        local = {r["cloud_id"]: r for r in db.cloud_rows("ads")}
+        want = {a["cloud_id"]: a for a in ads
+                if isinstance(a.get("cloud_id"), int)}
+        removed = db.delete_cloud_rows("ads", want.keys())
+        if removed:
+            cloud_log(f"{removed} reklama o'chirildi (bulut ro'yxatida yo'q)")
+
+        for cid, a in want.items():
+            cur = local.get(cid) or {}
+            row = {
+                "cloud_id": cid, "origin": "cloud",
+                "title": a.get("title"), "subtitle": a.get("subtitle"),
+                "link_url": a.get("link_url"),
+                "duration": db_int(a.get("duration"), 10),
+                "interval_min": (db_int(a.get("interval_min"))
+                                 if a.get("interval_min") else None),
+                "start_time": a.get("start_time") or None,
+                "end_time": a.get("end_time") or None,
+                "placement": a.get("placement") or "popup",
+                "is_active": 1 if a.get("is_active", 1) else 0,
+                "sort_order": db_int(a.get("sort_order")),
+            }
+            p = a.get("media")
+            if p and p.get("sha256"):
+                same = (cur.get("media_sha") == p["sha256"]
+                        and cur.get("media_path")
+                        and os.path.isfile(os.path.join(config.ADS_DIR,
+                                                        cur["media_path"])))
+                if same:
+                    row["media_path"] = cur["media_path"]
+                    row["media_sha"] = cur["media_sha"]
+                else:
+                    try:
+                        name = await asyncio.to_thread(
+                            self._download, p, config.ADS_DIR, None)
+                        row["media_path"] = name
+                        row["media_sha"] = p["sha256"]
+                    except Exception as e:                       # noqa: BLE001
+                        log.warning("Bulut: reklama fayli yuklanmadi (%s)", e)
+                        cloud_log(f"Reklama fayli yuklanmadi: {p.get('name')}",
+                                  "ERROR")
+                        continue
+            if cur:
+                db.update_ad(cur["id"], row)
+            else:
+                db.add_ad(row)
+
+    async def _apply_branding(self, branding):
+        """Bulutdan kelgan brending rasmlarini (hero banner) qo'llaydi.
+
+        Fayl `content/branding/` ga tushadi va sozlamaga nomi yoziladi
+        (`hero_image`). Veb ilova va kiosk shu sozlama bor bo'lsa serverdan
+        oladi, aks holda ilovadagi standart rasmni ko'rsatadi."""
+        if not isinstance(branding, dict):
+            return
+        for kind, key in (("hero", "hero_image"),):
+            p = branding.get(kind)
+            cur = db.get_settings().get(key) or ""
+            if not p or not p.get("sha256"):
+                if cur:                        # bulutда olib tashlangan
+                    db.set_setting(key, "")
+                    old = os.path.join(config.BRANDING_DIR, cur)
+                    try:
+                        if os.path.isfile(old):
+                            os.remove(old)
+                    except OSError:
+                        pass
+                    cloud_log(f"Brending olib tashlandi: {kind}")
+                continue
+            want = self._safe_name(p["sha256"], p.get("name"))
+            if cur == want and os.path.isfile(
+                    os.path.join(config.BRANDING_DIR, want)):
+                continue                       # o'zgarmagan
+            try:
+                name = await asyncio.to_thread(
+                    self._download, p, config.BRANDING_DIR, None)
+            except Exception as e:                               # noqa: BLE001
+                log.warning("Bulut: brending yuklanmadi (%s)", e)
+                cloud_log(f"Brending yuklanmadi: {kind} — {e}", "ERROR")
+                continue
+            db.set_setting(key, name)
+            # Eski faylni tozalaymiz (yangisi boshqa nomda)
+            if cur and cur != name:
+                try:
+                    old = os.path.join(config.BRANDING_DIR, cur)
+                    if os.path.isfile(old):
+                        os.remove(old)
+                except OSError:
+                    pass
+            cloud_log(f"Brending yangilandi: {kind} ({name})")
+
+    @staticmethod
+    def _apply_simple(table, rows, fields):
+        """Fayli yo'q oddiy jadvallar (sites / route_stops) uchun umumiy
+        qo'llash: bulut ro'yxatiga MOSLASH (yo'qini qo'shish, ortiqchasini
+        o'chirish, borini yangilash)."""
+        if not isinstance(rows, list):
+            return
+        add, upd, delete = {
+            "sites": (db.add_site, db.update_site, None),
+            "route_stops": (db.add_route_stop, db.update_route_stop, None),
+        }[table]
+        local = {r["cloud_id"]: r for r in db.cloud_rows(table)}
+        want = {r["cloud_id"]: r for r in rows
+                if isinstance(r.get("cloud_id"), int)}
+        removed = db.delete_cloud_rows(table, want.keys())
+        if removed:
+            log.info("Bulut: %s dan %d yozuv o'chirildi", table, removed)
+        for cid, r in want.items():
+            row = {"cloud_id": cid, "origin": "cloud"}
+            for f in fields:
+                row[f] = r.get(f)
+            cur = local.get(cid)
+            if cur:
+                upd(cur["id"], row)
+            else:
+                add(row)
 
     def _tick(self, got, total):
         self.progress = {

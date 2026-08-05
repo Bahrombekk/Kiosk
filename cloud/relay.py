@@ -101,18 +101,20 @@ class Relay:
         bo'lmagan bulut kontentini o'chiradi. Ya'ni "yuklash" va "o'chirish"
         bitta mexanizm — alohida delete buyrug'i kerak emas."""
         srv = db.get_server(server_id) or {}
+
+        def part(sha, name, size):
+            """Fayl bo'lagi: sha256 + imzolangan, muddatli yuklab olish havolasi."""
+            if not sha or not storage.exists(sha):
+                return None
+            return {
+                "sha256": sha,
+                "name": name or sha[:12],
+                "size": size or storage.size_of(sha),
+                "url": "/dl/" + security.make_dl_token(sha, server_id, name or ""),
+            }
+
         items = []
         for c in db.desired_content(server_id):
-            def part(sha, name, size):
-                if not sha or not storage.exists(sha):
-                    return None
-                return {
-                    "sha256": sha,
-                    "name": name or sha[:12],
-                    "size": size or storage.size_of(sha),
-                    "url": "/dl/" + security.make_dl_token(sha, server_id,
-                                                           name or ""),
-                }
             media = part(c["media_sha"], c["media_name"], c["media_size"])
             cover = part(c["cover_sha"], c["cover_name"], c["cover_size"])
             text = part(c["text_sha"], c["text_name"], c["text_size"])
@@ -132,13 +134,56 @@ class Relay:
                 "visible": c["visible"],
                 "media": media, "cover": cover, "text": text,
             })
-        return {"rev": srv.get("desired_rev", 0), "items": items}
+
+        # --- Reklama (media fayli bilan)
+        ads = []
+        for a in db.desired_ads(server_id):
+            ads.append({
+                "cloud_id": a["id"],
+                "title": a["title"], "subtitle": a["subtitle"],
+                "link_url": a["link_url"], "duration": a["duration"],
+                "interval_min": a["interval_min"],
+                "start_time": a["start_time"], "end_time": a["end_time"],
+                "placement": a["placement"], "is_active": a["is_active"],
+                "sort_order": a["sort_order"],
+                "media": part(a["media_sha"], a["media_name"], a["media_size"]),
+            })
+
+        # --- Saytlar (barcha serverlarga bir xil)
+        sites = [{
+            "cloud_id": s["id"], "name": s["name"], "url": s["url"],
+            "description": s["description"], "features": s["features"],
+            "icon": s["icon"], "sort_order": s["sort_order"],
+        } for s in db.get_sites()]
+
+        # --- Bekatlar (shu serverning yo'nalishi)
+        stops = [{
+            "cloud_id": s["id"], "name": s["name"],
+            "arrival_time": s["arrival_time"],
+            "departure_time": s["departure_time"],
+            "latitude": s["latitude"], "longitude": s["longitude"],
+            "distance_km": s["distance_km"], "sort_order": s["sort_order"],
+            "direction": s["direction"],
+        } for s in db.get_stops(server_id)]
+
+        # --- Brending (asosiy sahifa hero banneri va h.k.)
+        branding = {}
+        for b in db.get_branding(server_id):
+            p = part(b["sha"], b["name"], b["size"])
+            if p:
+                branding[b["kind"]] = p
+
+        return {"rev": srv.get("desired_rev", 0), "items": items,
+                "ads": ads, "sites": sites, "stops": stops,
+                "branding": branding}
 
     async def push_manifest(self, server_id, job_id=None):
         """Manifestni yuboradi (offlayn bo'lsa False — navbatda qoladi)."""
         m = self.build_manifest(server_id)
         return await self.send_cmd(server_id, "manifest", rev=m["rev"],
-                                   items=m["items"], job_id=job_id)
+                                   items=m["items"], ads=m["ads"],
+                                   sites=m["sites"], stops=m["stops"],
+                                   branding=m["branding"], job_id=job_id)
 
     async def dispatch_job(self, job_id, server_ids):
         """Ishni nishonlarga yuboradi. Offlayn serverlar `queued` bo'lib qoladi
@@ -167,6 +212,19 @@ class Relay:
         for p in pend:
             db.set_target(p["job_id"], server_id,
                           state="running" if ok else "queued")
+
+    async def flush_ops(self, server_id):
+        """Ulangan zahoti navbatда turgan (vaqti kelgan) buyruqlarni yuboradi."""
+        import json as _json
+        for op in db.due_ops(server_id):
+            try:
+                fields = _json.loads(op["payload"] or "{}")
+            except ValueError:
+                fields = {}
+            if await self.send_cmd(server_id, op["kind"], **fields):
+                db.mark_op_sent(op["id"])
+                log.info("%s: navbatdagi buyruq yuborildi (%s)", server_id,
+                         op["kind"])
 
 
 relay = Relay()

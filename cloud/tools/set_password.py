@@ -8,8 +8,10 @@ qo'llanadi; bu skript esa ishlab turgan bulutda ham darhol ishlaydi (parol har
 kirishda bazadan tekshiriladi).
 
 Ishlatish (cloud/ ichida):
-    py tools/set_password.py                 # parolni so'raydi
-    py tools/set_password.py kiosk123        # to'g'ridan-to'g'ri beradi
+    py tools/set_password.py                     # `admin` parolini so'raydi
+    py tools/set_password.py kiosk123            # to'g'ridan-to'g'ri beradi
+    py tools/set_password.py kiosk123 operator1  # boshqa foydalanuvchi
+                                                 # (yo'q bo'lsa yaratiladi)
 
 Boshqa bazani ko'rsatish: CLOUD_DB=/yo'l/cloud.db py tools/set_password.py
 """
@@ -26,6 +28,7 @@ MIN_LEN = 4
 
 def main():
     plain = sys.argv[1] if len(sys.argv) > 1 else ""
+    user = sys.argv[2] if len(sys.argv) > 2 else None
     if not plain:
         try:
             import getpass
@@ -38,10 +41,17 @@ def main():
         return 1
 
     db.init_db()
-    db.set_setting("admin_pass_hash", db.hash_secret(plain))
-    # Tekshirib ko'ramiz — xesh haqiqatan shu parolga mos kelishi kerak
-    ok = db.verify_secret(plain, db.get_setting("admin_pass_hash") or "")
+    db.migrate_legacy_password()
+    user = (user or db.DEFAULT_USER).strip()
+    db.upsert_user(user, plain)
+    if user == db.DEFAULT_USER:
+        # Eski kalitni ham yangilab qo'yamiz (moslik uchun)
+        db.set_setting("admin_pass_hash", db.hash_secret(plain))
+    # Tekshirib ko'ramiz — parol haqiqatan ishlashi kerak
+    ok = bool(db.get_user(user)
+              and db.verify_secret(plain, db.get_user(user)["pass_hash"]))
     print(f"Baza:  {config.DB_PATH}")
+    print(f"Login: {user}")
     print(f"Parol: {plain}")
     # DIQQAT: bu yerda faqat ASCII — Windows konsoli cp1251/cp866 bo'lishi
     # mumkin va "✓" kabi belgilar UnicodeEncodeError beradi.

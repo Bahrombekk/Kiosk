@@ -13,6 +13,12 @@
  */
 "use strict";
 
+// Backend bilan bir xil bo'lishi kerak (cloud/main.py -> APP_BUILD). Statik
+// fayllar diskdan o'qiladi va brauzer yangi UI'ni darhol oladi, lekin
+// endpointlar faqat bulut QAYTA ISHGA TUSHGANDA yangilanadi — mos kelmasa
+// yuqorida ogohlantirish chiqadi ("Not Found" bilan boshi qotmasin).
+const UI_BUILD = "2026-08-04.10";
+
 // ======================================================== 1) API klient
 async function req(method, url, body) {
   const opt = { method, headers: {}, credentials: "same-origin" };
@@ -25,12 +31,20 @@ async function req(method, url, body) {
   const txt = await r.text();
   let data = null;
   try { data = txt ? JSON.parse(txt) : null; } catch { data = null; }
+  if (r.status === 404 && /^\/api\//.test(String(url))) {
+    // Endpoint yo'q — deyarli har doim backend eski (UI diskdan yangilangan,
+    // Python jarayoni esa yo'q). Aniq aytamiz.
+    S.staleBackend = true;
+    throw new Error("Bu imkoniyat backendda yo'q — bulutni QAYTA ISHGA "
+                    + "TUSHIRING (statik UI yangilangan, Python jarayoni eski)");
+  }
   if (!r.ok) throw new Error((data && (data.detail || data.error)) || `Xato ${r.status}`);
   return data;
 }
 const api = {
   get: (u) => req("GET", u),
   post: (u, b) => req("POST", u, b || {}),
+  put: (u, b) => req("PUT", u, b || {}),
   patch: (u, b) => req("PATCH", u, b || {}),
   del: (u) => req("DELETE", u),
 };
@@ -87,6 +101,7 @@ const P = {
   chevronRight: "M9 5l7 7-7 7",
   chevronLeft: "M15 5l-7 7 7 7",
   menu: "M4 7h16M4 12h16M4 17h16",
+  clock: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M12 7v5l3.5 2",
 };
 function ic(name, size = 18, color = "currentColor", sw = 1.8) {
   // Bitta `d` ichida bir nechta subpath ("M…M…") bo'lishi normal — stroke bilan
@@ -159,6 +174,16 @@ function ago(ts) {
 }
 const clock = (ts) => String(ts || "").slice(11, 19) || String(ts || "").slice(0, 10);
 
+/** Sessiya davomiyligi (boshlangan → oxirgi hodisa). */
+function durText(a, b) {
+  const t1 = new Date(String(a || "").replace(" ", "T"));
+  const t2 = new Date(String(b || a || "").replace(" ", "T"));
+  if (isNaN(t1) || isNaN(t2)) return "—";
+  const m = Math.max(0, Math.round((t2 - t1) / 60000));
+  if (m < 1) return "1 daq";
+  return m >= 60 ? `${Math.floor(m / 60)} s ${m % 60} daq` : `${m} daq`;
+}
+
 function toast(msg, kind = "") {
   const box = document.querySelector(".toasts") || (() => {
     const d = document.createElement("div"); d.className = "toasts";
@@ -174,6 +199,11 @@ function toast(msg, kind = "") {
 // ============================================================= 4) Holat
 const S = {
   auth: null,            // null = hali tekshirilmagan
+  build: "",             // backend versiyasi (health)
+  user: null,            // kim kirgan {username, role}
+  loginUser: "",         // login maydonidagi qiymat (xatoda saqlanadi)
+  remember: false,
+  staleBackend: false,   // UI yangi, backend eski (qayta ishga tushirish kerak)
   page: "dash",
   serverId: null,        // tafsilot ochilgan server
   loading: false,
@@ -185,25 +215,30 @@ const S = {
   statDays: 14,
   statSource: "",        // "" = kiosk+veb, "kiosk", "web"
   srvForm: {},           // server sozlamalari formasidagi O'ZGARISHLAR
+  stopsDraft: null,      // bekatlar jadvalining tahrirlanayotgan nusxasi
+  schedule: { on: false, date: "", time: "", group: "" },  // rejalashtirish
   sel: new Set(),        // kutubxonada belgilangan id'lar
   modal: null,           // {kind:'upload'|'deploy'|'announce'|'token', ...}
   form: {},              // modal formasi qiymatlari
   // Yuklangan fayllar SLOT bo'yicha (dizaynda ham shunday: o'ngda muqova,
   // pastda media kartasi, kitob uchun matn qatori). Bir slotga yangi fayl
   // tashlansa eskisini almashtiradi.
-  up: { media: null, cover: null, text: null },
+  up: { media: null, cover: null, text: null, hero: null },
   pickKind: "",          // "" = kengaytmadan aniqlanadi, aks holda majburiy slot
   flags: { visible: true, rec: true, cache: true },
   pickAll: true,
+  adPick: null,          // reklama qaysi serverlarga (Set)
   pickOff: {},           // deploy: o'chirilgan serverlar
-  opts: { skip_existing: true, night_only: false },
+  opts: { skip_existing: true },
   dstep: 1,
 };
 
 const NAV = [
   ["dash", "Boshqaruv", "layoutDashboard"],
   ["servers", "Serverlar", "server"],
-  ["library", "Kutubxona", "clapperboard"],
+  ["library", "Kontent", "clapperboard"],
+  ["ads", "Reklama", "megaphone"],
+  ["sites", "Saytlar", "globe"],
   ["queue", "Navbat", "send"],
   ["stats", "Statistika", "barChart"],
   ["logs", "Loglar", "fileText"],
@@ -217,7 +252,10 @@ const TITLES = {
   stats: ["Statistika", "Barcha kiosklardan yig'ilgan foydalanish ma'lumoti"],
   logs: ["Loglar", "Serverlardan kelgan hodisalar"],
   tokens: ["Ulash kalitlari", "Yangi poyezd serverini bulutga ulash uchun bir martalik token"],
-  server: ["Server tafsiloti", "Kiosklar, sinxronizatsiya, sessiyalar"],
+  server: ["Server tafsiloti", "Kiosklar, sozlamalar, veb, sessiyalar"],
+  ads: ["Reklama", "Bulutdagi reklamalar — qaysi serverlarga ketishini belgilaysiz"],
+  sites: ["Saytlar", "Kiosklardagi «Saytlar» bo'limi — barcha serverlarga bir xil ketadi"],
+  stops: ["Bekatlar", "Shu poyezdning yo'nalish jadvali"],
 };
 
 // ============================================================ 5) Yuklash
@@ -226,7 +264,10 @@ async function load(silent) {
   try {
     if (S.page === "dash") S.data.dash = await api.get("/api/admin/overview");
     else if (S.page === "servers") S.data.servers = await api.get("/api/admin/servers");
-    else if (S.page === "server") S.data.server = await api.get("/api/admin/servers/" + S.serverId);
+    else if (S.page === "server") {
+      S.data.server = await api.get("/api/admin/servers/" + S.serverId);
+      S.data.brandingLib = await api.get("/api/admin/branding/library?kind=hero");
+    }
     else if (S.page === "library") {
       const p = new URLSearchParams();
       if (S.libType) p.set("type", S.libType);
@@ -247,6 +288,14 @@ async function load(silent) {
       S.data.logs = await api.get("/api/admin/logs?" + p);
       S.data.servers = await api.get("/api/admin/servers");
     } else if (S.page === "tokens") S.data.tokens = await api.get("/api/admin/enroll-tokens");
+    else if (S.page === "ads") {
+      S.data.ads = await api.get("/api/admin/ads");
+      S.data.servers = await api.get("/api/admin/servers");
+    } else if (S.page === "sites") S.data.sites = await api.get("/api/admin/sites");
+    else if (S.page === "stops") {
+      S.data.stops = await api.get(`/api/admin/servers/${S.serverId}/stops`);
+      S.data.server = await api.get("/api/admin/servers/" + S.serverId);
+    }
     S.err = "";
   } catch (e) {
     S.err = e.message;
@@ -266,34 +315,121 @@ function go(page, id) {
 }
 
 // ============================================================= 6) Render
-function render() {
-  const app = document.getElementById("app");
-  app.className = "";
-  if (S.auth === null) { app.className = "boot"; app.textContent = "Yuklanmoqda…"; return; }
-  if (!S.auth) { app.innerHTML = viewLogin(); return; }
-  app.innerHTML = viewShell();
+/** Qayta chizishdan OLDIN saqlab qolinadigan holat.
+ *
+ *  Panel har 5 soniyada jonli yangilanadi va butun DOM qaytadan yasaladi.
+ *  Hech narsa qilmasak scroll nolga qaytib "tepaga otib yuboradi", yozilayotgan
+ *  maydondan fokus ham uchadi. Shuning uchun scroll, fokus va kursor joyini
+ *  eslab qolib, chizilgandan keyin tiklaymiz. */
+function _snapshot(app) {
+  const page = app.querySelector(".page");
+  const ae = document.activeElement;
+  let sel = null, caret = null;
+  if (ae && ae.dataset) {
+    if (ae.dataset.srv) sel = `[data-srv="${ae.dataset.srv}"]`;
+    else if (ae.dataset.bind) sel = `[data-bind="${ae.dataset.bind}"]`;
+    else if (ae.dataset.act === "q") sel = '[data-act="q"]';
+    if (sel) {
+      try {
+        caret = [ae.selectionStart, ae.selectionEnd];
+      } catch { caret = null; }          // number/select — selection yo'q
+    }
+  }
+  const modal = app.querySelector(".modal");
+  return { scroll: page ? page.scrollTop : 0, sel, caret,
+           modalScroll: modal ? modal.scrollTop : 0 };
 }
 
+function _restore(app, k) {
+  const page = app.querySelector(".page");
+  if (page && k.scroll) page.scrollTop = k.scroll;
+  const modal = app.querySelector(".modal");
+  if (modal && k.modalScroll) modal.scrollTop = k.modalScroll;
+  if (!k.sel) return;
+  const el = app.querySelector(k.sel);
+  if (!el) return;
+  el.focus({ preventScroll: true });
+  if (k.caret) {
+    try { el.setSelectionRange(k.caret[0], k.caret[1]); } catch { /* mumkin emas */ }
+  }
+}
+
+function render() {
+  const app = document.getElementById("app");
+  const keep = _snapshot(app);
+  app.className = "";
+  if (S.auth === null) {
+    app.className = "boot";
+    app.textContent = "Yuklanmoqda…";
+    return;
+  }
+  app.innerHTML = S.auth ? viewShell() : viewLogin();
+  _restore(app, keep);
+}
+
+/** Kirish ekrani — chapda brend, o'ngda forma (dizayn 1a).
+ *  Telefonда bitta ustunga tushadi (styles.css @media). */
 function viewLogin() {
-  return `<div class="login-wrap"><form class="login" data-act="login">
-    <div class="side-mark">K</div>
-    <h1>KioskCloud</h1>
-    <p>Markaziy boshqaruv paneli. Davom etish uchun admin parolini kiriting.</p>
-    ${S.err ? `<div class="err-box">${esc(S.err)}</div>` : ""}
-    <div class="field"><label>Parol</label>
-      <input type="password" name="password" autofocus autocomplete="current-password"></div>
-    <button class="btn pri" style="width:100%;justify-content:center" type="submit">Kirish</button>
-  </form></div>`;
+  const blocked = /juda ko'p urinish/i.test(S.err || "");
+  const points = [
+    ["server", "Obyekt o'zi ulanadi — oq IP kerak emas"],
+    ["refresh", "Uzilsa navbatda turadi, o'zi davom etadi"],
+    ["lock", "Har bir buyruq imzolangan (Ed25519)"],
+  ];
+  return `<div class="login-wrap"><div class="login-card">
+
+    <aside class="login-brand">
+      <div class="side-logo" style="padding:0 0 26px">
+        <div class="side-mark">K</div>
+        <div><div class="side-name">KioskCloud</div>
+          <div class="side-sub">Markaziy boshqaruv</div></div>
+      </div>
+      <h2 class="login-h">Barcha kiosklar<br>bitta panelda</h2>
+      <p class="login-p">Obyektlaringiz bulutga o'zi ulanadi — oq IP, port
+        yoki VPN kerak emas.</p>
+      <div style="margin-top:22px">
+        ${points.map(([i, t]) => `<div class="login-pt">
+          ${ic(i, 16, "#93C5FD")}<span>${t}</span></div>`).join("")}
+      </div>
+      <div class="login-spacer"></div>
+      <div class="row" style="gap:8px">
+        <span class="dot live"></span>
+        <span style="color:#E2E8F0;font-size:12px;font-weight:700">Bulut ishlayapti</span>
+        <span class="dim" style="margin-left:auto">${esc(S.build || "v1.0")}</span>
+      </div>
+    </aside>
+
+    <form class="login-form" data-act="login">
+      <h1>Kirish</h1>
+      <p>Davom etish uchun login va parolni kiriting.</p>
+      ${S.err ? `<div class="err-box">
+        <b>${blocked ? "Vaqtincha bloklandi" : "Login yoki parol xato"}</b><br>
+        <span style="font-weight:600">${esc(S.err)}</span></div>` : ""}
+      <div class="field"><label>Login</label>
+        <input name="username" value="${esc(S.loginUser || "")}"
+          autocomplete="username" placeholder="admin" autofocus></div>
+      <div class="field"><label>Parol</label>
+        <input type="password" name="password" autocomplete="current-password"></div>
+      <label class="row" style="gap:9px;margin:2px 0 18px;cursor:pointer">
+        <input type="checkbox" name="remember" style="width:16px;height:16px">
+        <span style="font-size:12.5px;font-weight:700">Meni eslab qol</span>
+        <span class="dim" style="margin-left:auto">${S.remember ? "7 kun" : "12 soat"}</span>
+      </label>
+      <button class="btn pri" style="width:100%;justify-content:center;padding:13px"
+        type="submit" ${blocked ? "disabled" : ""}>Kirish</button>
+      ${blocked ? `<div class="dim" style="margin-top:16px;line-height:1.6">
+        Blok IP bo'yicha qo'yiladi — 5 daqiqadan keyin qayta urinib ko'ring.
+      </div>` : ""}
+    </form>
+  </div></div>`;
 }
 
 function viewShell() {
   const d = S.data.dash || {};
   const k = d.kpis || {};
   const jobs = (S.data.jobs || d.jobs || []).filter((j) => j.state === "running");
-  const badges = {
-    servers: k.servers_total ? (k.servers_total - k.servers_online) || "" : "",
-    queue: jobs.length || "",
-  };
+  // Sidebar badge'lari: Serverlar — jami soni (dizaynda «50»), Navbat — faol ish
+  const badges = { servers: k.servers_total || "", queue: jobs.length || "" };
   const [title, sub] = TITLES[S.page] || ["", ""];
   return `<div class="shell">
     <aside class="side">
@@ -311,25 +447,7 @@ function viewShell() {
           </button>`).join("")}
       </nav>
       <div class="side-spacer"></div>
-      <div class="side-status">
-        <div class="side-status-top">
-          <span class="dot ${k.servers_online ? "live" : "off"}"></span>
-          <span class="side-status-title">${k.servers_online ? "Bulut ishlayapti" : "Server ulanmagan"}</span>
-        </div>
-        <div class="side-status-note">
-          ${k.servers_online || 0} / ${k.servers_total || 0} server onlayn<br>
-          ${k.kiosks_online || 0} / ${k.kiosks_total || 0} kiosk
-        </div>
-        <div class="side-hr"></div>
-        <div class="side-user">
-          <div class="avatar">A</div>
-          <div style="flex:1;min-width:0">
-            <div class="side-user-name">Admin</div>
-            <div class="side-user-role">Super admin</div>
-          </div>
-          <button class="side-out" data-act="logout">Chiqish</button>
-        </div>
-      </div>
+      ${sideStatus(k)}
     </aside>
     <div class="main">
       <header class="top">
@@ -346,8 +464,19 @@ function viewShell() {
           <button class="btn" data-act="sync-all">${ic("refresh", 16)} Hammasini sinxronla</button>` : ""}
         ${S.page === "tokens" ? `
           <button class="btn pri" data-act="token-open">${ic("plus", 16)} Yangi kalit</button>` : ""}
+        ${S.page === "ads" ? `
+          <button class="btn pri" data-act="ad-new">${ic("plus", 16, "#fff")} Yangi reklama</button>` : ""}
+        ${S.page === "sites" ? `
+          <button class="btn pri" data-act="site-new">${ic("plus", 16, "#fff")} Yangi sayt</button>` : ""}
       </header>
       <main class="page">
+        ${S.staleBackend ? `<div class="err-box" style="margin-bottom:14px">
+          <b>Bulut backendi eski.</b> Brauzer yangi panelni oldi, lekin server
+          jarayoni yangilanmagan — shu sababli ba'zi bo'limlar «Not Found»
+          beradi. Terminalда bulutni to'xtatib qayta ishga tushiring:
+          <code>py main.py</code>${S.build
+            ? ` &nbsp;(backend: ${esc(S.build)}, panel: ${UI_BUILD})` : ""}
+        </div>` : ""}
         ${S.err ? `<div class="err-box" style="margin-bottom:14px">${esc(S.err)}</div>` : ""}
         ${S.loading && !Object.keys(S.data).length
           ? `<div class="empty"><div class="spin dark" style="margin:0 auto 10px"></div>Yuklanmoqda…</div>`
@@ -357,6 +486,39 @@ function viewShell() {
   </div>
   ${S.modal ? modalView() : ""}
   <div class="toasts"></div>`;
+}
+
+/** Sidebar pasti: bulut holati (progress bilan) + kim kirgan (dizayn bo'yicha). */
+function sideStatus(k) {
+  const on = k.servers_online || 0, total = k.servers_total || 0;
+  const pct = total ? Math.round(100 * on / total) : 0;
+  const off = Math.max(0, total - on);
+  const u = S.user || {};
+  const initials = (u.username || "A").slice(0, 2).toUpperCase();
+  return `<div class="side-status">
+    <div class="row" style="margin-bottom:9px">
+      <span class="dot ${on ? "live" : "off"}"></span>
+      <span class="side-status-title" style="flex:1">${
+        on ? "Bulut ishlayapti" : "Server ulanmagan"}</span>
+      <span class="side-nums"><b>${on}</b>/${total}</span>
+    </div>
+    <div class="side-bar"><i style="width:${pct}%"></i></div>
+    <div class="side-status-note">${off
+      ? `${off} ta obyekt SIM-signalsiz — navbat saqlanmoqda`
+      : `${k.kiosks_online || 0} / ${k.kiosks_total || 0} kiosk onlayn`}</div>
+    <div class="side-hr"></div>
+    <div class="side-user">
+      <div class="avatar">${esc(initials)}</div>
+      <div style="flex:1;min-width:0">
+        <div class="side-user-name">${esc(u.username || "Admin")}</div>
+        <div class="side-user-role">${u.role === "super" ? "Super admin" : esc(u.role || "admin")}${
+          u.ttl ? " · " + (u.ttl > 86400 ? Math.round(u.ttl / 86400) + " kun"
+                                        : Math.round(u.ttl / 3600) + " soat") : ""}</div>
+      </div>
+      <button class="side-out" data-act="logout" title="Chiqish">
+        ${ic("power", 15)}</button>
+    </div>
+  </div>`;
 }
 
 function pageBody() {
@@ -369,6 +531,9 @@ function pageBody() {
     case "stats": return pageStats();
     case "logs": return pageLogs();
     case "tokens": return pageTokens();
+    case "ads": return pageAds();
+    case "sites": return pageSites();
+    case "stops": return pageStops();
     default: return "";
   }
 }
@@ -545,70 +710,59 @@ function pageServer() {
     `<div class="kpi"><div class="kpi-label">${label}</div>
       <div class="kpi-value">${value}</div>
       ${note ? `<div class="kpi-note">${note}</div>` : ""}</div>`;
+  const ks = d.kiosks || [];
+  const sess = d.kiosk_sessions || {};
   return `
-  <button class="btn sm ghost" data-act="go" data-page="servers" style="margin-bottom:14px">
-    ${ic("chevronLeft", 14)} Serverlar ro'yxati</button>
+  <a class="back" href="#" data-act="go" data-page="servers">← Serverlar ro'yxati</a>
 
-  <div class="card">
-    <div class="row wrap">
-      <span class="dot ${s.online ? (s.synced ? "live" : "sync") : "off"}"></span>
-      <div style="flex:1;min-width:180px">
-        <div class="row"><div class="top-title">${esc(s.name)}</div>
-          ${s.online ? `<span class="pill ok">Onlayn</span>` : `<span class="pill mut">Offlayn</span>`}
-          ${s.approved ? "" : `<span class="pill warn">tasdiqlanmagan</span>`}
-          ${licPill(s)}</div>
-        <div class="dim" style="margin-top:4px">
-          ${esc(s.route || "—")} · ${esc(s.id)} · versiya ${esc(s.version || "?")}
-          · oxirgi aloqa ${ago(s.last_seen)}</div>
+  <div class="card srv-head">
+    <div class="srv-ic">${ic("server", 22, "#fff")}</div>
+    <div style="flex:1;min-width:200px">
+      <div class="row wrap" style="gap:9px">
+        <div class="top-title">${esc(s.name)}</div>
+        ${s.online ? `<span class="pill ok">Onlayn</span>`
+                   : `<span class="pill mut">Offlayn</span>`}
+        ${s.approved ? "" : `<span class="pill warn">tasdiqlanmagan</span>`}
+        ${s.synced ? "" : `<span class="pill warn">rev ${s.applied_rev}→${s.desired_rev}</span>`}
+        ${licPill(s)}
       </div>
-      ${s.approved ? "" : `<button class="btn sm pri" data-act="srv-approve"
-        data-id="${s.id}">${ic("check", 14, "#fff", 2.6)} Tasdiqlash</button>`}
-      <button class="btn sm" data-act="cmd" data-kind="sync_now">${ic("refresh", 14)} Hoziroq sinxronla</button>
-      <button class="btn sm" data-act="announce-open">${ic("megaphone", 14)} E'lon</button>
-      <button class="btn sm" data-act="cmd" data-kind="cache_clear">${ic("trash", 14)} Kesh tozalash</button>
-      <button class="btn sm danger" data-act="srv-del">${ic("x", 14)} Ro'yxatdan o'chirish</button>
+      <div class="dim" style="margin-top:4px">
+        ${esc(s.route || "yo'nalish ko'rsatilmagan")} · ${esc(s.id)} ·
+        v${esc(s.version || "?")} · oxirgi ko'rilgan ${ago(s.last_seen)}</div>
     </div>
+    ${s.approved ? "" : `<button class="btn sm pri" data-act="srv-approve"
+      data-id="${s.id}">${ic("check", 14, "#fff", 2.6)} Tasdiqlash</button>`}
+    <button class="btn sm pri" data-act="cmd" data-kind="sync_now">
+      ${ic("refresh", 14, "#fff")} Hoziroq sinxronla</button>
+    <button class="btn sm" data-act="announce-open">${ic("megaphone", 14)} E'lon</button>
+    <button class="btn sm" data-act="cmd" data-kind="cache_clear">
+      ${ic("trash", 14)} Kesh tozalash</button>
+    <button class="btn sm ghost" data-act="rename-open" title="Serverga nom berish">
+      ${ic("pencil", 14)}</button>
+    <button class="btn sm ghost" data-act="stops-open" title="Bekatlar jadvali">
+      ${ic("mapPin", 14)}</button>
+    <button class="btn sm ghost" data-act="srv-del" title="Ro'yxatdan o'chirish">
+      ${ic("x", 14)}</button>
   </div>
 
   <div class="grid k4" style="margin-top:16px">
-    ${stat("Kiosklar", `${s.kiosks_online}/${s.kiosks_total}`)}
-    ${stat("Kontent", s.assigned)}
+    ${stat("Kiosklar", `${s.kiosks_online} / ${s.kiosks_total}`)}
     ${stat("Bugungi sessiyalar", d.sessions_today)}
-    ${stat("Statistika", `${d.stats.events || 0}`,
-      s.stats_pending ? `serverda ${s.stats_pending} event navbatda`
-        : (s.stats_total ? "hammasi ko'chirilgan" : "bulutda saqlangan"))}
+    ${stat("Kontent", s.assigned + " ta")}
+    ${stat("Disk", s.disk_pct + "% band", bytes(s.disk_free) + " bo'sh")}
   </div>
 
+  ${opsCard(d.ops)}
   ${srvWebCard(s)}
   ${srvSettingsCard(s)}
+  ${srvBrandingCard(s, d.branding || {})}
+  ${srvAdsCard(s)}
+  ${srvLicenseCard(s)}
 
-  <h3 class="sec-title">Kiosklar (${d.kiosks.length})</h3>
-  <div class="card" style="padding:14px 4px"><div class="tbl-wrap"><table class="tbl">
-    <thead><tr><th style="padding-left:14px">Kiosk</th><th>Xona</th>
-      <th class="col-hide">IP</th><th>Kesh</th><th class="col-hide">Disk</th>
-      <th>Oxirgi</th><th>Boshqarish</th></tr></thead>
-    <tbody>${d.kiosks.length ? d.kiosks.map((k) => `<tr>
-      <td style="padding-left:14px"><div class="row">
-        <span class="dot ${k.online ? "live" : "off"}"></span>
-        <div><div class="strong">${esc(k.kiosk_no ? "KIOSK-" + k.kiosk_no : k.device_id)}</div>
-          <div class="dim">${esc(k.device_id)}</div></div></div></td>
-      <td>${esc(k.room || "—")}</td>
-      <td class="col-hide dim">${esc(k.ip || "—")}</td>
-      <td class="num">${k.cached_n} fayl</td>
-      <td class="col-hide dim">${bytes(k.disk_free)} bo'sh</td>
-      <td class="dim">${ago(k.last_seen)}</td>
-      <td><div class="row" style="gap:6px">
-        <button class="btn sm ghost" data-act="kiosk-cmd" data-dev="${esc(k.device_id)}"
-          data-kind="sync" title="Media keshni hoziroq yuklash">${ic("refresh", 13)}</button>
-        <button class="btn sm ghost" data-act="kiosk-cmd" data-dev="${esc(k.device_id)}"
-          data-kind="cache_clear" title="Lokal keshni tozalash">${ic("trash", 13)}</button>
-        <button class="btn sm ghost" data-act="kiosk-cmd" data-dev="${esc(k.device_id)}"
-          data-kind="cache_off" title="Keshni o'chirish (faqat striming)">${ic("power", 13)}</button>
-        <button class="btn sm ghost" data-act="kiosk-forget" data-dev="${esc(k.device_id)}"
-          title="Ro'yxatdan olib tashlash">${ic("x", 13)}</button>
-      </div></td></tr>`).join("")
-      : `<tr><td colspan="7"><div class="empty">Kiosk ma'lumoti yo'q</div></td></tr>`}
-    </tbody></table></div></div>
+  <h3 class="sec-title">Kiosklar (${ks.length})</h3>
+  ${ks.length ? `<div class="kgrid">${ks.map((k) => kioskCard(k, sess)).join("")}</div>`
+    : `<div class="card empty">Kiosk ma'lumoti yo'q — kiosklar serverga
+        ulanganda shu yerda o'zi paydo bo'ladi.</div>`}
 
   <h3 class="sec-title">Shu serverdagi kontent (${d.content.length})</h3>
   <div class="card" style="padding:14px 4px"><div class="tbl-wrap"><table class="tbl">
@@ -624,19 +778,87 @@ function pageServer() {
     </tbody></table></div></div>
 
   <h3 class="sec-title">Foydalanuvchi sessiyalari</h3>
-  <div class="card" style="padding:14px 4px"><div class="tbl-wrap"><table class="tbl">
+  <div class="card" style="padding:14px 4px"><div class="tbl-wrap scroll-y">
+    <table class="tbl">
     <thead><tr><th style="padding-left:14px">Kiosk</th><th>Boshlangan</th>
-      <th>Hodisa</th><th>Ko'rilgan kontent</th><th>Til</th></tr></thead>
-    <tbody>${d.sessions.length ? d.sessions.map((u) => `<tr>
-      <td style="padding-left:14px" class="dim">${esc(u.device_id || "—")}</td>
+      <th>Davomiylik</th><th>Ko'rilgan kontent</th>
+      <th class="col-hide">Hodisa</th><th>Til</th></tr></thead>
+    <tbody>${d.sessions.length ? d.sessions.map((u) => {
+      // Kiosk nomi (label yoki «Vagon N») — device_id o'rniga o'qiladigan nom
+      const k = ks.find((x) => x.device_id === u.device_id) || {};
+      const kn = k.label || (k.kiosk_no ? "Vagon " + k.kiosk_no : u.device_id);
+      return `<tr>
+      <td style="padding-left:14px" class="strong">${esc(kn || "—")}</td>
       <td class="dim">${esc(String(u.started || "").slice(5, 16))}</td>
-      <td class="num">${u.events}</td>
-      <td>${esc(u.content)}</td><td class="dim">${esc((u.lang || "uz").toUpperCase())}</td>
-      </tr>`).join("") : `<tr><td colspan="5"><div class="empty">Sessiya yo'q</div></td></tr>`}
+      <td class="dim">${durText(u.started, u.ended)}</td>
+      <td>${esc(u.content)}</td>
+      <td class="col-hide num">${u.events}</td>
+      <td class="dim">${esc((u.lang || "uz").toUpperCase())}</td>
+      </tr>`;
+    }).join("") : `<tr><td colspan="6"><div class="empty">Sessiya yo'q</div></td></tr>`}
     </tbody></table></div></div>
 
   <h3 class="sec-title">Shu serverning loglari</h3>
   ${logTable(d.logs, false)}`;
+}
+
+/** Kiosk kartochkasi (dizayn bo'yicha): holat · ko'rsatkichlar · buyruqlar.
+ *  Jadval o'rniga kartochka — 8 vagonli poyezdda bir qarashda ko'rinadi. */
+function kioskCard(k, sess) {
+  const name = k.label || (k.kiosk_no ? "Vagon " + k.kiosk_no : k.device_id);
+  const n = sess[k.device_id] || 0;
+  // `cache_enabled` heartbeatда keladi. Eski serverdan kelmasa `undefined`
+  // bo'ladi — u holda holatni "noma'lum" deb ko'rsatamiz, chunki "yoqilgan"
+  // deb yozib qo'yish yolg'on bo'lardi.
+  const cache = k.cache_enabled;
+  const cacheOn = cache === 1 || cache === true;
+  const cacheKnown = cache !== undefined && cache !== null;
+  return `<article class="kcard">
+    <div class="row" style="margin-bottom:3px">
+      <span class="dot ${k.online ? "live" : "off"}"></span>
+      <div class="strong" style="flex:1;min-width:0">${esc(name)}</div>
+      <span class="pill ${k.online ? "ok" : "mut"}">${k.online ? "Onlayn" : "Offlayn"}</span>
+    </div>
+    <div class="dim" style="margin-bottom:12px">${esc(k.device_id)}${
+      k.room ? " · xona " + esc(k.room) : ""} · ${ago(k.last_seen)}</div>
+
+    <div class="kmetrics">
+      <div><div class="kml">SESSIYALAR</div><div class="kmv">${n}</div></div>
+      <div><div class="kml">KESHDA</div><div class="kmv">${k.cached_n} fayl</div></div>
+      <div><div class="kml">BO'SH DISK</div><div class="kmv">${bytes(k.disk_free)}</div></div>
+    </div>
+
+    <div class="krow">
+      <div style="flex:1;min-width:0">
+        <div class="kml">LOKAL KESH</div>
+        <div class="row" style="gap:7px;margin-top:3px">
+          ${cacheKnown
+            ? `<span class="pill ${cacheOn ? "ok" : "warn"}">${
+                cacheOn ? "yoqilgan" : "o'chirilgan"}</span>
+               <span class="dim">${cacheOn
+                 ? "media kioskga yuklanadi" : "faqat serverdan striming"}</span>`
+            : `<span class="pill mut">noma'lum</span>
+               <span class="dim">server holatni hali yubormadi</span>`}
+        </div>
+      </div>
+      <button class="btn sm ${cacheOn ? "ghost" : ""}" data-act="kiosk-cmd"
+        data-dev="${esc(k.device_id)}"
+        data-kind="${cacheOn ? "cache_off" : "cache_on"}">
+        ${ic("power", 13)} ${cacheOn ? "O'chirish" : "Yoqish"}</button>
+    </div>
+
+    <div class="row" style="gap:7px;margin-top:12px;flex-wrap:wrap">
+      <button class="btn sm ghost" data-act="kiosk-cmd" data-dev="${esc(k.device_id)}"
+        data-kind="sync">${ic("refresh", 13)} Sinxronla</button>
+      <button class="btn sm ghost" data-act="kiosk-cmd" data-dev="${esc(k.device_id)}"
+        data-kind="cache_clear">${ic("trash", 13)} Keshni tozalash</button>
+      <div style="flex:1"></div>
+      <button class="btn sm ghost" data-act="klabel-open" data-dev="${esc(k.device_id)}"
+        data-label="${esc(k.label || "")}" title="Nom berish">${ic("pencil", 13)}</button>
+      <button class="btn sm ghost" data-act="kiosk-forget" data-dev="${esc(k.device_id)}"
+        title="Ro'yxatdan olib tashlash">${ic("x", 13)}</button>
+    </div>
+  </article>`;
 }
 
 /** Veb ilova (poyezd.uz) kartasi — holat + masofadan yoqish/o'chirish. */
@@ -657,7 +879,9 @@ function srvWebCard(s) {
       ${on ? "disabled" : ""}>${ic("globe", 14)} Yoqish</button>
     <button class="btn sm ghost" data-act="web-cmd" data-kind="stop"
       ${on ? "" : "disabled"}>O'chirish</button>
-  </div></div>`;
+  </div>
+  ${schedPicker("web", "Masalan tunda o'chirib, ertalab yoqish")}
+  </div>`;
 }
 
 /** Serverning sozlamalari — masofadan tahrirlanadi. */
@@ -672,7 +896,6 @@ const SRV_FIELDS = [
   ["speed", "Tezlik (km/soat)", "num", "210"],
   ["weather_auto", "Ob-havo avtomatik", "bool", ""],
   ["temperature", "Harorat (°C)", "num", "22"],
-  ["ad_interval_min", "Reklama oralig'i (daq)", "num", "10"],
   ["media_cache", "Kiosk lokal keshi", "bool", ""],
   ["cache_limit_gb", "Kesh chegarasi (GB)", "num", "50"],
   ["sos_enabled", "SOS tugmasi", "bool", ""],
@@ -682,7 +905,6 @@ const SRV_FIELDS = [
 function srvSettingsCard(s) {
   const cur = s.settings || {};
   const v = (k) => (S.srvForm[k] !== undefined ? S.srvForm[k] : (cur[k] ?? ""));
-  const dirty = Object.keys(S.srvForm).length;
   return `<h3 class="sec-title">Server sozlamalari</h3>
   <div class="card">
     <div class="card-sub" style="margin-bottom:14px">Bu qiymatlar poyezd
@@ -707,15 +929,276 @@ function srvSettingsCard(s) {
     <div class="field full" style="margin:14px 0 0">
       <label>SOS raqamlari (har biri yangi qatorda)</label>
       <textarea data-srv="sos_numbers">${esc(v("sos_numbers"))}</textarea></div>
-    <div class="row" style="margin-top:14px">
-      <div class="dim" style="flex:1">${dirty
-        ? `${dirty} maydon o'zgardi — hali yuborilmadi`
-        : "O'zgarish yo'q"}</div>
-      <button class="btn ghost sm" data-act="srv-reset" ${dirty ? "" : "disabled"}>
-        Bekor qilish</button>
-      <button class="btn pri sm" data-act="srv-save" ${dirty ? "" : "disabled"}>
-        ${ic("send", 14, "#fff")} Yuborish</button>
+    ${saveRow("main")}
+  </div>`;
+}
+
+/* Har bir sozlama kartasining O'Z saqlash qatori bor: shu kartada
+   o'zgartirilgan maydonlar aynan shu tugma bilan yuboriladi. Avval bitta
+   umumiy tugma edi va «Reklama sozlamalari» kartasida saqlash ko'rinmasdi. */
+const FIELD_GROUPS = {
+  main: [...SRV_FIELDS.map((f) => f[0]), "sos_numbers"],
+  ads: ["ad_algorithm", "media_ad_slots", "ad_interval_min"],
+  lic: ["trial_enabled", "trial_start", "trial_days"],
+};
+
+function dirtyKeys(group) {
+  return (FIELD_GROUPS[group] || []).filter((k) => S.srvForm[k] !== undefined);
+}
+
+/** Modallar va kartalar uchun umumiy reja tanlagich (sana + vaqt).
+ *  `group` — qaysi joy uchun (bir vaqtda faqat bittasi ochiq turadi). */
+function schedPicker(group, note) {
+  const on = S.schedule.on && S.schedule.group === group;
+  return `<div class="list-row" style="margin-top:12px">
+    <button class="tgl ${on ? "on" : ""}" data-act="sched-toggle"
+      data-group="${group}" type="button"><i></i></button>
+    <div style="flex:1;min-width:140px">
+      <div class="strong" style="font-size:12.5px">Rejalashtirib yuborish</div>
+      <div class="dim">${note || "O'chirilgan bo'lsa darhol (server offlayn "
+        + "bo'lsa ulangan zahoti) qo'llanadi"}</div>
     </div>
+    ${on ? `
+      <input type="date" data-sched="date" value="${esc(S.schedule.date)}">
+      <input type="time" data-sched="time" value="${esc(S.schedule.time)}">` : ""}
+  </div>`;
+}
+
+/** Rejalashtirilgan bo'lsa `apply_at` qiymati, aks holda undefined. */
+function schedValue(group) {
+  if (!(S.schedule.on && S.schedule.group === group)) return undefined;
+  if (!S.schedule.date) return undefined;
+  return `${S.schedule.date} ${S.schedule.time || "00:00"}`;
+}
+
+function saveRow(group) {
+  const keys = dirtyKeys(group);
+  const n = keys.length;
+  const sch = S.schedule.on && S.schedule.group === group;
+  return `<div class="save-row">
+    ${sch ? `<div class="row" style="gap:8px;flex:1;min-width:240px">
+        ${ic("clock", 15, "#64748B")}
+        <input type="date" data-sched="date" value="${esc(S.schedule.date)}">
+        <input type="time" data-sched="time" value="${esc(S.schedule.time)}">
+        <span class="dim">shu vaqtdan keyin qo'llanadi</span>
+      </div>`
+      : `<div class="dim" style="flex:1">${n
+          ? `${n} maydon o'zgardi — hali yuborilmadi`
+          : "O'zgarish yo'q"}</div>`}
+    ${n ? `<button class="btn ghost sm" data-act="srv-reset" data-group="${group}">
+      Bekor qilish</button>` : ""}
+    <button class="btn sm" data-act="sched-toggle" data-group="${group}"
+      ${n ? "" : "disabled"}>${ic("clock", 14)} ${sch
+        ? "Rejani bekor qilish" : "Rejalashtirib saqlash"}</button>
+    <button class="btn pri sm" data-act="srv-save" data-group="${group}"
+      ${n ? "" : "disabled"}>${ic("send", 14, "#fff")} ${sch
+        ? "Rejaga qo'yish" : "Hozir saqlash"}</button>
+  </div>`;
+}
+
+/** Brending — asosiy sahifadagi hero banner rasmini almashtirish. */
+/** Banner galereyasi — mavzu tanlagandek: yuklangan rasmlar saqlanib turadi,
+ *  bittasiga bosib shu serverga qo'yiladi. Joriy rasm belgilangan bo'ladi. */
+function srvBrandingCard(s, branding) {
+  const hero = branding.hero;
+  const lib = S.data.brandingLib || [];
+  const up = S.up.hero;
+  const curSha = hero && hero.sha;
+  return `<h3 class="sec-title">Asosiy sahifa banneri (hero)</h3>
+  <div class="card">
+    <div class="card-sub" style="margin-bottom:14px">Poyezd.uz va kiosk asosiy
+      sahifasidagi katta banner. Yuklangan rasmlar shu yerda saqlanadi —
+      bittasiga bosib shu serverga qo'yasiz, eski rasm yo'qolmaydi.
+      Reklama karuseli esa <b>Reklama</b> bo'limida.</div>
+    <input type="file" accept="image/*" multiple class="u-hide" data-act="file-input">
+
+    <div class="bgal">
+      <!-- Standart: ilovaning O'ZIDAGI banner (brending qo'yilmaganda shu
+           ko'rinadi). Katakchada aynan o'sha rasmning kichik nusxasi turadi. -->
+      <div class="bthumb ${curSha ? "" : "on"}" data-act="hero-clear"
+        title="Ilovadagi standart banner (dashboard-hero.png)">
+        <div class="bthumb-img">
+          <img src="/static/default-hero.jpg" alt="" loading="lazy"></div>
+        <div class="bthumb-n">Standart rasm</div>
+        ${curSha ? "" : `<span class="bthumb-ok">${ic("check", 12, "#fff", 3)}</span>`}
+      </div>
+
+      ${lib.map((b) => `<div class="bthumb ${curSha === b.sha ? "on" : ""}"
+          data-act="hero-pick" data-id="${b.id}"
+          title="${esc(b.name || "")} · ${bytes(b.size)}">
+        <div class="bthumb-img">
+          <img src="/api/admin/branding/library/${b.id}/image" alt=""
+            loading="lazy" onerror="this.remove()"></div>
+        <div class="bthumb-n">${esc(b.name || "banner")}</div>
+        ${curSha === b.sha ? `<span class="bthumb-ok">${ic("check", 12, "#fff", 3)}</span>`
+          : ""}
+        <button class="bthumb-x" data-act="hero-del" data-id="${b.id}"
+          title="Kutubxonadan o'chirish">${ic("x", 11)}</button>
+      </div>`).join("")}
+
+      <!-- Yangi rasm qo'shish -->
+      <div class="bthumb add ${up ? "on" : ""}" data-act="pick-hero">
+        <div class="bthumb-img" style="display:grid;place-items:center">
+          ${up && up.preview ? `<img src="${up.preview}" alt="">`
+            : ic("plus", 22, "#94A3B8", 2.4)}</div>
+        <div class="bthumb-n">${up
+          ? (up.state === "up" ? up.pct + "% yuklanmoqda…" : esc(up.name))
+          : "Yangi rasm"}</div>
+      </div>
+    </div>
+
+    <div class="row wrap" style="margin-top:14px;gap:12px">
+      <div class="dim" style="flex:1;min-width:240px;line-height:1.6">
+        Tavsiya: <b>1672 × 941</b> (16:9 ga yaqin), jpg yoki png. Matnsiz toza
+        rasm bo'lsa yaxshi — poyezd nomi va bekatlar ustiga jonli yoziladi.
+        ${lib.length ? `<br>Kutubxonada ${lib.length} banner.` : ""}
+      </div>
+      ${up && up.state === "done"
+        ? `<button class="btn sm pri" data-act="hero-save">
+            ${ic("send", 14, "#fff")} Yuklash va shu serverga qo'yish</button>` : ""}
+    </div>
+  </div>`;
+}
+
+/** Reklama sozlamalari — algoritm, media joylashuvi, oraliq. */
+const AD_ALGOS = [
+  ["weighted", "Vaznli — har reklamaning o'z oralig'i hisobga olinadi"],
+  ["queue", "Navbat bilan — har oraliqda ro'yxatdagi keyingisi"],
+  ["random", "Tasodifiy — har safar aralash tartibda"],
+  ["media", "Media — kino boshida, o'rtasida va oxirida"],
+];
+const AD_SLOTS = [["pre,mid,end", "Boshi + o'rtasi + oxiri"],
+                  ["pre,mid", "Boshi + o'rtasi"], ["pre,end", "Boshi + oxiri"],
+                  ["pre", "Faqat boshida"], ["mid,end", "O'rtasi + oxiri"],
+                  ["end", "Faqat oxirida"]];
+
+function srvAdsCard(s) {
+  const cur = s.settings || {};
+  const v = (k, d = "") => (S.srvForm[k] !== undefined ? S.srvForm[k] : (cur[k] ?? d));
+  const algos = String(v("ad_algorithm", "weighted")).split(",")
+    .map((x) => x.trim()).filter(Boolean);
+  const slots = String(v("media_ad_slots", "pre,mid,end"));
+  return `<h3 class="sec-title">Reklama sozlamalari</h3>
+  <div class="card">
+    <div class="card-sub" style="margin-bottom:14px">Reklamalarning O'ZI
+      «Reklama» bo'limida — bu yerda ular <b>qanday ko'rsatilishi</b>
+      boshqariladi. Saqlash uchun quyidagi «Yuborish» tugmasini bosing.</div>
+    <div class="grid k2">
+      <div>
+        <label class="up-label" style="display:block;margin-bottom:8px">Algoritm
+          (bir nechtasini tanlash mumkin)</label>
+        ${AD_ALGOS.map(([k, t]) => `<div class="flag" data-act="algo-toggle"
+            data-key="${k}" style="margin-bottom:10px">
+          <span class="box ${algos.includes(k) ? "on" : ""}">${
+            algos.includes(k) ? ic("check", 12, "#fff", 3.2) : ""}</span>
+          <div class="flag-sub" style="margin:0;color:var(--text);font-weight:600">${t}</div>
+        </div>`).join("")}
+      </div>
+      <div>
+        <div class="field"><label>Reklama oralig'i (daqiqa)</label>
+          <input data-srv="ad_interval_min" value="${esc(v("ad_interval_min", "10"))}"
+            inputmode="numeric"></div>
+        <div class="field"><label>Kino ichida qayerda (media algoritmi)</label>
+          <select data-srv="media_ad_slots" ${algos.includes("media") ? "" : "disabled"}>
+            ${AD_SLOTS.map(([k, t]) => `<option value="${k}"
+              ${slots === k ? "selected" : ""}>${t}</option>`).join("")}
+          </select>
+          <div class="hint">${algos.includes("media")
+            ? "Kino boshlanishida/o'rtasida/oxirida reklama qo'yiladi"
+            : "«Media» algoritmi tanlanmagan — bu sozlama ishlamaydi"}</div></div>
+      </div>
+    </div>
+    ${saveRow("ads")}
+  </div>`;
+}
+
+/** Litsenziya — holat, Qurilma ID, bloklash, license.key yuborish. */
+function srvLicenseCard(s) {
+  const li = s.license_info || {};
+  const cur = s.settings || {};
+  const v = (k, d = "") => (S.srvForm[k] !== undefined ? S.srvForm[k] : (cur[k] ?? d));
+  const trialOn = String(v("trial_enabled", "0")) === "1";
+  const blocked = String(v("trial_blocked", "0")) === "1" || li.blocked;
+  const state = li.valid ? ["ok", "Yaroqli"]
+    : li.present ? ["err", "Yaroqsiz"] : ["warn", "Fayl yo'q (dev rejim)"];
+  return `<h3 class="sec-title">Litsenziya va bloklash</h3>
+  <div class="card">
+    <div class="row wrap" style="margin-bottom:14px">
+      <span class="pill ${state[0]}">${state[1]}</span>
+      ${blocked ? `<span class="pill err">KIOSKLAR BLOKLANGAN</span>` : ""}
+      ${li.customer ? `<span class="dim">${esc(li.customer)}</span>` : ""}
+      ${li.expires ? `<span class="dim">muddat: ${esc(li.expires)}${
+        li.days_left != null ? ` (${li.days_left} kun)` : ""}</span>`
+        : `<span class="dim">muddatsiz</span>`}
+      ${li.max_kiosks ? `<span class="dim">kiosk limiti: ${li.max_kiosks}</span>` : ""}
+      ${li.reason && !li.valid ? `<span class="dim">${esc(li.reason)}</span>` : ""}
+    </div>
+
+    <div class="field"><label>Qurilma ID (yangi license.key shu ID uchun yasaladi)</label>
+      <div class="row" style="gap:8px">
+        <input value="${esc(li.hw_id || "—")}" readonly id="hwid" style="flex:1">
+        <button class="btn sm ghost" data-act="copy-hw">${ic("copy", 14)} Ko'chirish</button>
+      </div></div>
+
+    <div class="field"><label>license.key mazmunini shu yerga qo'ying</label>
+      <textarea data-bind="lictext" rows="3"
+        placeholder="KIOSK-LIC-v1.eyJ…  (vendor bergan fayl matni)"
+        >${esc(F("lictext", ""))}</textarea>
+      <div class="hint">Imzo serverда tekshiriladi — yaroqsiz fayl mavjud
+        yaroqli litsenziyani almashtirmaydi.</div></div>
+    <div class="row" style="margin-bottom:18px">
+      <div style="flex:1"></div>
+      <button class="btn sm pri" data-act="lic-send">
+        ${ic("send", 14, "#fff")} Litsenziyani yuborish</button>
+    </div>
+
+    <div class="grid k3">
+      <div class="list-row" style="border:0;padding:6px 0">
+        <div style="flex:1"><div class="strong" style="font-size:12.5px">Sinov
+          muddati nazorati</div></div>
+        <button class="tgl ${trialOn ? "on" : ""}" data-act="srv-bool"
+          data-key="trial_enabled" data-val="${trialOn ? "0" : "1"}"><i></i></button>
+      </div>
+      <div class="field" style="margin:0"><label>Boshlanish sanasi</label>
+        <input data-srv="trial_start" value="${esc(v("trial_start"))}"
+          placeholder="2026-08-01"></div>
+      <div class="field" style="margin:0"><label>Necha kun</label>
+        <input data-srv="trial_days" value="${esc(v("trial_days", "30"))}"
+          inputmode="numeric"></div>
+    </div>
+
+    ${dirtyKeys("lic").length ? saveRow("lic") : ""}
+
+    ${schedPicker("lic2", "Masalan to'lov kuni kelmasa — 1-sanada bloklash")}
+    <div class="row" style="margin-top:16px">
+      <div class="dim" style="flex:1">Bloklash DARHOL ishlaydi — kiosklarda
+        qulf ekrani chiqadi (offlayn bo'lsa ulanganda).</div>
+      ${blocked
+        ? `<button class="btn sm" data-act="lic-block" data-val="0">
+            ${ic("check", 14)} Blokni ochish</button>`
+        : `<button class="btn sm danger" data-act="lic-block" data-val="1">
+            ${ic("lock", 14)} Kiosklarni bloklash</button>`}
+    </div>
+  </div>`;
+}
+
+/** Navbatda turgan / rejalashtirilgan buyruqlar. */
+function opsCard(ops) {
+  if (!ops || !ops.length) return "";
+  return `<h3 class="sec-title">Navbatda turgan buyruqlar (${ops.length})</h3>
+  <div class="card">
+    ${ops.map((o) => `<div class="list-row">
+      ${ic(o.apply_at ? "clock" : "send", 17, "#475569")}
+      <div style="flex:1;min-width:0">
+        <div class="strong">${esc(o.label || o.kind)}</div>
+        <div class="dim">${o.apply_at
+          ? `rejalashtirilgan: <b>${esc(o.apply_at.slice(0, 16))}</b>`
+          : "server onlayn bo'lishi bilan qo'llanadi"}
+          · qo'shilgan ${esc(String(o.created_at || "").slice(5, 16))}</div>
+      </div>
+      <button class="btn sm ghost" data-act="op-cancel" data-id="${o.id}">
+        Bekor qilish</button>
+    </div>`).join("")}
   </div>`;
 }
 
@@ -775,49 +1258,138 @@ function libCard(c) {
 }
 
 // ----------------------------------------------------------------- Navbat
+/* Navbat: ishlar HOLAT bo'yicha guruhlanadi, progress esa har bir NISHON
+   uchun bitta segment (dizayn: 12 obyektga → 12 blok). Shu ko'rinishда
+   "nechta tugadi / nechta yuklanmoqda / nechta kutmoqda" bir qarashda ayon. */
+const JOB_ICON = { deploy: "send", remove: "trash", announce: "megaphone",
+                   cache_clear: "trash", sync: "refresh" };
+const T_STATE = {
+  done: ["done", "tugadi", "#22C55E"], running: ["run", "yuklanmoqda", "#2563EB"],
+  queued: ["wait", "kutmoqda", "#CBD5E1"], pending: ["wait", "kutmoqda", "#CBD5E1"],
+  error: ["err", "xato", "#EF4444"],
+};
+
 function pageQueue() {
   const jobs = S.data.jobs || [];
-  if (!jobs.length) return `<div class="card empty">Hali tarqatish bo'lmagan</div>`;
-  return jobs.map((j) => {
-    const pct = jobPct(j);
-    const stateP = { running: ["acc", "ketmoqda"], done: ["ok", "tugadi"],
-                     error: ["err", "xato"], cancelled: ["mut", "bekor"] }[j.state]
-                   || ["mut", j.state];
-    return `<section class="card" style="margin-bottom:14px">
-      <div class="row wrap">
-        <div style="flex:1;min-width:200px">
-          <div class="row"><div class="card-title">${esc(j.title || j.kind)}</div>
-            <span class="pill ${stateP[0]}">${stateP[1]}</span></div>
-          <div class="card-sub">${esc(String(j.created_at || "").slice(5, 16))} ·
-            ${j.n_items} fayl · ${j.n_targets} server · ${j.kind === "remove" ? "o'chirish" : "yuklash"}</div>
-        </div>
-        <div class="mono strong">${pct}%</div>
-        ${j.state === "running"
-          ? `<button class="btn sm ghost" data-act="job-cancel" data-id="${j.id}">Bekor qilish</button>` : ""}
-      </div>
-      <div class="bar ${j.state === "running" ? "flow" : j.state === "error" ? "err" : "ok"}"
-           style="margin:12px 0 14px"><i style="width:${pct}%"></i></div>
-      <div class="grid k2">
-        ${j.targets.map((t) => {
-          const p = { pending: ["mut", "kutilmoqda"], queued: ["warn", "navbatda (offlayn)"],
-                      running: ["acc", "yuklanmoqda"], done: ["ok", "tugadi"],
-                      error: ["err", t.error || "xato"] }[t.state] || ["mut", t.state];
-          return `<div class="list-row">
-            <div style="flex:1;min-width:0">
-              <div class="strong">${esc(t.name || t.server_id)}</div>
-              <div class="dim">${t.bytes_total ? bytes(t.bytes_done) + " / " + bytes(t.bytes_total) : "—"}</div>
-            </div>
-            <div style="width:70px"><div class="bar"><i style="width:${t.state === "done" ? 100 : t.pct}%"></i></div></div>
-            <span class="pill ${p[0]}">${esc(p[1])}</span>
-          </div>`;
-        }).join("")}
-      </div>
-      ${j.targets.some((t) => t.state === "queued") ? `<div class="dim" style="margin-top:12px">
-        Offlayn serverlar navbatda saqlanadi — internet tiklanishi bilan yuklash
-        avtomatik davom etadi. Uzilgan fayl boshidan emas, to'xtagan joyidan (Range) yuklanadi.
-      </div>` : ""}
-    </section>`;
+  if (!jobs.length) {
+    return `<div class="card empty">Hali tarqatish bo'lmagan —
+      <b>Kutubxona</b> bo'limidan kontent tanlab «Tarqatish» bosing.</div>`;
+  }
+  // KPI: faol / navbatda / xato / yuborilayotgan hajm
+  const running = jobs.filter((j) => j.state === "running");
+  const queuedJobs = running.filter((j) =>
+    j.targets.every((t) => t.state === "queued" || t.state === "pending"));
+  const activeJobs = running.filter((j) => !queuedJobs.includes(j));
+  const errJobs = jobs.filter((j) => j.state === "error");
+  const doneJobs = jobs.filter((j) => j.state === "done" || j.state === "cancelled");
+  const inFlight = running.reduce((a, j) =>
+    a + j.targets.reduce((b, t) => b + (t.bytes_total || 0), 0), 0);
+
+  const kpi = (color, label, val) => `<div style="min-width:88px">
+    <div class="row" style="gap:6px;margin-bottom:2px">
+      <span class="dot" style="background:${color};animation:none"></span>
+      <span class="kpi-label" style="font-size:10.5px">${label}</span></div>
+    <div style="font-family:Unbounded,sans-serif;font-size:22px;font-weight:600">${val}</div>
+  </div>`;
+
+  const group = (title, color, list) => list.length ? `
+    <div class="row" style="gap:9px;margin:22px 0 10px">
+      <span class="dot" style="background:${color};animation:none"></span>
+      <div class="strong" style="font-size:14px">${title}</div>
+      <span class="dim">${list.length} ta</span>
+    </div>
+    <div class="card" style="padding:6px 0">${list.map(jobRow).join("")}</div>` : "";
+
+  return `
+  <div class="row wrap" style="gap:16px;align-items:stretch">
+    <div class="card" style="flex:1;min-width:300px;display:flex;gap:26px;align-items:center">
+      ${kpi("#2563EB", "FAOL", activeJobs.length)}
+      ${kpi("#94A3B8", "NAVBATDA", queuedJobs.length)}
+      ${kpi("#EF4444", "XATO", errJobs.length)}
+      ${kpi("#0F172A", "YUBORILMOQDA", bytes(inFlight))}
+    </div>
+    <div class="card" style="flex:1.2;min-width:280px;display:flex;align-items:center;
+      gap:12px;background:#EFF6FF;box-shadow:none">
+      ${ic("wifi", 18, "#2563EB")}
+      <div class="dim" style="color:#334155;line-height:1.6">Offlayn obyektlar
+        navbatda turadi — SIM-internet tiklanishi bilan <b>o'zi</b> davom etadi,
+        fayl to'xtagan joyidan (Range) yuklanadi.</div>
+    </div>
+  </div>
+
+  ${group("Bajarilmoqda", "#2563EB", activeJobs)}
+  ${group("Navbatda", "#94A3B8", queuedJobs)}
+  ${group("Xato", "#EF4444", errJobs)}
+  ${group("Tugagan", "#22C55E", doneJobs)}`;
+}
+
+function jobRow(j) {
+  const pct = jobPct(j);
+  const n = { done: 0, running: 0, wait: 0, err: 0 };
+  const segs = j.targets.map((t) => {
+    const st = T_STATE[t.state] || T_STATE.pending;
+    n[st[0] === "run" ? "running" : st[0] === "wait" ? "wait"
+      : st[0] === "err" ? "err" : "done"]++;
+    return `<i class="seg ${st[0]}" title="${esc(t.name || t.server_id)} — ${st[1]}"></i>`;
   }).join("");
+  const legend = [
+    n.done && `<span><i class="dotm" style="background:#22C55E"></i>${n.done} tugadi</span>`,
+    n.running && `<span><i class="dotm" style="background:#2563EB"></i>${n.running} yuklanmoqda</span>`,
+    n.wait && `<span><i class="dotm" style="background:#CBD5E1"></i>${n.wait} kutmoqda</span>`,
+    n.err && `<span><i class="dotm" style="background:#EF4444"></i>${n.err} xato</span>`,
+  ].filter(Boolean).join("");
+
+  const kindLabel = j.kind === "remove" ? "O'chirish" : j.kind === "deploy"
+    ? (j.items && j.items[0] ? (TYPES[j.items[0].type] || [])[0] || "Kontent" : "Kontent")
+    : j.kind;
+  const size = (j.items || []).reduce((a, c) => a + (c.media_size || 0), 0);
+  const err = (j.targets.find((t) => t.state === "error") || {}).error;
+
+  // O'ng tomon: foiz + qolgan vaqt/izoh + amal tugmasi
+  let right, action;
+  if (j.state === "running") {
+    const allWait = n.done === 0 && n.running === 0;
+    right = allWait ? ["—", "onlayn kutilmoqda"] : [pct + "%", etaText(j)];
+    action = allWait
+      ? `<button class="btn sm ghost" data-act="job-cancel" data-id="${j.id}">Bekor qilish</button>`
+      : `<button class="btn sm ghost" data-act="job-cancel" data-id="${j.id}">To'xtatish</button>`;
+  } else if (j.state === "error") {
+    right = [pct + "%", err ? esc(err.slice(0, 40)) : "xato"];
+    action = `<button class="btn sm ghost" data-act="job-retry" data-id="${j.id}">Qayta urinish</button>`;
+  } else {
+    right = ["100%", ago(j.done_at || j.created_at)];
+    action = "";
+  }
+
+  return `<div class="job">
+    <div class="job-ic">${ic(JOB_ICON[j.kind] || "send", 18, "#475569")}</div>
+    <div class="job-t">
+      <div class="strong">${esc(j.title || j.kind)}${size
+        ? ` — ${bytes(size)}` : ""}</div>
+      <div class="dim">${esc(kindLabel)} · ${j.n_targets} obyektga</div>
+    </div>
+    <div class="job-p">
+      <div class="segs">${segs || `<i class="seg wait"></i>`}</div>
+      <div class="job-legend">${legend}</div>
+    </div>
+    <div class="job-r">
+      <div class="strong mono">${right[0]}</div>
+      <div class="dim">${right[1]}</div>
+    </div>
+    <div class="job-a">${action}</div>
+  </div>`;
+}
+
+/** Qolgan vaqtni baholaydi (tezlikni bilmaymiz — nishonlar nisbatidan). */
+function etaText(j) {
+  const done = j.targets.filter((t) => t.state === "done").length;
+  const left = j.targets.length - done;
+  if (!left) return "yakunlanmoqda";
+  const t0 = new Date(String(j.created_at || "").replace(" ", "T"));
+  if (isNaN(t0) || !done) return `${left} obyekt qoldi`;
+  const perOne = (Date.now() - t0.getTime()) / done / 60000;   // daqiqa
+  const min = Math.max(1, Math.round(perOne * left));
+  return min > 90 ? `~${Math.round(min / 60)} soat qoldi` : `~${min} daq qoldi`;
 }
 
 // ------------------------------------------------------------- Statistika
@@ -864,11 +1436,17 @@ function pageStats() {
   <section class="card" style="margin-top:16px">
     <div class="card-head">
       <div><div class="card-title">Kunlik sessiyalar — ${S.statDays} kun</div>
-        <div class="card-sub">Jami ${t.events} event bulutda saqlangan</div></div>
+        <div class="card-sub">Jami ${t.events} event bulutda saqlangan${
+          max > 1 ? ` · eng ko'p kun: ${max}` : ""}</div></div>
     </div>
-    <div class="chart">${d.daily.map((x) => `<div title="${x.date}: ${x.n} sessiya">
-      <div class="b" style="height:${Math.round(100 * x.n / max)}%"></div>
-      <div class="d">${x.date.slice(8)}</div></div>`).join("")}</div>
+    ${d.daily.some((x) => x.n) ? `<div class="chart">${d.daily.map((x) => `
+      <div title="${x.date}: ${x.n} sessiya">
+        <div class="b ${x.n ? "" : "zero"}"
+          style="height:${x.n ? Math.max(6, Math.round(100 * x.n / max)) : 2}%"></div>
+        <div class="cn">${x.n || ""}</div>
+        <div class="d">${x.date.slice(8)}</div>
+      </div>`).join("")}</div>`
+      : `<div class="empty">Bu davrda sessiya bo'lmagan</div>`}
   </section>
 
   <div class="grid k2" style="margin-top:16px">
@@ -902,8 +1480,8 @@ function pageStats() {
     </section>
     <section class="card">
       <div class="card-head"><div class="card-title">Faol qurilmalar</div>
-        <span class="dim card-link">sessiya bo'yicha</span></div>
-      ${(d.devices || []).length ? `<div class="tbl-wrap"><table class="tbl">
+        <span class="dim card-link">${(d.devices || []).length} ta · sessiya bo'yicha</span></div>
+      ${(d.devices || []).length ? `<div class="tbl-wrap scroll-y"><table class="tbl">
         <thead><tr><th>Qurilma</th><th>Manba</th><th>Sessiya</th>
           <th class="col-hide">Oxirgi</th></tr></thead>
         <tbody>${d.devices.map((x) => `<tr>
@@ -952,6 +1530,132 @@ function logTable(rows, showServer) {
       <td>${esc(l.msg)}</td></tr>`).join("")
       : `<tr><td colspan="5"><div class="empty">Log yo'q</div></td></tr>`}
     </tbody></table></div></div>`;
+}
+
+// --------------------------------------------------------------- Reklama
+const PLACEMENTS = { popup: "Qalqib chiquvchi", banner: "Asosiy sahifa banneri",
+                     both: "Ikkisi ham" };
+
+function pageAds() {
+  const list = S.data.ads || [];
+  if (!list.length) {
+    return `<div class="card empty">Reklama yo'q — yuqoridagi
+      <b>Yangi reklama</b> tugmasi bilan qo'shing.<br>
+      Rasm yoki video yuklanadi, keyin qaysi serverlarga ketishini belgilaysiz.</div>`;
+  }
+  return `<div class="lib">${list.map((a) => {
+    const vid = /\.(mp4|webm|mkv|mov)$/i.test(a.media_name || "");
+    return `<article class="lib-card" style="cursor:default">
+      <div class="lib-cover">
+        ${vid ? `<video src="/api/admin/ads/${a.id}/media" muted loop
+                   playsinline style="width:100%;height:100%;object-fit:cover"
+                   onmouseover="this.play()" onmouseout="this.pause()"></video>`
+              : `<img src="/api/admin/ads/${a.id}/media" alt=""
+                   onerror="this.remove()">`}
+        ${a.is_active ? "" : `<span class="lib-dur" style="left:8px;right:auto;
+          background:rgba(185,28,28,.9)">o'chirilgan</span>`}
+        ${vid ? `<span class="lib-dur">video</span>` : ""}
+      </div>
+      <div class="lib-body">
+        <div class="lib-title">${esc(a.title || "(nomsiz)")}</div>
+        <div class="dim" style="margin-bottom:7px">${esc(a.subtitle || "")}</div>
+        <div class="lib-meta">
+          <span class="pill acc">${PLACEMENTS[a.placement] || a.placement}</span>
+          ${a.interval_min ? `<span class="dim">har ${a.interval_min} daq</span>` : ""}
+          ${a.start_time ? `<span class="dim">${esc(a.start_time)}–${esc(a.end_time || "")}</span>` : ""}
+        </div>
+        <div style="margin-top:10px">
+          ${a.deployed
+            ? `<div class="ad-srv">${(a.servers || []).slice(0, 3).map((id) => {
+                const s2 = (S.data.servers || []).find((x) => x.id === id) || {};
+                return `<span class="pill mut">${esc(s2.name || id)}</span>`;
+              }).join("")}${a.deployed > 3
+                ? `<span class="pill mut">+${a.deployed - 3}</span>` : ""}</div>`
+            : `<div class="pill warn">hech qaysi serverda yo'q</div>`}
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn sm ghost" data-act="ad-servers" data-id="${a.id}"
+            style="flex:1">${ic("server", 13)} Serverlar</button>
+          <button class="btn sm ghost" data-act="ad-edit" data-id="${a.id}"
+            title="Tahrirlash">${ic("pencil", 13)}</button>
+          <button class="btn sm ghost" data-act="ad-del" data-id="${a.id}"
+            title="O'chirish">${ic("trash", 13)}</button>
+        </div>
+      </div>
+    </article>`;
+  }).join("")}</div>`;
+}
+
+// --------------------------------------------------------------- Saytlar
+function pageSites() {
+  const list = S.data.sites || [];
+  return `<div class="card" style="margin-bottom:16px">
+      <div class="card-sub">Bu ro'yxat <b>barcha serverlarga bir xil</b> ketadi —
+        kiosklardagi «Saytlar» bo'limida QR kod bilan ochiladi.</div>
+    </div>
+    <div class="card" style="padding:14px 4px"><div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th style="padding-left:14px">Nom</th><th>URL</th>
+        <th class="col-hide">Tavsif</th><th>Tartib</th><th></th></tr></thead>
+      <tbody>${list.length ? list.map((s) => `<tr>
+        <td style="padding-left:14px" class="strong">${esc(s.name)}</td>
+        <td class="dim">${esc(s.url)}</td>
+        <td class="col-hide dim">${esc((s.description || "").slice(0, 60))}</td>
+        <td class="num">${s.sort_order}</td>
+        <td><div class="row" style="gap:6px">
+          <button class="btn sm ghost" data-act="site-edit" data-id="${s.id}">
+            ${ic("pencil", 13)}</button>
+          <button class="btn sm ghost" data-act="site-del" data-id="${s.id}">
+            ${ic("trash", 13)}</button>
+        </div></td></tr>`).join("")
+        : `<tr><td colspan="5"><div class="empty">Sayt yo'q</div></td></tr>`}
+      </tbody></table></div></div>`;
+}
+
+// --------------------------------------------------------------- Bekatlar
+function pageStops() {
+  const list = S.data.stops || [];
+  const srv = (S.data.server || {}).server || {};
+  const rows = S.stopsDraft !== null ? S.stopsDraft : list;
+  return `<button class="btn sm ghost" data-act="go" data-page="server"
+      data-id="${S.serverId}" style="margin-bottom:14px">
+      ${ic("chevronLeft", 14)} ${esc(srv.name || "Server")}</button>
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-sub">Jadvalni to'liq kiritib «Saqlash»ni bosing —
+        server yo'nalishni almashtiradi va kiosklarda darhol ko'rinadi.
+        <b>Yo'nalish:</b> 0 = borish, 1 = qaytish.</div>
+    </div>
+    <div class="card" style="padding:14px 4px">
+      <div class="tbl-wrap"><table class="tbl">
+        <thead><tr><th style="padding-left:14px">#</th><th>Bekat nomi</th>
+          <th>Kelish</th><th>Jo'nash</th><th class="col-hide">Masofa (km)</th>
+          <th>Yo'nalish</th><th></th></tr></thead>
+        <tbody>${rows.map((s, i) => `<tr>
+          <td style="padding-left:14px" class="dim">${i + 1}</td>
+          <td><input data-stop="${i}.name" value="${esc(s.name || "")}"
+            style="border:1px solid var(--border);border-radius:8px;padding:7px 9px;width:100%"></td>
+          <td><input data-stop="${i}.arrival_time" value="${esc(s.arrival_time || "")}"
+            placeholder="08:30" style="border:1px solid var(--border);border-radius:8px;padding:7px 9px;width:78px"></td>
+          <td><input data-stop="${i}.departure_time" value="${esc(s.departure_time || "")}"
+            placeholder="08:35" style="border:1px solid var(--border);border-radius:8px;padding:7px 9px;width:78px"></td>
+          <td class="col-hide"><input data-stop="${i}.distance_km" value="${esc(s.distance_km ?? "")}"
+            style="border:1px solid var(--border);border-radius:8px;padding:7px 9px;width:70px"></td>
+          <td><input data-stop="${i}.direction" value="${esc(s.direction ?? 0)}"
+            style="border:1px solid var(--border);border-radius:8px;padding:7px 9px;width:48px"></td>
+          <td><button class="btn sm ghost" data-act="stop-del" data-i="${i}">
+            ${ic("x", 13)}</button></td>
+        </tr>`).join("") || `<tr><td colspan="7"><div class="empty">
+          Bekat yo'q — «Qator qo'shish» bilan boshlang</div></td></tr>`}
+        </tbody></table></div>
+      <div class="row" style="margin-top:14px">
+        <button class="btn sm ghost" data-act="stop-add">${ic("plus", 14)} Qator qo'shish</button>
+        <div style="flex:1"></div>
+        ${S.stopsDraft !== null ? `<button class="btn sm ghost" data-act="stops-reset">
+          Bekor qilish</button>` : ""}
+        <button class="btn sm pri" data-act="stops-save"
+          ${S.stopsDraft === null ? "disabled" : ""}>
+          ${ic("save", 14, "#fff")} Saqlash va yuborish</button>
+      </div>
+    </div>`;
 }
 
 // -------------------------------------------------------- Ulash kalitlari
@@ -1012,6 +1716,10 @@ function modalView() {
     : m.kind === "remove" ? mRemove()
     : m.kind === "announce" ? mAnnounce()
     : m.kind === "token" ? mToken()
+    : m.kind === "ad" ? mAd()
+    : m.kind === "site" ? mSite()
+    : m.kind === "rename" ? mRename()
+    : m.kind === "klabel" ? mKioskLabel()
     : "";
   const cls = m.kind === "upload" ? "xwide" : m.kind === "deploy" ? "wide" : "";
   return `<div class="overlay" data-act="modal-bg"><div class="modal ${cls}">${
@@ -1237,14 +1945,16 @@ function mDeploy() {
         .map(([l, v]) => `<div class="kpi"><div class="kpi-label">${l}</div>
           <div class="kpi-value" style="font-size:19px">${v}</div></div>`).join("")}
     </div>
-    ${[["skip_existing", "sha256 mos kelsa qayta yubormaslik",
-        "Serverda allaqachon bor fayl SIM-trafikni behuda sarflamaydi"],
-       ["night_only", "Tungi soatlarda yuborish (00:00 – 06:00)",
-        "SIM-trafikni tejash uchun"]].map(([k, t2, s2]) => `
-      <div class="list-row"><div style="flex:1"><div class="strong">${t2}</div>
-        <div class="dim">${s2}</div></div>
-        <button class="tgl ${S.opts[k] ? "on" : ""}" data-act="opt" data-key="${k}"><i></i></button>
-      </div>`).join("")}
+    <div class="list-row"><div style="flex:1">
+      <div class="strong">sha256 mos kelsa qayta yubormaslik</div>
+      <div class="dim">Serverda allaqachon bor fayl SIM-trafikni behuda sarflamaydi</div></div>
+      <button class="tgl ${S.opts.skip_existing ? "on" : ""}" data-act="opt"
+        data-key="skip_existing"><i></i></button>
+    </div>
+    ${schedPicker("deploy", "Tunda yuborish — SIM-trafik arzon va yo'lovchi yo'q")}
+    ${schedValue("deploy") ? `<div class="dim" style="margin-top:10px">
+      Kontent belgilangan vaqtgacha serverlarga <b>yuborilmaydi</b> — reja
+      vaqti kelganда tayinlanadi va yuklab olish boshlanadi.</div>` : ""}
     ${picked.some((s) => !s.online) ? `<div class="dim" style="margin-top:14px">
       Tanlanganlardan ${picked.filter((s) => !s.online).length} tasi hozir offlayn.
       Ular navbatga qo'shiladi va onlayn bo'lishi bilan avtomatik yuklab oladi —
@@ -1258,7 +1968,7 @@ function mDeploy() {
       ? `<button class="btn pri" data-act="dstep" data-n="${S.dstep + 1}"
            ${S.dstep === 1 && !items.length ? "disabled" : ""}>Davom etish →</button>`
       : `<button class="btn pri" data-act="deploy-go" ${!picked.length ? "disabled" : ""}>
-           Tarqatishni boshlash</button>`}
+           ${schedValue("deploy") ? "Rejaga qo'yish" : "Tarqatishni boshlash"}</button>`}
   </div>`;
 }
 
@@ -1278,13 +1988,16 @@ function mRemove() {
 }
 
 function mAnnounce() {
+  const at = schedValue("announce");
   return `${head("E'lon yuborish", "Matn shu serverning barcha kiosklarida ko'rinadi")}
   <div class="field"><label>Matn</label>
     <textarea data-bind="text" placeholder="Masalan: Buxoro bekatiga 20 daqiqa"
       >${esc(F("text", ""))}</textarea></div>
+  ${schedPicker("announce", "Masalan bekatga yetishdan 20 daqiqa oldin")}
   <div class="modal-foot">
     <button class="btn ghost" data-act="modal-close">Bekor qilish</button>
-    <button class="btn pri" data-act="announce-go">Yuborish</button>
+    <button class="btn pri" data-act="announce-go">${at
+      ? "Rejaga qo'yish" : "Hozir yuborish"}</button>
   </div>`;
 }
 
@@ -1309,6 +2022,163 @@ KIOSK_CLOUD_ENROLL=${esc(S.modal.token)}</textarea></div>
   <div class="modal-foot">
     <button class="btn ghost" data-act="modal-close">Bekor qilish</button>
     <button class="btn pri" data-act="token-go">Yaratish</button>
+  </div>`;
+}
+
+function mAd() {
+  const edit = S.modal.id;
+  const md = S.up.media;
+  const vid = md && /\.(mp4|webm|mkv|mov)$/i.test(md.name || "");
+  return `${head(edit ? "Reklamani tahrirlash" : "Yangi reklama",
+    "Rasm yoki video + ko'rsatish shartlari. Keyin qaysi serverlarga "
+    + "ketishini belgilaysiz.")}
+  <input type="file" multiple class="u-hide" data-act="file-input">
+  <div class="up-grid">
+    <div class="up-form">
+      <div class="field full"><label>Sarlavha</label>
+        <input data-bind="title" value="${esc(F("title", ""))}"
+          placeholder="Reklama sarlavhasi"></div>
+      <div class="field full"><label>Qo'shimcha matn</label>
+        <input data-bind="subtitle" value="${esc(F("subtitle", ""))}"></div>
+      <div class="field full"><label>Havola (QR uchun, ixtiyoriy)</label>
+        <input data-bind="link_url" value="${esc(F("link_url", ""))}"
+          placeholder="https://..."></div>
+      <div class="field"><label>Joylashuv</label>
+        <select data-bind="placement">${Object.entries(PLACEMENTS).map(([k, v]) =>
+          `<option value="${k}" ${F("placement", "popup") === k ? "selected" : ""}
+            >${v}</option>`).join("")}</select></div>
+      <div class="field"><label>Ko'rsatish (soniya)</label>
+        <input data-bind="duration" value="${esc(F("duration", "10"))}"
+          placeholder="10 · video uchun 0 = oxirigacha"></div>
+      <div class="field"><label>Har necha daqiqada</label>
+        <input data-bind="interval_min" value="${esc(F("interval_min", ""))}"
+          placeholder="bo'sh = umumiy sozlama"></div>
+      <div class="field"><label>Vaqt oralig'i</label>
+        <div class="row" style="gap:8px">
+          <input data-bind="start_time" value="${esc(F("start_time", ""))}"
+            placeholder="09:00" style="width:50%">
+          <input data-bind="end_time" value="${esc(F("end_time", ""))}"
+            placeholder="21:00" style="width:50%"></div></div>
+      <div class="field full">
+        <div class="row" style="gap:10px">
+          <button class="tgl ${F("is_active", true) ? "on" : ""}" data-act="ad-active"
+            type="button"><i></i></button>
+          <span style="font-size:12.5px;font-weight:700">Faol (kiosklarda ko'rsatiladi)</span>
+        </div></div>
+    </div>
+    <div>
+      <label class="up-label" style="display:block;margin-bottom:6px">Reklama fayli</label>
+      <div class="cover-box ${md ? "on" : ""}" data-act="pick-media">
+        ${md && md.preview && !vid ? `<img src="${md.preview}" alt="">`
+          : md && md.state === "have" && edit
+            ? `<img src="/api/admin/ads/${edit}/media" alt="" onerror="this.remove()">`
+            : ic(vid ? "clapperboard" : "image", 26, md ? "#2563EB" : "#94A3B8", 1.7)}
+        <div class="cover-state">${md ? esc(md.name) : "Fayl tanlanmagan"}</div>
+        <div class="cover-hint">${md
+          ? (md.state === "up" ? md.pct + "% yuklanmoqda…" : bytes(md.size))
+          : "bosing yoki tashlang"}</div>
+      </div>
+      <div class="cover-note">jpg · png · mp4 · webm. Video bo'lsa kioskda
+        ovozsiz to'liq o'ynatiladi.</div>
+    </div>
+  </div>
+
+  ${adServerPicker()}
+
+  <div class="modal-foot">
+    <div class="foot-note">${(S.adPick || new Set()).size
+      ? `Saqlashda ${(S.adPick).size} serverga yuboriladi`
+      : "Hech qanday server tanlanmagan — reklama faqat kutubxonada qoladi"}</div>
+    <button class="btn ghost" data-act="modal-close">Bekor qilish</button>
+    <button class="btn pri" data-act="ad-save">${edit ? "Saqlash"
+      : "Saqlash va tarqatish"}</button>
+  </div>`;
+}
+
+/** Reklama formasining ichidagi server tanlash bloki.
+ *  Avval bu alohida ikonka ortida edi va ko'rinmasdi — endi formaning o'zida. */
+function adServerPicker() {
+  const servers = S.data.servers || [];
+  const pick = S.adPick || new Set();
+  if (!servers.length) {
+    return `<div class="card" style="margin-top:16px;background:var(--warn-bg);
+      box-shadow:none"><div class="dim" style="color:var(--warn-dark)">
+      Hali birorta server ulanmagan — reklama kutubxonada saqlanadi va server
+      qo'shilgach tarqatasiz.</div></div>`;
+  }
+  return `<div class="flags" style="margin-top:16px">
+    <div class="row" style="margin-bottom:12px">
+      <div style="flex:1">
+        <div class="strong" style="font-size:13px">Qaysi serverlarda ko'rinadi</div>
+        <div class="dim">Belgilanganlarga yuboriladi, belgisi olinganlardan
+          o'chiriladi</div>
+      </div>
+      <span class="pill acc">${pick.size} / ${servers.length}</span>
+      <button class="btn sm ghost" data-act="adpick-all" type="button">Barchasi</button>
+      <button class="btn sm ghost" data-act="adpick-none" type="button">Tozalash</button>
+    </div>
+    <div class="kgrid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr))">
+      ${servers.map((s) => `<div class="pickrow ${pick.has(s.id) ? "on" : ""}"
+          data-act="adpick" data-id="${s.id}" style="margin:0">
+        <div class="box">${pick.has(s.id) ? ic("check", 12, "#fff", 3.2) : ""}</div>
+        <div style="flex:1;min-width:0">
+          <div class="strong" style="font-size:12.5px">${esc(s.name)}</div>
+          <div class="dim">${esc(s.route || "—")}</div>
+        </div>
+        <span class="dot ${s.online ? "live" : "off"}" style="animation:none"></span>
+      </div>`).join("")}
+    </div>
+  </div>`;
+}
+
+function mSite() {
+  return `${head(S.modal.id ? "Saytni tahrirlash" : "Yangi sayt",
+    "Barcha serverlarga bir xil ketadi")}
+  <div class="field"><label>Nom</label>
+    <input data-bind="name" value="${esc(F("name", ""))}" placeholder="Poyezd.uz"></div>
+  <div class="field"><label>URL</label>
+    <input data-bind="url" value="${esc(F("url", ""))}" placeholder="https://..."></div>
+  <div class="field"><label>Tavsif</label>
+    <textarea data-bind="description">${esc(F("description", ""))}</textarea></div>
+  <div class="f2">
+    <div class="field"><label>Imkoniyatlar (matn)</label>
+      <input data-bind="features" value="${esc(F("features", ""))}"></div>
+    <div class="field"><label>Tartib raqami</label>
+      <input data-bind="sort_order" value="${esc(F("sort_order", "0"))}"></div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn ghost" data-act="modal-close">Bekor qilish</button>
+    <button class="btn pri" data-act="site-save">Saqlash</button>
+  </div>`;
+}
+
+function mRename() {
+  return `${head("Serverga nom berish",
+    "Bu nom butun panelда ko'rinadi. Server hostnameни (masalan «GPUPC») "
+    + "endi ustiga yozmaydi.")}
+  <div class="field"><label>Nom</label>
+    <input data-bind="name" value="${esc(F("name", ""))}"
+      placeholder="Poyezd 076Ф — 3-vagon"></div>
+  <div class="field"><label>Yo'nalish</label>
+    <input data-bind="route" value="${esc(F("route", ""))}"
+      placeholder="Toshkent → Xiva"></div>
+  <div class="field"><label>Izoh (ixtiyoriy)</label>
+    <textarea data-bind="note">${esc(F("note", ""))}</textarea></div>
+  <div class="modal-foot">
+    <button class="btn ghost" data-act="modal-close">Bekor qilish</button>
+    <button class="btn pri" data-act="rename-save">Saqlash</button>
+  </div>`;
+}
+
+function mKioskLabel() {
+  return `${head("Kioskка nom berish",
+    `Qurilma: ${esc(S.modal.dev)} — nom faqat shu panelда ko'rinadi`)}
+  <div class="field"><label>Nom</label>
+    <input data-bind="label" value="${esc(F("label", ""))}"
+      placeholder="1-vagon, o'ng tomon"></div>
+  <div class="modal-foot">
+    <button class="btn ghost" data-act="modal-close">Bekor qilish</button>
+    <button class="btn pri" data-act="klabel-save">Saqlash</button>
   </div>`;
 }
 
@@ -1412,25 +2282,106 @@ document.addEventListener("click", async (e) => {
     S.srvForm[el.dataset.key] = el.dataset.val;
     render(); return;
   }
-  if (act === "srv-reset") { S.srvForm = {}; render(); return; }
-  if (act === "srv-save") {
-    const values = { ...S.srvForm };
-    if (!Object.keys(values).length) return;
+  if (act === "srv-reset") {
+    const g = el.dataset.group;
+    if (g) dirtyKeys(g).forEach((k) => delete S.srvForm[k]);
+    else S.srvForm = {};
+    if (S.schedule.group === g) S.schedule = { on: false, date: "", time: "", group: "" };
+    render(); return;
+  }
+  if (act === "algo-toggle") {
+    const cur = ((S.srvForm.ad_algorithm !== undefined
+      ? S.srvForm.ad_algorithm
+      : (((S.data.server || {}).server || {}).settings || {}).ad_algorithm)
+      || "weighted").split(",").map((x) => x.trim()).filter(Boolean);
+    const k = el.dataset.key;
+    const next = cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k];
+    S.srvForm.ad_algorithm = next.join(",") || "weighted";
+    render(); return;
+  }
+  if (act === "copy-hw") {
+    const i = document.getElementById("hwid");
+    i.select(); navigator.clipboard?.writeText(i.value);
+    toast("Qurilma ID ko'chirildi", "ok"); return;
+  }
+  if (act === "lic-send") {
+    const text = (S.form.lictext || "").trim();
+    if (!text) { toast("license.key mazmunini qo'ying", "err"); return; }
     try {
-      const r = await api.post(`/api/admin/servers/${S.serverId}/settings`,
-                               { values });
-      toast(`Yuborildi: ${r.sent.length} sozlama`, "ok");
+      const r = await api.post(`/api/admin/servers/${S.serverId}/license`,
+                               { text, apply_at: schedValue("lic2") });
+      toast(r.apply_at ? `Rejaga qo'yildi: ${r.apply_at.slice(0, 16)}`
+            : r.queued ? "Navbatga qo'yildi — server ulanganda o'rnatiladi"
+                       : "Yuborildi — server imzoni tekshiradi", "ok");
+      S.form.lictext = "";
+      setTimeout(() => load(true), 2500);
+    } catch (err) { toast(err.message, "err"); }
+    return;
+  }
+  if (act === "lic-block") {
+    const want = el.dataset.val === "1";
+    if (want && !confirm("Bu serverning BARCHA kiosklari bloklanadimi?\n\n"
+        + "Ekranlarda qulf chiqadi va yo'lovchilar hech narsa ko'rmaydi.")) return;
+    try {
+      const r = await api.post(`/api/admin/servers/${S.serverId}/license`,
+                               { blocked: want, apply_at: schedValue("lic2") });
+      toast(r.apply_at ? `Rejaga qo'yildi: ${r.apply_at.slice(0, 16)}`
+            : r.queued ? "Navbatga qo'yildi"
+                       : (want ? "Bloklandi" : "Blok ochildi"), "ok");
+      setTimeout(() => load(true), 1500);
+    } catch (err) { toast(err.message, "err"); }
+    return;
+  }
+  if (act === "sched-toggle") {
+    const g = el.dataset.group || "main";
+    S.schedule.on = !(S.schedule.on && S.schedule.group === g);
+    S.schedule.group = g;
+    if (S.schedule.on && !S.schedule.date) {
+      // Standart: ertaga tunda 03:00 (SIM-trafik arzon va yo'lovchi yo'q payt)
+      const t = new Date(Date.now() + 864e5);
+      S.schedule.date = t.toISOString().slice(0, 10);
+      S.schedule.time = "03:00";
+    }
+    render(); return;
+  }
+  if (act === "op-cancel") {
+    try { await api.del("/api/admin/ops/" + el.dataset.id); load(true); }
+    catch (err) { toast(err.message, "err"); }
+    return;
+  }
+  if (act === "srv-save") {
+    const g = el.dataset.group || "main";
+    const keys = dirtyKeys(g);
+    if (!keys.length) return;
+    const values = {};
+    keys.forEach((k) => { values[k] = S.srvForm[k]; });
+    const body = { values };
+    if (S.schedule.on && S.schedule.group === g) {
+      if (!S.schedule.date) { toast("Sanani tanlang", "err"); return; }
+      body.apply_at = `${S.schedule.date} ${S.schedule.time || "00:00"}`;
+    }
+    try {
+      const r = await api.post(`/api/admin/servers/${S.serverId}/settings`, body);
+      toast(r.apply_at
+        ? `Rejaga qo'yildi: ${r.apply_at.slice(0, 16)} (${r.sent.length} sozlama)`
+        : r.queued
+          ? `Navbatga qo'yildi — server ulanganda qo'llanadi (${r.sent.length} sozlama)`
+          : `Yuborildi: ${r.sent.length} sozlama`, "ok");
       S.srvForm = {};
+      S.schedule = { on: false, date: "", time: "" };
       setTimeout(() => load(true), 1200);   // server qo'llagach qaytib o'qiymiz
     } catch (err) { toast(err.message, "err"); }
     return;
   }
   // ---- veb ilova
   if (act === "web-cmd") {
+    const at = schedValue("web");
     try {
-      await api.post(`/api/admin/servers/${S.serverId}/web`,
-                     { action: el.dataset.kind });
-      toast(el.dataset.kind === "start" ? "Veb yoqilmoqda…" : "Veb o'chirilmoqda…", "ok");
+      const r = await api.post(`/api/admin/servers/${S.serverId}/web`,
+                               { action: el.dataset.kind, apply_at: at });
+      toast(r.apply_at ? `Rejaga qo'yildi: ${r.apply_at.slice(0, 16)}`
+            : el.dataset.kind === "start" ? "Veb yoqilmoqda…" : "Veb o'chirilmoqda…", "ok");
+      if (at) S.schedule = { on: false, date: "", time: "", group: "" };
       setTimeout(() => load(true), 2500);
     } catch (err) { toast(err.message, "err"); }
     return;
@@ -1514,13 +2465,57 @@ document.addEventListener("click", async (e) => {
     S.flags[el.dataset.key] = !S.flags[el.dataset.key];
     render(); return;
   }
+  if (act === "hero-save") {
+    const u = S.up.hero;
+    if (!u || u.state !== "done") { toast("Rasm yuklanishini kuting", "err"); return; }
+    try {
+      await api.put(`/api/admin/servers/${S.serverId}/branding`,
+                    { kind: "hero", media: { sha256: u.sha256, name: u.name } });
+      toast("Banner kutubxonaga qo'shildi va shu serverga qo'yildi", "ok");
+      if (u.preview) URL.revokeObjectURL(u.preview);
+      S.up.hero = null;
+      setTimeout(() => load(true), 1500);
+    } catch (err) { toast(err.message, "err"); }
+    return;
+  }
+  if (act === "hero-pick") {
+    try {
+      await api.put(`/api/admin/servers/${S.serverId}/branding`,
+                    { kind: "hero", library_id: +el.dataset.id });
+      toast("Banner almashtirildi — serverga yetkaziladi", "ok");
+      setTimeout(() => load(true), 1200);
+    } catch (err) { toast(err.message, "err"); }
+    return;
+  }
+  if (act === "hero-del") {
+    e.stopPropagation();
+    if (!confirm("Bu banner kutubxonadan o'chirilsinmi? Uni ishlatayotgan "
+                 + "serverlar standart rasmga qaytadi.")) return;
+    try {
+      const r = await api.del("/api/admin/branding/library/" + el.dataset.id);
+      toast(r.servers ? `O'chirildi · ${r.servers} server standartga qaytdi`
+                      : "O'chirildi", "ok");
+      load(true);
+    } catch (err) { toast(err.message, "err"); }
+    return;
+  }
+  if (act === "hero-clear") {
+    if (!confirm("Banner standart rasmga qaytarilsinmi?")) return;
+    try {
+      await api.put(`/api/admin/servers/${S.serverId}/branding`,
+                    { kind: "hero", media: null });
+      toast("Standart rasmga qaytarildi", "ok");
+      setTimeout(() => load(true), 1500);
+    } catch (err) { toast(err.message, "err"); }
+    return;
+  }
   if (act === "drop" || act === "pick-cover" || act === "pick-media"
-      || act === "pick-text") {
+      || act === "pick-text" || act === "pick-hero") {
     // Qaysi slotga tushishi: tugmadan aniq, "drop"da esa kengaytmadan
     S.pickKind = act === "drop" ? "" : act.replace("pick-", "");
     const inp = document.querySelector('[data-act="file-input"]');
     if (inp) {
-      inp.accept = S.pickKind === "cover" ? "image/*"
+      inp.accept = (S.pickKind === "cover" || S.pickKind === "hero") ? "image/*"
         : S.pickKind === "text" ? ".json,.txt,.epub" : "";
       inp.click();
     }
@@ -1546,6 +2541,154 @@ document.addEventListener("click", async (e) => {
     render(); return;
   }
 
+  // ---- reklama
+  if (act === "ad-new") {
+    openModal("ad");
+    S.up = { media: null, cover: null, text: null, hero: null };
+    S.form = { duration: "10", placement: "popup", is_active: true };
+    // Reklama odatda BARCHA poyezdlarga ketadi — standart holatда hammasi
+    // belgilangan bo'ladi, kerak bo'lsa olib tashlanadi.
+    S.adPick = new Set((S.data.servers || []).map((x) => x.id));
+    render(); return;
+  }
+  if (act === "ad-edit") {
+    const a = (S.data.ads || []).find((x) => x.id === +el.dataset.id);
+    if (!a) return;
+    S.modal = { kind: "ad", id: a.id };
+    S.form = { title: a.title || "", subtitle: a.subtitle || "",
+               link_url: a.link_url || "", placement: a.placement || "popup",
+               duration: String(a.duration ?? 10),
+               interval_min: a.interval_min ? String(a.interval_min) : "",
+               start_time: a.start_time || "", end_time: a.end_time || "",
+               is_active: a.is_active === 1 };
+    S.up = { media: a.media_sha ? { name: a.media_name || "fayl",
+      size: a.media_size, sha256: a.media_sha, state: "have", pct: 100 } : null,
+      cover: null, text: null, hero: null };
+    S.adPick = new Set(a.servers || []);
+    render(); return;
+  }
+  if (act === "ad-active") { S.form.is_active = !F("is_active", true); render(); return; }
+  if (act === "adpick") {
+    const id = el.dataset.id;
+    S.adPick = S.adPick || new Set();
+    S.adPick.has(id) ? S.adPick.delete(id) : S.adPick.add(id);
+    render(); return;
+  }
+  if (act === "adpick-all") {
+    S.adPick = new Set((S.data.servers || []).map((x) => x.id)); render(); return;
+  }
+  if (act === "adpick-none") { S.adPick = new Set(); render(); return; }
+  if (act === "ad-save") { await saveAd(); return; }
+  if (act === "ad-del") {
+    if (!confirm("Reklama o'chirilsinmi? Barcha serverlardan ham olib tashlanadi.")) return;
+    try { const r = await api.del("/api/admin/ads/" + el.dataset.id);
+      toast(r.servers ? `O'chirildi · ${r.servers} server yangilanadi` : "O'chirildi", "ok");
+      load(true);
+    } catch (err) { toast(err.message, "err"); }
+    return;
+  }
+  if (act === "ad-servers") {
+    // Alohida modal emas — reklamaning o'z formasini ochamiz (server tanlash
+    // shu yerда, forma ichida). Bitta joyda bo'lgani chalkashlikni yo'qotadi.
+    const a = (S.data.ads || []).find((x) => x.id === +el.dataset.id);
+    if (!a) return;
+    S.modal = { kind: "ad", id: a.id, focusServers: true };
+    S.form = { title: a.title || "", subtitle: a.subtitle || "",
+               link_url: a.link_url || "", placement: a.placement || "popup",
+               duration: String(a.duration ?? 10),
+               interval_min: a.interval_min ? String(a.interval_min) : "",
+               start_time: a.start_time || "", end_time: a.end_time || "",
+               is_active: a.is_active === 1 };
+    S.up = { media: a.media_sha ? { name: a.media_name || "fayl",
+      size: a.media_size, sha256: a.media_sha, state: "have", pct: 100 } : null,
+      cover: null, text: null, hero: null };
+    S.adPick = new Set(a.servers || []);
+    render(); return;
+  }
+  // ---- saytlar
+  if (act === "site-new") { openModal("site"); S.form = { sort_order: "0" }; render(); return; }
+  if (act === "site-edit") {
+    const s2 = (S.data.sites || []).find((x) => x.id === +el.dataset.id);
+    if (!s2) return;
+    S.modal = { kind: "site", id: s2.id };
+    S.form = { name: s2.name || "", url: s2.url || "",
+               description: s2.description || "", features: s2.features || "",
+               sort_order: String(s2.sort_order ?? 0) };
+    render(); return;
+  }
+  if (act === "site-save") {
+    const body = { name: (F("name", "") || "").trim(), url: (F("url", "") || "").trim(),
+      description: F("description", ""), features: F("features", ""),
+      sort_order: parseInt(F("sort_order", "0"), 10) || 0 };
+    if (!body.name || !body.url) { toast("Nom va URL kerak", "err"); return; }
+    try {
+      if (S.modal.id) await api.patch("/api/admin/sites/" + S.modal.id, body);
+      else await api.post("/api/admin/sites", body);
+      toast("Saqlandi — barcha serverlarga yuborildi", "ok");
+      closeModal(); load(true);
+    } catch (err) { toast(err.message, "err"); }
+    return;
+  }
+  if (act === "site-del") {
+    if (!confirm("Sayt o'chirilsinmi? Barcha kiosklardan ketadi.")) return;
+    try { await api.del("/api/admin/sites/" + el.dataset.id); load(true); }
+    catch (err) { toast(err.message, "err"); }
+    return;
+  }
+  // ---- bekatlar
+  if (act === "stops-open") { go("stops", S.serverId || el.dataset.id); return; }
+  if (act === "stop-add") {
+    S.stopsDraft = [...(S.stopsDraft || S.data.stops || []),
+                    { name: "", arrival_time: "", departure_time: "",
+                      distance_km: "", direction: 0 }];
+    render(); return;
+  }
+  if (act === "stop-del") {
+    const rows = [...(S.stopsDraft || S.data.stops || [])];
+    rows.splice(+el.dataset.i, 1);
+    S.stopsDraft = rows; render(); return;
+  }
+  if (act === "stops-reset") { S.stopsDraft = null; render(); return; }
+  if (act === "stops-save") {
+    const rows = (S.stopsDraft || []).filter((r) => (r.name || "").trim());
+    try {
+      const r = await api.put(`/api/admin/servers/${S.serverId}/stops`,
+                              { stops: rows });
+      toast(`${r.n} bekat saqlandi va yuborildi`, "ok");
+      S.stopsDraft = null; load(true);
+    } catch (err) { toast(err.message, "err"); }
+    return;
+  }
+  // ---- nom berish
+  if (act === "rename-open") {
+    const s2 = ((S.data.server || {}).server) || {};
+    S.modal = { kind: "rename" };
+    S.form = { name: s2.name || "", route: s2.route || "", note: s2.note || "" };
+    render(); return;
+  }
+  if (act === "rename-save") {
+    const name = (F("name", "") || "").trim();
+    if (!name) { toast("Nom kerak", "err"); return; }
+    try {
+      await api.patch("/api/admin/servers/" + S.serverId,
+                      { name, route: F("route", ""), note: F("note", "") });
+      toast("Nom saqlandi", "ok"); closeModal(); load(true);
+    } catch (err) { toast(err.message, "err"); }
+    return;
+  }
+  if (act === "klabel-open") {
+    S.modal = { kind: "klabel", dev: el.dataset.dev };
+    S.form = { label: el.dataset.label || "" };
+    render(); return;
+  }
+  if (act === "klabel-save") {
+    try {
+      await api.patch(`/api/admin/servers/${S.serverId}/kiosk-label`,
+                      { device_id: S.modal.dev, label: F("label", "") });
+      toast("Kiosk nomi saqlandi", "ok"); closeModal(); load(true);
+    } catch (err) { toast(err.message, "err"); }
+    return;
+  }
   if (act === "save-content") { await saveContent(el.dataset.then); return; }
   if (act === "deploy-go") { await deployGo(); return; }
   if (act === "remove-go") {
@@ -1559,9 +2702,15 @@ document.addEventListener("click", async (e) => {
   if (act === "announce-go") {
     const text = (S.form.text || "").trim();
     if (!text) { toast("Matn kiriting", "err"); return; }
+    const at = schedValue("announce");
     try {
-      await api.post(`/api/admin/servers/${S.serverId}/command`, { kind: "announce", text });
-      toast("E'lon yuborildi", "ok"); closeModal();
+      const r = await api.post(`/api/admin/servers/${S.serverId}/command`,
+                               { kind: "announce", text, apply_at: at });
+      toast(r.apply_at ? `Rejaga qo'yildi: ${r.apply_at.slice(0, 16)}`
+            : r.queued ? "Navbatga qo'yildi — server ulanganda ko'rinadi"
+                       : "E'lon yuborildi", "ok");
+      S.schedule = { on: false, date: "", time: "", group: "" };
+      closeModal(); load(true);
     } catch (err) { toast(err.message, "err"); }
     return;
   }
@@ -1586,6 +2735,14 @@ document.addEventListener("click", async (e) => {
     catch (err) { toast(err.message, "err"); }
     return;
   }
+  if (act === "job-retry") {
+    try {
+      const r = await api.post(`/api/admin/jobs/${el.dataset.id}/retry`);
+      toast(`Qayta urinilmoqda — ${r.servers} obyekt`, "ok");
+      load(true);
+    } catch (err) { toast(err.message, "err"); }
+    return;
+  }
   if (act === "job-cancel") {
     try { await api.post(`/api/admin/jobs/${el.dataset.id}/cancel`); load(true); }
     catch (err) { toast(err.message, "err"); }
@@ -1597,6 +2754,17 @@ document.addEventListener("click", async (e) => {
 document.addEventListener("input", (e) => {
   const b = e.target.dataset.bind;
   if (b) { S.form[b] = e.target.value; return; }
+  // Bekatlar jadvali: data-stop="<index>.<maydon>"
+  const st = e.target.dataset.stop;
+  if (st) {
+    const [i, field] = st.split(".");
+    const rows = [...(S.stopsDraft || S.data.stops || [])];
+    rows[+i] = { ...(rows[+i] || {}), [field]: e.target.value };
+    S.stopsDraft = rows;
+    const btn = document.querySelector('[data-act="stops-save"]');
+    if (btn) btn.disabled = false;
+    return;
+  }
   const sv = e.target.dataset.srv;
   if (sv) {
     S.srvForm[sv] = e.target.value;
@@ -1618,14 +2786,20 @@ document.addEventListener("input", (e) => {
 document.addEventListener("change", (e) => {
   if (e.target.dataset.act === "log-server") { S.logFilter.server_id = e.target.value; load(); }
   if (e.target.dataset.act === "file-input") pickFiles([...e.target.files]);
+  const sc = e.target.dataset.sched;
+  if (sc) { S.schedule[sc] = e.target.value; }
 });
 document.addEventListener("submit", async (e) => {
   if (e.target.dataset.act !== "login") return;
   e.preventDefault();
-  const pass = new FormData(e.target).get("password");
+  const f = new FormData(e.target);
+  const username = String(f.get("username") || "").trim();
+  S.loginUser = username;                       // xato bo'lsa qayta yozmasin
   try {
-    await api.post("/api/admin/login", { password: pass });
-    S.auth = true; S.err = ""; load();
+    const r = await api.post("/api/admin/login", {
+      username, password: f.get("password"), remember: !!f.get("remember") });
+    S.auth = true; S.err = ""; S.user = { username: r.username, role: r.role };
+    load();
   } catch (err) { S.err = err.message; render(); }
 });
 // Fayl tashlash: butun modal ustiga tashlasa ham ishlaydi (dizaynda "shu
@@ -1658,12 +2832,13 @@ async function pickFiles(files) {
   for (const f of files) {
     // Slot: tugma orqali majburiy berilgan bo'lsa shu, aks holda kengaytmadan
     const slot = S.pickKind || EXT_KIND(f.name);
+    // hero — modal ichida emas, server tafsiloti sahifasida turadi
     const old = S.up[slot];
     if (old && old.preview) URL.revokeObjectURL(old.preview);
     const u = {
       name: f.name, pct: 0, loaded: 0, total: f.size, size: f.size, state: "up",
-      preview: slot === "cover" && f.type.startsWith("image/")
-        ? URL.createObjectURL(f) : null,
+      preview: (slot === "cover" || slot === "hero")
+        && f.type.startsWith("image/") ? URL.createObjectURL(f) : null,
     };
     S.up[slot] = u;
     // Sarlavha bo'sh bo'lsa media fayl nomidan taklif qilamiz
@@ -1777,30 +2952,78 @@ async function saveEdit() {
   } catch (err) { toast(err.message, "err"); }
 }
 
+async function saveAd() {
+  const md = S.up.media;
+  if (!md || md.state === "up") { toast("Fayl yuklanishini kuting", "err"); return; }
+  const body = {
+    title: F("title", ""), subtitle: F("subtitle", ""),
+    link_url: F("link_url", ""), placement: F("placement", "popup"),
+    duration: parseInt(F("duration", "10"), 10) || 0,
+    interval_min: parseInt(F("interval_min", "0"), 10) || 0,
+    start_time: F("start_time", ""), end_time: F("end_time", ""),
+    is_active: !!F("is_active", true),
+  };
+  if (md.state === "done") body.media = { sha256: md.sha256, name: md.name };
+  const picked = [...(S.adPick || new Set())];
+  try {
+    let id = S.modal.id;
+    if (id) {
+      await api.patch("/api/admin/ads/" + id, body);
+    } else {
+      if (!body.media) { toast("Rasm yoki video kerak", "err"); return; }
+      id = (await api.post("/api/admin/ads", body)).id;
+    }
+    // Tayinlovni HAR SAFAR yuboramiz — backend farqni o'zi hisoblab, faqat
+    // o'zgargan serverlarga manifest yuboradi.
+    const r = await api.post(`/api/admin/ads/${id}/servers`,
+                             { server_ids: picked });
+    toast(picked.length
+      ? `Saqlandi · ${picked.length} serverda ko'rinadi`
+        + (r.added || r.removed ? ` (+${r.added} / −${r.removed})` : "")
+      : "Saqlandi — hech qanday serverga yuborilmadi", "ok");
+    closeModal(); load(true);
+  } catch (err) { toast(err.message, "err"); }
+}
+
 async function deployGo() {
   const server_ids = (S.data.servers || []).filter((s) => !S.pickOff[s.id]).map((s) => s.id);
   try {
+    const at = schedValue("deploy");
     const r = await api.post("/api/admin/deploy", {
       content_ids: [...S.sel], server_ids,
-      skip_existing: S.opts.skip_existing, night_only: S.opts.night_only,
+      skip_existing: S.opts.skip_existing, apply_at: at,
     });
-    toast(`Tarqatish boshlandi — ${r.servers} server` +
-          (r.queued ? `, ${r.queued} tasi navbatda` : ""), "ok");
+    toast(r.apply_at
+      ? `Rejaga qo'yildi: ${r.apply_at.slice(0, 16)} — ${r.servers} server`
+      : `Tarqatish boshlandi — ${r.servers} server`
+        + (r.queued ? `, ${r.queued} tasi navbatda` : ""), "ok");
+    S.schedule = { on: false, date: "", time: "", group: "" };
     S.sel.clear(); closeModal(); go("queue");
   } catch (err) { toast(err.message, "err"); }
 }
 
 // ============================================================= 10) Boshla
 (async function boot() {
+  // Backend versiyasini tekshiramiz (eski jarayon "Not Found" bermasin)
+  try {
+    const h = await api.get("/api/health");
+    S.build = h.build || "?";
+    if (S.build !== UI_BUILD) S.staleBackend = true;
+  } catch { /* health ham yo'q — quyida ko'rinadi */ }
   try {
     const me = await api.get("/api/admin/me");
     S.auth = !!me.auth;
   } catch { S.auth = false; }
   if (S.auth) load(); else render();
-  // Jonli yangilanish: faqat holat ko'rinadigan sahifalarда va modal yopiq bo'lsa
+  // Jonli yangilanish: faqat holat ko'rinadigan sahifalarда va modal yopiq bo'lsa.
+  // Foydalanuvchi biror maydonni yozayotgan yoki saqlanmagan o'zgarishi bo'lsa
+  // ham to'xtatamiz — qayta chizish ish ustida xalaqit bermasin.
   setInterval(() => {
-    if (S.auth && !S.modal && ["dash", "servers", "queue", "server"].includes(S.page)) {
-      load(true);
-    }
+    if (!S.auth || S.modal) return;
+    if (!["dash", "servers", "queue", "server"].includes(S.page)) return;
+    if (Object.keys(S.srvForm).length) return;        // yuborilmagan sozlama bor
+    const ae = document.activeElement;
+    if (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName || "")) return;
+    load(true);
   }, 5000);
 })();

@@ -98,6 +98,11 @@ input, select, textarea { font: inherit; color: inherit; }
 .dot.sync { background: var(--warn); }
 .side-status-title { color: var(--light); font-size: 12px; font-weight: 700; }
 .side-status-note { color: var(--dim); font-size: 11px; line-height: 1.6; }
+/* Onlayn/jami hisob va progress (dizayn: «42/50» + yashil chiziq) */
+.side-nums { color: var(--dim); font-size: 11.5px; font-weight: 700; }
+.side-nums b { color: #fff; font-size: 13px; }
+.side-bar { height: 4px; border-radius: 999px; background: #334155; overflow: hidden; margin: 0 0 9px; }
+.side-bar > i { display: block; height: 100%; background: var(--ok); border-radius: 999px; transition: width .4s; }
 .side-hr { height: 1px; background: var(--divider); margin: 12px 0; }
 .side-user { display: flex; align-items: center; gap: 9px; }
 .avatar {
@@ -108,10 +113,10 @@ input, select, textarea { font: inherit; color: inherit; }
 .side-user-name { color: var(--light); font-size: 12px; font-weight: 700; }
 .side-user-role { color: var(--muted); font-size: 10.5px; }
 .side-out {
-  background: transparent; border: 0; color: var(--muted); font-size: 11px;
-  font-weight: 700; padding: 0;
+  background: transparent; border: 0; color: var(--muted); padding: 6px;
+  border-radius: 8px; display: grid; place-items: center; flex: none;
 }
-.side-out:hover { color: var(--light); }
+.side-out:hover { color: var(--light); background: #334155; }
 
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .top {
@@ -253,6 +258,10 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 .lib-card.sel .lib-check { background: var(--accent); color: #fff; }
 
+/* Reklama kartochkasida qaysi serverlarda ekani (chiplar) */
+.ad-srv { display: flex; flex-wrap: wrap; gap: 5px; }
+.ad-srv .pill { font-size: 10.5px; padding: 2px 7px; }
+
 .selbar {
   position: sticky; bottom: 0; margin-top: 18px; display: flex; align-items: center;
   gap: 12px; background: var(--sidebar); color: #fff; border-radius: 14px;
@@ -340,6 +349,32 @@ input, select, textarea { font: inherit; color: inherit; }
 .cover-state { font-size: 12.5px; font-weight: 800; margin-top: 9px; word-break: break-all; }
 .cover-hint { color: var(--dim); font-size: 11px; margin-top: 3px; }
 .cover-note { color: var(--dim); font-size: 11px; line-height: 1.55; margin-top: 9px; }
+/* Banner galereyasi — mavzu tanlagandek: joriy rasm belgilangan turadi */
+.bgal { display: grid; grid-template-columns: repeat(auto-fill, minmax(178px, 1fr)); gap: 12px; }
+.bthumb {
+  position: relative; border-radius: 13px; overflow: hidden; cursor: pointer;
+  border: 2px solid var(--border); background: var(--card); padding: 0 0 8px;
+}
+.bthumb:hover { border-color: var(--border-strong); }
+.bthumb.on { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37, 99, 235, .14); }
+.bthumb.add { border-style: dashed; }
+.bthumb-img { height: 96px; background: #F8FAFC; }
+.bthumb-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.bthumb-n {
+  font-size: 11.5px; font-weight: 700; padding: 7px 9px 0; text-align: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.bthumb-ok {
+  position: absolute; top: 7px; left: 7px; width: 22px; height: 22px;
+  border-radius: 50%; background: var(--accent); display: grid; place-items: center;
+}
+.bthumb-x {
+  position: absolute; top: 7px; right: 7px; width: 22px; height: 22px;
+  border-radius: 7px; border: 0; background: rgba(255, 255, 255, .92);
+  display: grid; place-items: center; color: var(--err-dark);
+}
+.bthumb-x:hover { background: #fff; }
+
 .cover-x {
   position: absolute; top: 7px; right: 7px; width: 26px; height: 26px;
   border-radius: 8px; margin: 0; z-index: 2; background: rgba(255, 255, 255, .92);
@@ -366,6 +401,16 @@ input, select, textarea { font: inherit; color: inherit; }
 .flag-sub { color: var(--dim); font-size: 11.5px; margin-top: 2px; line-height: 1.5; }
 
 .foot-note { color: var(--dim); font-size: 11.5px; flex: 1; min-width: 0; }
+
+/* Har kartaning o'z saqlash qatori: «Hozir saqlash» / «Rejalashtirib saqlash» */
+.save-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--bg);
+}
+input[type="date"], input[type="time"] {
+  border: 1px solid var(--border-strong); border-radius: 9px; padding: 8px 10px;
+  font-size: 12.5px; background: var(--card);
+}
 
 .steps { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
 .step { display: flex; align-items: center; gap: 8px; }
@@ -396,21 +441,121 @@ input, select, textarea { font: inherit; color: inherit; }
 .tgl > i { display: block; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: margin .15s; }
 .tgl.on > i { margin-left: 16px; }
 
+/* ------------------------------------------------------ server tafsiloti */
+.back {
+  display: inline-block; margin-bottom: 14px; font-size: 12.5px; font-weight: 700;
+}
+.srv-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.srv-ic {
+  width: 54px; height: 54px; border-radius: 15px; background: var(--sidebar);
+  display: grid; place-items: center; flex: none;
+}
+
+/* Kiosklar — jadval o'rniga kartochkalar (dizayn) */
+.kgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(288px, 1fr)); gap: 14px; }
+.kcard {
+  background: var(--card); border-radius: 16px; box-shadow: var(--shadow);
+  padding: 15px 16px;
+}
+.kmetrics {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+  border-top: 1px solid var(--bg); padding-top: 11px;
+}
+.kml { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .5px; }
+.kmv { font-size: 15px; font-weight: 800; margin-top: 2px; }
+/* Kesh holati qatori: holat ko'rinib turadi va tugma yozuvli (avval faqat
+   ikonka edi — o'chiqmi/yoqiqmi bilinmasdi) */
+.krow {
+  display: flex; align-items: center; gap: 10px; margin-top: 12px;
+  background: var(--bg); border-radius: 12px; padding: 10px 12px;
+}
+
+/* ---------------------------------------------------------------- navbat */
+/* Ish qatori: ikonka · nom · SEGMENTLI progress · foiz · amal.
+   Har segment = bitta nishon obyekt, shuning uchun 12 obyektga tarqatishда
+   12 blok chiziladi va holat bir qarashda ko'rinadi. */
+.job {
+  display: flex; align-items: center; gap: 14px; padding: 14px 18px;
+  border-bottom: 1px solid var(--bg);
+}
+.job:last-child { border-bottom: 0; }
+.job-ic {
+  width: 38px; height: 38px; border-radius: 11px; background: var(--bg);
+  display: grid; place-items: center; flex: none;
+}
+.job-t { width: 210px; flex: none; min-width: 0; }
+.job-t .strong { font-size: 13px; line-height: 1.35; }
+.job-p { flex: 1; min-width: 120px; }
+.job-r { width: 96px; flex: none; text-align: right; }
+.job-a { width: 108px; flex: none; display: flex; justify-content: flex-end; }
+
+.segs { display: flex; gap: 4px; }
+.segs > .seg {
+  flex: 1; height: 16px; border-radius: 4px; background: var(--border-strong);
+  min-width: 4px; transition: background .3s;
+}
+.segs > .seg.done { background: var(--ok); }
+.segs > .seg.err { background: var(--err); }
+.segs > .seg.run {
+  background: var(--accent);
+  background-image: linear-gradient(115deg, rgba(255,255,255,.45) 25%, transparent 0,
+    transparent 50%, rgba(255,255,255,.45) 0, rgba(255,255,255,.45) 75%, transparent 0);
+  background-size: 14px 14px; animation: barFlow .9s linear infinite;
+}
+.job-legend { display: flex; gap: 14px; margin-top: 7px; flex-wrap: wrap; }
+.job-legend span { display: flex; align-items: center; gap: 5px; color: var(--muted);
+  font-size: 11px; font-weight: 700; }
+.dotm { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; }
+
+@media (max-width: 1180px) {
+  .job { flex-wrap: wrap; }
+  .job-t { width: auto; flex: 1; }
+  .job-p { flex-basis: 100%; order: 5; }
+}
+
 /* --------------------------------------------------------------- grafik */
 .chart { display: flex; align-items: flex-end; gap: 6px; height: 168px; padding-top: 8px; }
 .chart > div { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 6px; height: 100%; }
 .chart .b { width: 100%; background: var(--accent); border-radius: 6px 6px 3px 3px; min-height: 3px; }
+/* Siyrak ma'lumot: bo'sh kunlar ko'rinib turadi, lekin diqqatni tortmaydi */
+.chart .b.zero { background: var(--border); }
+.chart .cn { font-size: 10.5px; font-weight: 800; color: var(--muted); min-height: 13px; }
 .chart .d { font-size: 10px; color: var(--dim); white-space: nowrap; }
 
+/* Uzun ro'yxatlar (qurilmalar) — kartani cho'zib yubormasin */
+.scroll-y { max-height: 320px; overflow-y: auto; }
+
 /* ---------------------------------------------------------------- login */
-.login-wrap { display: grid; place-items: center; height: 100vh; background: var(--sidebar); }
-.login {
-  background: var(--card); border-radius: 20px; padding: 30px; width: 360px;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, .35);
+.login-wrap {
+  display: grid; place-items: center; min-height: 100vh; padding: 20px;
+  background: radial-gradient(1200px 600px at 20% 10%, #1E293B, var(--sidebar));
 }
-.login .side-mark { margin-bottom: 16px; }
-.login h1 { font-family: Unbounded, sans-serif; font-size: 19px; font-weight: 600; margin: 0 0 6px; }
-.login p { color: var(--muted); font-size: 12.5px; margin: 0 0 20px; }
+/* Ikki panel: chapda brend (to'q), o'ngda forma (oq) */
+.login-card {
+  display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
+  width: 100%; max-width: 880px; border-radius: 22px; overflow: hidden;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .45);
+}
+.login-brand {
+  background: var(--sidebar); padding: 34px 32px; display: flex;
+  flex-direction: column; min-height: 460px;
+}
+.login-h {
+  font-family: Unbounded, sans-serif; font-size: 26px; line-height: 1.25;
+  font-weight: 600; color: #fff; margin: 0 0 12px;
+}
+.login-p { color: var(--dim); font-size: 13px; line-height: 1.65; margin: 0; }
+.login-pt {
+  display: flex; align-items: center; gap: 10px; color: var(--light);
+  font-size: 12.5px; font-weight: 600; padding: 7px 0;
+}
+.login-spacer { flex: 1; min-height: 20px; }
+.login-form { background: var(--card); padding: 34px 32px; display: flex; flex-direction: column; justify-content: center; }
+.login-form h1 { font-family: Unbounded, sans-serif; font-size: 21px; font-weight: 600; margin: 0 0 6px; }
+.login-form p { color: var(--muted); font-size: 12.5px; margin: 0 0 20px; }
+.login-form code {
+  background: var(--bg); border-radius: 5px; padding: 1px 5px; font-size: 11.5px;
+}
 .err-box {
   background: var(--err-bg); color: var(--err-dark); border-radius: 10px;
   padding: 9px 12px; font-size: 12.5px; font-weight: 700; margin-bottom: 12px;
@@ -460,6 +605,12 @@ input, select, textarea { font: inherit; color: inherit; }
   .up-grid { grid-template-columns: 1fr; }
   .up-form { grid-template-columns: 1fr; }
   .cover-box { height: 168px; }
+  /* Login: bitta ustun — brend paneli qisqaradi (dizayn 1c) */
+  .login-card { grid-template-columns: 1fr; max-width: 420px; }
+  .login-brand { min-height: 0; padding: 24px 22px 20px; }
+  .login-h { font-size: 20px; }
+  .login-brand .login-p, .login-pt, .login-spacer { display: none; }
+  .login-form { padding: 24px 22px 28px; }
 }
 
 .burger {

@@ -169,6 +169,8 @@ Kiosk/
 │   └── nuxt.config.ts / package.json
 │
 ├── cloud/                       # BULUT (markaziy admin) — VPS'da ishlaydi
+│   ├── deploy/                  # systemd xizmati + nginx sozlamasi (VPS)
+│   ├── tools/set_password.py    # admin parolini almashtirish
 │   ├── main.py                  # /agent WS, /api/enroll, /dl/{token}, admin API
 │   ├── relay.py                 # ulangan agentlar + manifest/buyruq yuborish
 │   ├── db.py                    # servers, content, assignments (desired state),

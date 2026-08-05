@@ -1,9 +1,0 @@
-const UT = {
-  movie:     ["Kino", "Kino nomi", "Rejissor", "Afisha (poster)", "clapperboard"],
-  cartoon:   ["Multfilm", "Multfilm nomi", "Studiya", "Afisha (poster)", "star"],
-  music:     ["Musiqa", "Qo'shiq nomi", "Ijrochi", "Albom muqovasi", "music"],
-  book:      ["Kitob", "Kitob nomi", "Muallif", "Muqova", "bookOpen"],
-  audiobook: ["Audiokitob", "Audiokitob nomi", "Muallif", "Muqova", "headphones"],
-};
-
-const UTK = ["movie", "cartoon", "music", "book", "audiobook"];

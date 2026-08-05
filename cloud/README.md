@@ -26,13 +26,43 @@ Poyezdda oq IP yo'q, SIM-internet uzilib turadi. Shuning uchun bulut poyezdga
 
 Poyezdda port ochish, statik IP, VPN — **kerak emas**.
 
-## Ishga tushirish
+## Nega `web/` papkasida emas?
+
+Ikkisi turli mashinada, turli auditoriya uchun ishlaydi va hech qachon bir joyda
+turmaydi:
+
+| | `web/` | `cloud/static/` |
+|---|---|---|
+| Kim ko'radi | **yo'lovchi** | **super admin** |
+| Qayerda ishlaydi | poyezd serveri ichida (vagonda) | VPS (internetda) |
+| Internet | kerak emas | shart |
+| Nima bilan tarqaladi | `KioskServerSetup.exe` ichida | VPS'ga alohida qo'yiladi |
+| Texnologiya | Nuxt 4 + Node.js | statik JS, bulut FastAPI beradi |
+
+Super-admin panelini `web/` ga qo'yish xato bo'lardi: u **har bir poyezdga
+tarqatilardi** va vagon Wi-Fi'idan ochilib qolardi. Shuning uchun bulut paneli
+bulutning o'z jarayoni bilan keladi.
+
+## Ishga tushirish (lokal sinov)
 
 ```bash
 cd cloud
 pip install -r requirements.txt
 CLOUD_ADMIN_PASS=<parol> python main.py        # http://0.0.0.0:9000
 ```
+
+## VPS'ga qo'yish (ishlab chiqarish)
+
+`cloud/` — **mustaqil**: `server/`, `web/`, `kiosk/` papkalari kerak emas,
+PyQt ham, Node.js ham kerak emas (kodi ~1 MB, 3 ta Python paketi).
+
+Batafsil qadamlar, systemd xizmati va nginx sozlamasi:
+**[deploy/README.md](deploy/README.md)** — ichida `kioskcloud.service` va
+`nginx-kioskcloud.conf` tayyor holda.
+
+Qisqacha: `scp -r cloud root@VPS:/opt/kioskcloud` → venv + requirements →
+`kioskcloud.service` → nginx + certbot → poyezd serverlarida faqat domenni
+ko'rsatasiz.
 
 Parol berilmasa birinchi ishga tushishда tasodifiy parol yaratiladi va konsolga
 **bir marta** chiqariladi (keyin xesh ko'rinishida bazada saqlanadi).

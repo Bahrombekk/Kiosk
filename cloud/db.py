@@ -75,9 +75,13 @@ CREATE TABLE IF NOT EXISTS servers (
     stats_total   INTEGER DEFAULT 0,        -- serverdagi jami eventlar
     web_running   INTEGER DEFAULT 0,        -- veb ilova (poyezd.uz) ishlayaptimi
     settings      TEXT,                     -- serverning joriy sozlamalari (JSON)
+    license_info  TEXT,                     -- to'liq litsenziya holati (JSON)
     -- 0 = o'zi ro'yxatga turgan, admin TASDIQLAMAGAN. Tasdiqlanmagan serverga
     -- manifest ham, buyruq ham yuborilmaydi (faqat ro'yxatda ko'rinadi).
     approved      INTEGER DEFAULT 1,
+    -- 1 = nomni ADMIN qo'ygan. Bunda heartbeatдan kelgan hostname nomni
+    -- BOSIB KETMAYDI (aks holda har 30 soniyada "GPUPC" ga qaytardi).
+    name_custom   INTEGER DEFAULT 0,
     enrolled_at   TEXT DEFAULT (datetime('now')),
     last_seen     TEXT
 );
@@ -94,6 +98,7 @@ CREATE TABLE IF NOT EXISTS server_kiosks (
     disk_total INTEGER DEFAULT 0,
     disk_free  INTEGER DEFAULT 0,
     online     INTEGER DEFAULT 0,
+    cache_enabled INTEGER DEFAULT 1,      -- lokal kesh yoqilganmi
     last_seen  TEXT,
     PRIMARY KEY (server_id, device_id),
     FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
@@ -130,6 +135,81 @@ CREATE TABLE IF NOT EXISTS assignments (
     FOREIGN KEY (content_id) REFERENCES content(id) ON DELETE CASCADE
 );
 
+-- Reklama (bulut kutubxonasi). Fayl storage/ da sha256 bo'yicha.
+CREATE TABLE IF NOT EXISTS ads (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    title        TEXT,
+    subtitle     TEXT,
+    link_url     TEXT,
+    duration     INTEGER DEFAULT 10,     -- namoyish (soniya); video uchun 0
+    interval_min INTEGER,                -- har necha daqiqada (bo'sh = umumiy)
+    start_time   TEXT, end_time TEXT,    -- HH:MM oralig'i (bo'sh = doim)
+    placement    TEXT DEFAULT 'popup',   -- popup | banner | both
+    is_active    INTEGER DEFAULT 1,
+    sort_order   INTEGER DEFAULT 0,
+    media_sha    TEXT, media_name TEXT, media_size INTEGER DEFAULT 0,
+    created_at   TEXT DEFAULT (datetime('now'))
+);
+
+-- Reklama qaysi serverlarga tayinlangan (kontent bilan bir xil mantiq)
+CREATE TABLE IF NOT EXISTS ad_assignments (
+    server_id TEXT NOT NULL,
+    ad_id     INTEGER NOT NULL,
+    PRIMARY KEY (server_id, ad_id),
+    FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
+    FOREIGN KEY (ad_id) REFERENCES ads(id) ON DELETE CASCADE
+);
+
+-- Saytlar — barcha serverlarga bir xil ketadi (foydali havolalar ro'yxati)
+CREATE TABLE IF NOT EXISTS sites (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL,
+    url         TEXT NOT NULL,
+    description TEXT,
+    features    TEXT,
+    icon        TEXT,
+    sort_order  INTEGER DEFAULT 0
+);
+
+-- Bekatlar — HAR SERVER uchun alohida (har poyezdning o'z yo'nalishi bor)
+CREATE TABLE IF NOT EXISTS stops (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    server_id      TEXT NOT NULL,
+    name           TEXT NOT NULL,
+    arrival_time   TEXT,
+    departure_time TEXT,
+    latitude       REAL, longitude REAL,
+    distance_km    INTEGER,
+    sort_order     INTEGER DEFAULT 0,
+    direction      INTEGER DEFAULT 0,    -- 0 = borish, 1 = qaytish
+    FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_stops_srv ON stops(server_id, direction, sort_order);
+
+-- Brending: server bo'yicha almashtiriladigan rasmlar (hero banner va h.k.)
+CREATE TABLE IF NOT EXISTS branding (
+    server_id TEXT NOT NULL,
+    kind      TEXT NOT NULL,             -- hero (keyinchalik: logo, splash…)
+    sha       TEXT NOT NULL,
+    name      TEXT,
+    size      INTEGER DEFAULT 0,
+    PRIMARY KEY (server_id, kind),
+    FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
+);
+
+-- Brending KUTUBXONASI: yuklangan bannerlar shu yerda turadi (umumiy).
+-- `branding` jadvali esa har server uchun QAYSI BIRI faol ekanini saqlaydi —
+-- ya'ni mavzu tanlagandek almashtirib turish mumkin, eski rasm yo'qolmaydi.
+CREATE TABLE IF NOT EXISTS branding_library (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind       TEXT NOT NULL DEFAULT 'hero',
+    sha        TEXT NOT NULL,
+    name       TEXT,
+    size       INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    UNIQUE (kind, sha)
+);
+
 -- Tarqatish/buyruq ishlari
 CREATE TABLE IF NOT EXISTS jobs (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -160,6 +240,24 @@ CREATE TABLE IF NOT EXISTS job_targets (
     PRIMARY KEY (job_id, server_id),
     FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
 );
+
+-- KUTAYOTGAN buyruqlar: server offlayn bo'lsa yoki REJALASHTIRILGAN bo'lsa
+-- shu yerda turadi va vaqti kelganda (server onlayn bo'lganda) yuboriladi.
+-- Shuning uchun "saqlash" hech qachon yo'qolmaydi — internet tiklanishi yoki
+-- belgilangan sana/vaqt kelishi bilan o'zi qo'llanadi.
+CREATE TABLE IF NOT EXISTS pending_ops (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    server_id  TEXT NOT NULL,
+    kind       TEXT NOT NULL,           -- set_settings | web | kiosk | announce | cache_clear
+    payload    TEXT,                    -- JSON (buyruq maydonlari)
+    label      TEXT,                    -- panelда ko'rinadigan qisqa izoh
+    apply_at   TEXT,                    -- NULL = imkon bo'lishi bilan
+    state      TEXT DEFAULT 'pending',  -- pending | sent | cancelled
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    sent_at    TEXT,
+    FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_ops_srv ON pending_ops(server_id, state);
 
 -- Kiosklardan yig'ilgan foydalanish statistikasi (server batch qilib yuboradi)
 CREATE TABLE IF NOT EXISTS stats_events (
@@ -210,6 +308,19 @@ CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT
 );
+
+-- Panel foydalanuvchilari. Avval bitta global parol edi; u birinchi
+-- foydalanuvchi (`admin`) sifatida ko'chiriladi va ishlashda davom etadi.
+-- Login qo'shilgani uchun endi loglarда KIM qilgani ham ko'rinadi.
+CREATE TABLE IF NOT EXISTS admin_users (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    username   TEXT NOT NULL UNIQUE,
+    pass_hash  TEXT NOT NULL,
+    role       TEXT DEFAULT 'super',      -- super | operator (kelajakda)
+    is_active  INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    last_login TEXT
+);
 """
 
 
@@ -231,12 +342,25 @@ def init_db():
             if col not in scols:
                 conn.execute(f"ALTER TABLE servers ADD COLUMN {col}"
                              " INTEGER DEFAULT 0")
-        if "settings" not in scols:
-            conn.execute("ALTER TABLE servers ADD COLUMN settings TEXT")
+        for col in ("settings", "license_info"):
+            if col not in scols:
+                conn.execute(f"ALTER TABLE servers ADD COLUMN {col} TEXT")
         if "approved" not in scols:
             # Mavjud serverlar token bilan ulangan — ular tasdiqlangan hisoblanadi
             conn.execute("ALTER TABLE servers ADD COLUMN approved"
                          " INTEGER DEFAULT 1")
+        if "name_custom" not in scols:
+            conn.execute("ALTER TABLE servers ADD COLUMN name_custom"
+                         " INTEGER DEFAULT 0")
+        kcols = {r["name"] for r in
+                 conn.execute("PRAGMA table_info(server_kiosks)").fetchall()}
+        if "cache_enabled" not in kcols:
+            conn.execute("ALTER TABLE server_kiosks ADD COLUMN cache_enabled"
+                         " INTEGER DEFAULT 1")
+        if "label" not in kcols:
+            # Kioskning odam beradigan nomi ("1-vagon, o'ng tomon"). Faqat
+            # bulutda saqlanadi — heartbeat uni bosib ketmaydi.
+            conn.execute("ALTER TABLE server_kiosks ADD COLUMN label TEXT")
         conn.commit()
     finally:
         conn.close()
@@ -254,6 +378,73 @@ def set_setting(key, value):
         c.execute("INSERT INTO settings (key,value) VALUES (?,?) "
                   "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                   (key, value))
+
+
+# ------------------------------------------------------ foydalanuvchilar
+DEFAULT_USER = "admin"
+
+
+def migrate_legacy_password():
+    """Eski bitta global parolni `admin_users` ga ko'chiradi (bir marta).
+
+    Shu sababli yangilanishdan keyin ham AYNI parol ishlaydi — faqat endi
+    login maydoni bor (bo'sh qoldirilsa `admin` deb qabul qilinadi)."""
+    with _conn() as c:
+        n = c.execute("SELECT COUNT(*) n FROM admin_users").fetchone()["n"]
+        if n:
+            return
+        row = c.execute("SELECT value FROM settings WHERE key='admin_pass_hash'"
+                        ).fetchone()
+        if row and row["value"]:
+            c.execute("INSERT INTO admin_users (username,pass_hash,role) "
+                      "VALUES (?,?,'super')", (DEFAULT_USER, row["value"]))
+            log.info("Eski parol '%s' foydalanuvchisiga ko'chirildi", DEFAULT_USER)
+
+
+def get_user(username):
+    with _conn() as c:
+        row = c.execute("SELECT * FROM admin_users WHERE username=? "
+                        "AND is_active=1", (str(username or "").strip(),)
+                        ).fetchone()
+    return dict(row) if row else None
+
+
+def get_users():
+    with _conn() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT id,username,role,is_active,created_at,last_login "
+            "FROM admin_users ORDER BY id").fetchall()]
+
+
+def upsert_user(username, password=None, role="super", is_active=1):
+    """Foydalanuvchi qo'shadi yoki parolini/rolini yangilaydi."""
+    username = str(username).strip()
+    if not username:
+        raise ValueError("login bo'sh")
+    with _conn() as c:
+        cur = c.execute("SELECT id FROM admin_users WHERE username=?",
+                        (username,)).fetchone()
+        if cur:
+            if password:
+                c.execute("UPDATE admin_users SET pass_hash=?, role=?, "
+                          "is_active=? WHERE id=?",
+                          (hash_secret(password), role, is_active, cur["id"]))
+            else:
+                c.execute("UPDATE admin_users SET role=?, is_active=? WHERE id=?",
+                          (role, is_active, cur["id"]))
+            return cur["id"]
+        if not password:
+            raise ValueError("yangi foydalanuvchi uchun parol kerak")
+        c2 = c.execute("INSERT INTO admin_users (username,pass_hash,role,is_active)"
+                       " VALUES (?,?,?,?)",
+                       (username, hash_secret(password), role, is_active))
+        return c2.lastrowid
+
+
+def touch_user(user_id):
+    with _conn() as c:
+        c.execute("UPDATE admin_users SET last_login=? WHERE id=?",
+                  (now(), user_id))
 
 
 # ------------------------------------------------------- parol xeshlash
@@ -350,11 +541,39 @@ def get_servers():
     return [dict(r) for r in rows]
 
 
+def rename_server(server_id, name=None, route=None, note=None):
+    """Serverga ADMIN nom beradi — shundan keyin heartbeatдagi hostname nomni
+    o'zgartirmaydi (`name_custom=1`)."""
+    sets, args = [], []
+    if name is not None:
+        sets += ["name=?", "name_custom=1"]
+        args.append(name)
+    if route is not None:
+        sets.append("route=?")
+        args.append(route)
+    if note is not None:
+        sets.append("note=?")
+        args.append(note)
+    if not sets:
+        return
+    with _conn() as c:
+        c.execute(f"UPDATE servers SET {', '.join(sets)} WHERE id=?",
+                  (*args, server_id))
+
+
+def set_kiosk_label(server_id, device_id, label):
+    """Kioskка odam o'qiydigan nom beradi (faqat bulutda ko'rinadi)."""
+    with _conn() as c:
+        c.execute("UPDATE server_kiosks SET label=? WHERE server_id=? "
+                  "AND device_id=?", (label, server_id, device_id))
+
+
 def update_server(server_id, **fields):
     allowed = ("name", "route", "note", "version", "kiosks_total", "kiosks_online",
                "disk_total", "disk_free", "license", "license_note",
                "applied_rev", "queue_active", "queue_pending", "last_seen",
-               "stats_pending", "stats_total", "web_running", "settings")
+               "stats_pending", "stats_total", "web_running", "settings",
+               "license_info")
     data = {k: v for k, v in fields.items() if k in allowed}
     if not data:
         return
@@ -400,6 +619,7 @@ def replace_server_kiosks(server_id, kiosks):
                      str(k.get("platform") or "")[:64],
                      to_int(k.get("cached_n")), to_int(k.get("disk_total")),
                      to_int(k.get("disk_free")), 1 if k.get("online") else 0,
+                     0 if k.get("cache_enabled") == 0 else 1,
                      str(k.get("last_seen") or "")[:32]))
     with _conn() as c:
         # Ro'yxatda yo'q kiosk o'chirilmaydi (tarix saqlanadi) — faqat
@@ -407,13 +627,14 @@ def replace_server_kiosks(server_id, kiosks):
         c.execute("UPDATE server_kiosks SET online=0 WHERE server_id=?", (server_id,))
         c.executemany(
             "INSERT INTO server_kiosks (server_id,device_id,kiosk_no,room,ip,"
-            "platform,cached_n,disk_total,disk_free,online,last_seen) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?) "
+            "platform,cached_n,disk_total,disk_free,online,cache_enabled,"
+            "last_seen) VALUES (?,?,?,?,?,?,?,?,?,?,?,?) "
             "ON CONFLICT(server_id,device_id) DO UPDATE SET "
             "kiosk_no=excluded.kiosk_no, room=excluded.room, ip=excluded.ip, "
             "platform=excluded.platform, cached_n=excluded.cached_n, "
             "disk_total=excluded.disk_total, disk_free=excluded.disk_free, "
-            "online=excluded.online, last_seen=excluded.last_seen", rows)
+            "online=excluded.online, cache_enabled=excluded.cache_enabled, "
+            "last_seen=excluded.last_seen", rows)
     return len(rows)
 
 
@@ -508,7 +729,8 @@ def content_deploy_counts():
 
 
 def shas_in_use():
-    """Bazada ishlatilayotgan barcha sha256'lar (yetim blob tozalash uchun)."""
+    """Bazada ishlatilayotgan barcha sha256'lar (yetim blob tozalash uchun).
+    Kontent VA reklama fayllari hisobga olinadi."""
     out = set()
     with _conn() as c:
         for col in ("media_sha", "cover_sha", "text_sha"):
@@ -516,7 +738,224 @@ def shas_in_use():
                     f"SELECT DISTINCT {col} s FROM content WHERE {col} IS NOT NULL"):
                 if r["s"]:
                     out.add(r["s"])
+        for r in c.execute("SELECT DISTINCT media_sha s FROM ads "
+                           "WHERE media_sha IS NOT NULL"):
+            if r["s"]:
+                out.add(r["s"])
+        for r in c.execute("SELECT DISTINCT sha s FROM branding "
+                           "WHERE sha IS NOT NULL"):
+            if r["s"]:
+                out.add(r["s"])
+        # Kutubxonadagi bannerlar ham saqlanadi (faol bo'lmasa ham — keyin
+        # qayta tanlash mumkin bo'lishi kerak)
+        for r in c.execute("SELECT DISTINCT sha s FROM branding_library "
+                           "WHERE sha IS NOT NULL"):
+            if r["s"]:
+                out.add(r["s"])
     return out
+
+
+# ----------------------------------------------------- reklama / sayt / bekat
+ADS_COLS = ["title", "subtitle", "link_url", "duration", "interval_min",
+            "start_time", "end_time", "placement", "is_active", "sort_order",
+            "media_sha", "media_name", "media_size"]
+SITE_COLS = ["name", "url", "description", "features", "icon", "sort_order"]
+STOP_COLS = ["server_id", "name", "arrival_time", "departure_time", "latitude",
+             "longitude", "distance_km", "sort_order", "direction"]
+
+
+def _ins(table, cols, data):
+    use = [c for c in cols if c in data]
+    if not use:
+        raise ValueError(f"{table}: yoziladigan ustun yo'q")
+    ph = ",".join("?" * len(use))
+    with _conn() as c:
+        cur = c.execute(f"INSERT INTO {table} ({','.join(use)}) VALUES ({ph})",
+                        [data[k] for k in use])
+        return cur.lastrowid
+
+
+def _upd(table, row_id, cols, data):
+    data = {k: v for k, v in data.items() if k in cols}
+    if not data:
+        return
+    sets = ", ".join(f"{k}=?" for k in data)
+    with _conn() as c:
+        c.execute(f"UPDATE {table} SET {sets} WHERE id=?",
+                  (*data.values(), row_id))
+
+
+def _del(table, row_id):
+    with _conn() as c:
+        c.execute(f"DELETE FROM {table} WHERE id=?", (row_id,))
+
+
+# --- Reklama
+def add_ad(data):
+    return _ins("ads", ADS_COLS, data)
+
+
+def update_ad(ad_id, data):
+    _upd("ads", ad_id, ADS_COLS, data)
+
+
+def delete_ad(ad_id):
+    _del("ads", ad_id)
+
+
+def get_ads():
+    with _conn() as c:
+        rows = c.execute("SELECT * FROM ads ORDER BY sort_order, id").fetchall()
+        assigned = {}
+        for r in c.execute("SELECT ad_id, server_id FROM ad_assignments"):
+            assigned.setdefault(r["ad_id"], []).append(r["server_id"])
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["servers"] = assigned.get(d["id"], [])
+        d["deployed"] = len(d["servers"])
+        out.append(d)
+    return out
+
+
+def get_ad_by_id(ad_id):
+    with _conn() as c:
+        row = c.execute("SELECT * FROM ads WHERE id=?", (ad_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def assign_ads(server_ids, ad_ids):
+    pairs = [(s, a) for s in server_ids for a in ad_ids]
+    if not pairs:
+        return 0
+    with _conn() as c:
+        c.executemany("INSERT OR IGNORE INTO ad_assignments (server_id,ad_id) "
+                      "VALUES (?,?)", pairs)
+    bump_rev(server_ids)
+    return len(pairs)
+
+
+def unassign_ads(server_ids, ad_ids):
+    pairs = [(s, a) for s in server_ids for a in ad_ids]
+    if not pairs:
+        return 0
+    with _conn() as c:
+        c.executemany("DELETE FROM ad_assignments WHERE server_id=? AND ad_id=?",
+                      pairs)
+    bump_rev(server_ids)
+    return len(pairs)
+
+
+def ad_servers(ad_id):
+    with _conn() as c:
+        rows = c.execute("SELECT server_id FROM ad_assignments WHERE ad_id=?",
+                         (ad_id,)).fetchall()
+    return [r["server_id"] for r in rows]
+
+
+def desired_ads(server_id):
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT a.* FROM ads a JOIN ad_assignments x ON x.ad_id=a.id "
+            "WHERE x.server_id=? ORDER BY a.sort_order, a.id",
+            (server_id,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def ad_assigned_ids(server_id):
+    with _conn() as c:
+        rows = c.execute("SELECT ad_id FROM ad_assignments WHERE server_id=?",
+                         (server_id,)).fetchall()
+    return [r["ad_id"] for r in rows]
+
+
+# --- Saytlar (barcha serverlarga bir xil)
+def add_site(data):
+    sid = _ins("sites", SITE_COLS, data)
+    bump_all_rev()
+    return sid
+
+
+def update_site(site_id, data):
+    _upd("sites", site_id, SITE_COLS, data)
+    bump_all_rev()
+
+
+def delete_site(site_id):
+    _del("sites", site_id)
+    bump_all_rev()
+
+
+def get_sites():
+    with _conn() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT * FROM sites ORDER BY sort_order, id").fetchall()]
+
+
+def bump_all_rev():
+    """Barcha serverlarning rev'ini oshiradi (sayt ro'yxati hammaga tegishli)."""
+    with _conn() as c:
+        c.execute("UPDATE servers SET desired_rev=desired_rev+1")
+
+
+# --- Bekatlar (har server uchun alohida)
+def add_stop(data):
+    sid = _ins("stops", STOP_COLS, data)
+    bump_rev([data["server_id"]])
+    return sid
+
+
+def update_stop(stop_id, data):
+    with _conn() as c:
+        row = c.execute("SELECT server_id FROM stops WHERE id=?",
+                        (stop_id,)).fetchone()
+    _upd("stops", stop_id, STOP_COLS, data)
+    if row:
+        bump_rev([row["server_id"]])
+
+
+def delete_stop(stop_id):
+    with _conn() as c:
+        row = c.execute("SELECT server_id FROM stops WHERE id=?",
+                        (stop_id,)).fetchone()
+    _del("stops", stop_id)
+    if row:
+        bump_rev([row["server_id"]])
+
+
+def get_stops(server_id, direction=None):
+    sql = "SELECT * FROM stops WHERE server_id=?"
+    args = [server_id]
+    if direction in (0, 1):
+        sql += " AND direction=?"
+        args.append(direction)
+    sql += " ORDER BY direction, sort_order, id"
+    with _conn() as c:
+        return [dict(r) for r in c.execute(sql, args).fetchall()]
+
+
+def replace_stops(server_id, stops):
+    """Serverning bekatlar jadvalini to'liq almashtiradi (jadval kiritish
+    odatda to'liq qayta yozish bilan bo'ladi — bittalab tahrirlashdan qulay)."""
+    rows = []
+    for i, s in enumerate(stops[:200]):
+        if not isinstance(s, dict) or not str(s.get("name") or "").strip():
+            continue
+        rows.append((server_id, str(s["name"])[:120],
+                     str(s.get("arrival_time") or "")[:8],
+                     str(s.get("departure_time") or "")[:8],
+                     s.get("latitude"), s.get("longitude"),
+                     to_int(s.get("distance_km")),
+                     to_int(s.get("sort_order"), i),
+                     1 if to_int(s.get("direction")) == 1 else 0))
+    with _conn() as c:
+        c.execute("DELETE FROM stops WHERE server_id=?", (server_id,))
+        c.executemany(
+            "INSERT INTO stops (server_id,name,arrival_time,departure_time,"
+            "latitude,longitude,distance_km,sort_order,direction) "
+            "VALUES (?,?,?,?,?,?,?,?,?)", rows)
+    bump_rev([server_id])
+    return len(rows)
 
 
 # ----------------------------------------------------- desired state (rev)
@@ -596,6 +1035,141 @@ def servers_with_content(content_id):
     return [r["server_id"] for r in rows]
 
 
+# ------------------------------------------------------------------ brending
+BRANDING_KINDS = ("hero",)
+
+
+def set_branding(server_id, kind, sha, name, size):
+    with _conn() as c:
+        c.execute("INSERT INTO branding (server_id,kind,sha,name,size) "
+                  "VALUES (?,?,?,?,?) ON CONFLICT(server_id,kind) DO UPDATE SET "
+                  "sha=excluded.sha, name=excluded.name, size=excluded.size",
+                  (server_id, kind, sha, name, size))
+    bump_rev([server_id])
+
+
+def clear_branding(server_id, kind):
+    with _conn() as c:
+        c.execute("DELETE FROM branding WHERE server_id=? AND kind=?",
+                  (server_id, kind))
+    bump_rev([server_id])
+
+
+def get_branding(server_id):
+    with _conn() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT * FROM branding WHERE server_id=?", (server_id,)).fetchall()]
+
+
+def branding_shas():
+    with _conn() as c:
+        return {r["sha"] for r in c.execute(
+            "SELECT DISTINCT sha FROM branding WHERE sha IS NOT NULL")}
+
+
+# --- Banner kutubxonasi (yuklangan rasmlar saqlanib turadi)
+def lib_add(kind, sha, name, size):
+    """Kutubxonaga qo'shadi (bir xil rasm ikki marta yozilmaydi) va id qaytaradi."""
+    with _conn() as c:
+        row = c.execute("SELECT id FROM branding_library WHERE kind=? AND sha=?",
+                        (kind, sha)).fetchone()
+        if row:
+            return row["id"]
+        cur = c.execute("INSERT INTO branding_library (kind,sha,name,size) "
+                        "VALUES (?,?,?,?)", (kind, sha, name, size))
+        return cur.lastrowid
+
+
+def lib_list(kind="hero"):
+    with _conn() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT * FROM branding_library WHERE kind=? ORDER BY id DESC",
+            (kind,)).fetchall()]
+
+
+def lib_get(lib_id):
+    with _conn() as c:
+        row = c.execute("SELECT * FROM branding_library WHERE id=?",
+                        (lib_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def lib_delete(lib_id):
+    """Kutubxonadan o'chiradi. Qaysi serverlarda faol bo'lса — ular
+    standart rasmga qaytadi (server_id ro'yxati qaytariladi)."""
+    row = lib_get(lib_id)
+    if not row:
+        return []
+    with _conn() as c:
+        srv = [r["server_id"] for r in c.execute(
+            "SELECT server_id FROM branding WHERE kind=? AND sha=?",
+            (row["kind"], row["sha"])).fetchall()]
+        c.execute("DELETE FROM branding WHERE kind=? AND sha=?",
+                  (row["kind"], row["sha"]))
+        c.execute("DELETE FROM branding_library WHERE id=?", (lib_id,))
+    bump_rev(srv)
+    return srv
+
+
+def lib_shas():
+    with _conn() as c:
+        return {r["sha"] for r in c.execute(
+            "SELECT DISTINCT sha FROM branding_library").fetchall()}
+
+
+# -------------------------------------------- kutayotgan/rejalashtirilgan ish
+def queue_op(server_id, kind, payload, label="", apply_at=None):
+    """Buyruqni navbatga qo'yadi. `apply_at` (YYYY-MM-DD HH:MM:SS) berilса —
+    o'sha vaqtdan keyin, aks holda server onlayn bo'lishi bilan yuboriladi."""
+    with _conn() as c:
+        cur = c.execute(
+            "INSERT INTO pending_ops (server_id,kind,payload,label,apply_at) "
+            "VALUES (?,?,?,?,?)",
+            (server_id, kind, json.dumps(payload or {}, ensure_ascii=False),
+             label[:200], apply_at))
+        return cur.lastrowid
+
+
+def due_ops(server_id=None):
+    """Yuborish vaqti KELGAN ishlar (rejasi yo'q yoki vaqti o'tgan)."""
+    sql = ("SELECT * FROM pending_ops WHERE state='pending' "
+           "AND (apply_at IS NULL OR apply_at <= ?)")
+    args = [now()]
+    if server_id:
+        sql += " AND server_id=?"
+        args.append(server_id)
+    sql += " ORDER BY id"
+    with _conn() as c:
+        return [dict(r) for r in c.execute(sql, args).fetchall()]
+
+
+def get_pending_ops(server_id):
+    """Panelда ko'rsatish uchun — hali yuborilmagan hammasi."""
+    with _conn() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT * FROM pending_ops WHERE server_id=? AND state='pending' "
+            "ORDER BY COALESCE(apply_at,'0'), id", (server_id,)).fetchall()]
+
+
+def mark_op_sent(op_id):
+    with _conn() as c:
+        c.execute("UPDATE pending_ops SET state='sent', sent_at=? WHERE id=?",
+                  (now(), op_id))
+
+
+def cancel_op(op_id):
+    with _conn() as c:
+        c.execute("UPDATE pending_ops SET state='cancelled' WHERE id=? "
+                  "AND state='pending'", (op_id,))
+
+
+def pending_op_count(server_id):
+    with _conn() as c:
+        row = c.execute("SELECT COUNT(*) n FROM pending_ops WHERE server_id=? "
+                        "AND state='pending'", (server_id,)).fetchone()
+    return row["n"] if row else 0
+
+
 # ------------------------------------------------------------------ ishlar
 def create_job(kind, title, server_ids, content_ids=(), opts=None):
     with _conn() as c:
@@ -671,6 +1245,22 @@ def get_jobs(limit=40, active_only=False):
                 (j["id"],)).fetchall()]
             out.append(j)
     return out
+
+
+def retry_job(job_id):
+    """Xato bo'lgan nishonlarni qaytadan navbatga qo'yadi va nishon
+    server_id'larini qaytaradi (chaqiruvchi manifest yuboradi)."""
+    with _conn() as c:
+        rows = c.execute("SELECT server_id FROM job_targets WHERE job_id=? "
+                         "AND state='error'", (job_id,)).fetchall()
+        sids = [r["server_id"] for r in rows]
+        if not sids:
+            return []
+        c.execute("UPDATE job_targets SET state='pending', pct=0, error=NULL "
+                  "WHERE job_id=? AND state='error'", (job_id,))
+        c.execute("UPDATE jobs SET state='running', done_at=NULL WHERE id=?",
+                  (job_id,))
+    return sids
 
 
 def cancel_job(job_id):
@@ -872,6 +1462,16 @@ def server_sessions_today(server_id):
             "WHERE server_id=? AND event='session_start' AND ts >= ?",
             (server_id, today)).fetchone()
     return row["n"] if row else 0
+
+
+def kiosk_session_counts(server_id, days=1):
+    """Har bir kiosk bo'yicha sessiya soni (kiosk kartochkasida ko'rinadi)."""
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT device_id, COUNT(DISTINCT session) n FROM stats_events "
+            "WHERE server_id=? AND event='session_start' AND ts >= ? "
+            "GROUP BY device_id", (server_id, _since(days))).fetchall()
+    return {r["device_id"]: r["n"] for r in rows}
 
 
 def server_sessions_list(server_id, limit=40):

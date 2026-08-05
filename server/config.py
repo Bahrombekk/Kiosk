@@ -25,6 +25,9 @@ MEDIA_DIR = os.path.join(CONTENT_DIR, "media")
 COVERS_DIR = os.path.join(CONTENT_DIR, "covers")
 BOOKS_DIR = os.path.join(CONTENT_DIR, "books")
 ADS_DIR = os.path.join(CONTENT_DIR, "ads")
+# Brending: bulutdan almashtiriladigan rasmlar (masalan asosiy sahifa hero
+# banneri). Bo'sh bo'lsa ilovadagi standart rasm ishlatiladi.
+BRANDING_DIR = os.path.join(CONTENT_DIR, "branding")
 
 # Server manzili
 HOST = os.environ.get("KIOSK_HOST", "0.0.0.0")

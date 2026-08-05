@@ -5,9 +5,11 @@ Bu papkada **dizayn manbalari** turadi — ishlaydigan kod emas, faqat namuna
 
 | Fayl | Nima |
 |---|---|
-| `kiosk-cloud-admin.dc.html` | [`cloud/`](../../cloud/) bulut admin panelining dizayn prototipi |
+| `kiosk-cloud-admin.dc.html` | [`cloud/`](../../cloud/) bulut panelining dizayn prototipi (2026-08-04, 2-versiya) |
+| `kiosk-cloud-login.dc.html` | kirish ekrani: 2 panel + mobil, 4 holat, foydalanuvchilar taklifi |
 | `support.js` | prototip runtime'i (dizayn vositasi generatsiya qilgan — tahrirlanmaydi) |
 | `cloud-admin-upload-modal.png` | "Kontent yuklash" modali skrinshoti |
+| `cloud-admin-queue.png` | Navbat sahifasi: holat bo'yicha guruhlash + segmentli progress |
 
 ## Prototipni ko'rish
 
