@@ -346,7 +346,8 @@ class AdManager(QObject):
         super().__init__(window)
         self.win = window           # MainWindow (parent + holat tekshiruvlari)
         self.api = api
-        self.ads = []
+        self.ads = []               # popup kanaliga tegishli reklamalar
+        self.media_ads = []         # kino ichida (media) chiqadigan reklamalar
         self._last_shown = {}       # ad_id -> monotonic vaqt (oxirgi ko'rsatilgan)
         self._next_slot_ts = None   # keyingi popup sloti (monotonic)
         self._last_close_ts = 0     # oxirgi popup yopilgan vaqt (MIN_GAP uchun)
@@ -405,11 +406,25 @@ class AdManager(QObject):
         self._aloader.done.connect(self._on_ads)
         self._aloader.start()
 
+    @staticmethod
+    def channels(ad):
+        """Reklama joylashuvi (kanallar to'plami). Eski qiymatlar ham mos:
+        'popup'/'banner' → o'zi; 'both' → popup+banner; vergulli ro'yxat ham
+        ('media', 'media,banner' ...). Bo'sh — popup (standart)."""
+        s = str(ad.get("placement") or "").strip().lower()
+        if not s:
+            return {"popup"}
+        if s == "both":
+            return {"popup", "banner"}
+        parts = {p.strip() for p in s.split(",") if p.strip()}
+        return (parts & {"popup", "banner", "media"}) or {"popup"}
+
     def _on_ads(self, ads):
-        # Banner-only reklamalar popup bo'lib chiqmaydi — ular bosh sahifa
-        # bannerida aylanadi (screens/home.py); "both" ikkala joyda ham.
-        self.ads = [a for a in ads if a.get("media_path")
-                    and (a.get("placement") or "popup") in ("popup", "both")]
+        # Kanallar bo'yicha ajratamiz: popup — qalqib chiquvchi slot; media —
+        # kino ichida (pre/mid/end). Banner esa screens/home.py da alohida.
+        withmedia = [a for a in ads if a.get("media_path")]
+        self.ads = [a for a in withmedia if "popup" in self.channels(a)]
+        self.media_ads = [a for a in withmedia if "media" in self.channels(a)]
 
     # ---- Takrorlanish oralig'i ----
     @staticmethod
@@ -462,6 +477,16 @@ class AdManager(QObject):
         nm = now.hour * 60 + now.minute
         out = [a for a in self.ads if self._in_window(a, nm)]
         if not _HAS_MM:   # multimedia yo'q — video reklamalarni tashlab ketamiz
+            out = [a for a in out if a.get("media_type") != "video"]
+        return out
+
+    def _eligible_media(self):
+        """Kino ichida (media) ko'rsatiladigan nomzodlar — vaqt oynasi + turi
+        bo'yicha filtrlangan media-kanal reklamalari."""
+        now = datetime.now()
+        nm = now.hour * 60 + now.minute
+        out = [a for a in self.media_ads if self._in_window(a, nm)]
+        if not _HAS_MM:
             out = [a for a in out if a.get("media_type") != "video"]
         return out
 
@@ -520,7 +545,9 @@ class AdManager(QObject):
         hit = cache.load_json("settings")
         raw = (hit[0].get("ad_algorithm") or "") if hit else ""
         sel = {x.strip() for x in raw.split(",") if x.strip()}
-        return sel & {"weighted", "queue", "random", "media"}
+        # 'media' endi GLOBAL algoritm emas — har reklamaning O'Z joylashuvida
+        # (placement) belgilanadi. Eski sozlamada qolsa ham e'tiborsiz.
+        return sel & {"weighted", "queue", "random"}
 
     @classmethod
     def _popup_algorithm(cls):
@@ -533,10 +560,10 @@ class AdManager(QObject):
                 return a
         return None if sel else "weighted"
 
-    @classmethod
-    def _media_enabled(cls):
-        """Kino atrofida (pre/mid/end) reklama ko'rsatilsinmi."""
-        return "media" in cls._algorithms()
+    def _media_enabled(self):
+        """Kino atrofida (pre/mid/end) reklama ko'rsatilsinmi — endi shunchaki
+        'media' joylashuvига belgilangan reklama bor-yo'qligiга qarab."""
+        return bool(self.media_ads)
 
     @staticmethod
     def _media_slots():
@@ -592,8 +619,8 @@ class AdManager(QObject):
 
         Tanlov — aylanma navbat (eng uzoq ko'rsatilmagani), 'media' algoritmi
         belgilangandagina ishlaydi."""
-        log.debug("media_ad kirdi: stage=%s, enabled=%s, active=%s, ads=%d",
-                  stage, self._media_enabled(), self._active, len(self.ads))
+        log.debug("media_ad kirdi: stage=%s, enabled=%s, active=%s, media_ads=%d",
+                  stage, self._media_enabled(), self._active, len(self.media_ads))
         if not self._media_enabled():
             log.info("Media reklama (%s) o'tkazildi: 'media' algoritmi yoqilmagan",
                      stage)
@@ -618,19 +645,19 @@ class AdManager(QObject):
             log.info("Media reklama (pre) o'tkazildi: endigina yopildi (<3s)")
             on_done()
             return
-        cands = sorted(self._eligible(),
+        cands = sorted(self._eligible_media(),
                        key=lambda a: (self._last_shown.get(a["id"]) or 0,
                                       a.get("id") or 0))
-        if len(cands) < len(self.ads):
+        if len(cands) < len(self.media_ads):
             # Diagnostika: nimaga ba'zi reklamalar chiqmayapti? — vaqt
             # oralig'i (start/end_time) yoki video/multimedia filtri.
             log.info("Media reklama (%s): %d/%d mos — qolganlari vaqt "
                      "oralig'i/turi bo'yicha filtrlangan",
-                     stage, len(cands), len(self.ads))
+                     stage, len(cands), len(self.media_ads))
         if not cands:
             log.info("Media reklama (%s) o'tkazildi: mos reklama yo'q "
-                     "(%d ta reklama, hammasi banner/vaqt oralig'idan tashqari?)",
-                     stage, len(self.ads))
+                     "(%d ta media reklama, vaqt oralig'idan tashqari?)",
+                     stage, len(self.media_ads))
             on_done()
             return
         # Qatlam mustaqil top-level oyna — uni KIOSK OYNASI (self.win) ustiga

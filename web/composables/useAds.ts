@@ -68,18 +68,29 @@ export function useAds() {
     return nowMin <= (end as number);
   }
 
+  // Joylashuv — kanallar to'plami (kiosk bilan bir xil). Eski qiymatlar mos:
+  // 'both' → popup+banner; vergulli ro'yxat ham ('media', 'media,banner' ...).
+  function channelsOf(a: Ad): Set<string> {
+    const s = String(a.placement ?? "").trim().toLowerCase();
+    if (!s) return new Set(["popup"]);
+    if (s === "both") return new Set(["popup", "banner"]);
+    const parts = s.split(",").map((x) => x.trim()).filter(Boolean);
+    const valid = parts.filter((p) => ["popup", "banner", "media"].includes(p));
+    return new Set(valid.length ? valid : ["popup"]);
+  }
+
   const bannerAds = computed(() =>
     (ads.value ?? []).filter(
       (a) =>
-        (a.placement === "banner" || a.placement === "both") &&
-        a.mediaType !== "video" &&
-        inWindow(a),
+        channelsOf(a).has("banner") && a.mediaType !== "video" && inWindow(a),
     ),
   );
   const popupAds = computed(() =>
-    (ads.value ?? []).filter(
-      (a) => (a.placement === "popup" || a.placement === "both") && inWindow(a),
-    ),
+    (ads.value ?? []).filter((a) => channelsOf(a).has("popup") && inWindow(a)),
+  );
+  // Kino ichida (pre-roll) — 'media' joylashuvига belgilangan reklamalar.
+  const mediaAds = computed(() =>
+    (ads.value ?? []).filter((a) => channelsOf(a).has("media") && inWindow(a)),
   );
 
   return {
@@ -91,6 +102,7 @@ export function useAds() {
     intervalMs,
     bannerAds,
     popupAds,
+    mediaAds,
     ready,
   };
 }

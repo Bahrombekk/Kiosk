@@ -235,18 +235,21 @@ class SettingsPageMixin:
         algo_box = QVBoxLayout(algo_holder)
         algo_box.setContentsMargins(0, 0, 0, 0)
         algo_box.setSpacing(8)
+        # Faqat POPUP rotatsiyasi usullari (bir-birini istisno qiladi). «Media»
+        # endi bu yerda EMAS — har reklamaning O'Z joylashuvida (Reklama bo'limi
+        # → «Joylashuv» → «Kino ichida») belgilanadi.
         for key, text in (
                 ("weighted", "Vaznli — har reklamaning o'z oralig'i hisobga olinadi"),
                 ("queue", "Navbat bilan — har oraliqda ro'yxatdagi keyingisi"),
-                ("random", "Tasodifiy — har safar aralash tartibda"),
-                ("media", "Media — kino boshida, o'rtasida va oxirida")):
+                ("random", "Tasodifiy — har safar aralash tartibda")):
             cb = QCheckBox(text)
             self.s_ad_algos[key] = cb
             algo_box.addWidget(cb)
         clay.addLayout(self._field(
-            "Reklama algoritmlari (bir nechtasini tanlash mumkin)", algo_holder))
+            "Popup reklama tartibi (bittasini tanlang)", algo_holder))
 
-        # «Media» tanlangan bo'lsa — kino ichida qaysi joylarda chiqsin
+        # Kino ichida reklama QAYSI joylarda chiqsin (media joylashuvли
+        # reklamalar uchun — har kino boshi/o'rtasi/oxiri).
         self.s_media_slots = QComboBox()
         for label, val in (
                 ("Boshida, o'rtasida va oxirida", "pre,mid,end"),
@@ -255,24 +258,16 @@ class SettingsPageMixin:
             self.s_media_slots.addItem(label, val)
         no_wheel(self.s_media_slots)   # scroll paytida adashib o'zgarmasin
         clay.addLayout(self._field(
-            "Media reklama joylashuvi (kino ichida)", self.s_media_slots))
-
-        def _upd_media_slots():
-            self.s_media_slots.setEnabled(self.s_ad_algos["media"].isChecked())
-        self.s_ad_algos["media"].toggled.connect(lambda _c: _upd_media_slots())
-        _upd_media_slots()
+            "Kino ichида reklama joylashuvi", self.s_media_slots))
 
         ad_hint = QLabel(
-            "Oraliq — popup chastotasi: har shu daqiqada BITTA reklama "
-            "chiqadi. «Vaznli»da har reklamaning o'z oralig'i (Reklama "
-            "bo'limida) vazn bo'lib xizmat qiladi; «Navbat bilan» va "
-            "«Tasodifiy»da reklamalar teng aylanadi. Bu uchovidan bittasi "
-            "ishlatiladi (bir nechtasi belgilansa — yuqoridagisi). «Media» "
-            "alohida: reklama kino ichida ko'rsatiladi — joyini quyidagi "
-            "«Media reklama joylashuvi» orqali tanlaysiz (faqat boshida / "
-            "boshi va oxiri / boshi-o'rtasi-oxiri). Har kino ochilganda "
-            "navbatdagi boshqa reklama chiqadi; ikki joy tanlansa har biriga "
-            "boshqa reklama. «Media»ni popup usuli bilan birga belgilash mumkin.")
+            "Oraliq — popup chastotasi: har shu daqiqada BITTA reklama chiqadi. "
+            "«Vaznli»da har reklamaning o'z oralig'i vazn bo'lib xizmat qiladi; "
+            "«Navbat»/«Tasodifiy»da teng aylanadi (bittasi ishlatiladi). "
+            "Reklama QAYERDA chiqishi (popup / banner / kino ichida) endi har "
+            "reklamaning O'ZIDA — «Reklama» bo'limida «Joylashuv» orqali "
+            "tanlanadi. «Kino ichида reklama joylashuvi» esa media reklamalar "
+            "kinoning qaysi qismида chiqishini belgilaydi.")
         ad_hint.setObjectName("hint")
         ad_hint.setWordWrap(True)   # MUHIM: aks holda oyna kichraymay qoladi
         clay.addWidget(ad_hint)
@@ -645,15 +640,20 @@ class SettingsPageMixin:
         except (TypeError, ValueError):
             self.s_ad_int.setValue(5)
         # Algoritmlar vergul bilan saqlanadi; eski yagona qiymat ham mos keladi.
+        # Faqat MAVJUD tugmalarга tegishli qiymatlar (eski 'media' endi popup
+        # tartibi emas — u bo'lса ro'yxat bo'sh sanaladi va 'weighted'ga tushadi).
         sel = {x.strip() for x in (s.get("ad_algorithm") or "").split(",")
-               if x.strip()} or {"weighted"}
+               if x.strip()} & set(self.s_ad_algos)
+        if not sel:
+            sel = {"weighted"}
         for key, cb in self.s_ad_algos.items():
             cb.setChecked(key in sel)
-        # Media reklama joylashuvi (kino ichida)
+        # Kino ichida reklama joylashuvi — media joylashuvли reklamalar uchun
+        # (endi doim faol, chunki media har reklamaning o'zida belgilanadi).
         slots = s.get("media_ad_slots") or "pre,mid,end"
         idx = self.s_media_slots.findData(slots)
         self.s_media_slots.setCurrentIndex(idx if idx >= 0 else 0)
-        self.s_media_slots.setEnabled("media" in sel)
+        self.s_media_slots.setEnabled(True)
 
     def save_settings(self):
         import re
@@ -668,35 +668,41 @@ class SettingsPageMixin:
                                 "Jo'nash vaqti HH:MM ko'rinishida bo'lsin "
                                 "(masalan 08:00).")
             return
-        db.set_setting("wagon_number", wagon)
-        db.set_setting("wagon_note", self.s_wagon_note.text())
-        db.set_setting("train_name", self.s_train.text())
-        db.set_setting("route", self.s_route.text())
-        db.set_setting("depart_time", depart)
-        db.set_setting("weather_auto", "1" if self.s_weather.isChecked() else "0")
-        db.set_setting("temperature", str(self.s_temp.value()))
-        db.set_setting("speed_auto", "1" if self.s_speed_auto.isChecked() else "0")
-        db.set_setting("speed", str(self.s_speed.value()))
-        db.set_setting("trial_enabled", "1" if self.s_trial_on.isChecked() else "0")
-        db.set_setting("trial_start", self.s_trial_start.date().toString("yyyy-MM-dd"))
-        db.set_setting("trial_days", str(self.s_trial_days.value()))
-        self._update_trial_status()
-        db.set_setting("ad_interval_min", str(self.s_ad_int.value()))
-        algos = [k for k, cb in self.s_ad_algos.items() if cb.isChecked()]
-        db.set_setting("ad_algorithm", ",".join(algos) or "weighted")
-        db.set_setting("media_ad_slots", self.s_media_slots.currentData())
-        db.set_setting("kiosk_location", self.s_location.text().strip())
-        # Standart ro'yxat o'zgartirilmagan bo'lsa bo'sh saqlanadi — kiosk
-        # uni i18n orqali 3 tilda ko'rsatishda davom etadi.
-        sos_txt = self.s_sos.toPlainText().strip()
-        db.set_setting("sos_numbers", "" if sos_txt == DEFAULT_SOS else sos_txt)
-        db.set_setting("sos_enabled", self.s_sos_on.currentData())
-        db.set_setting("media_cache", "1" if self.s_mcache.isChecked() else "0")
-        db.set_setting("cache_limit_gb", str(self.s_cache_limit.value()))
-        db.log_action("settings_saved",
-                      f"train={self.s_train.text()!r} wagon={wagon!r}")
+        # DB yozuvlarини o'raymiz — biror set_setting xato bersa yarim saqlanib
+        # crash bermasin, admin aniq xato xabari ko'rsin.
+        try:
+            db.set_setting("wagon_number", wagon)
+            db.set_setting("wagon_note", self.s_wagon_note.text())
+            db.set_setting("train_name", self.s_train.text())
+            db.set_setting("route", self.s_route.text())
+            db.set_setting("depart_time", depart)
+            db.set_setting("weather_auto", "1" if self.s_weather.isChecked() else "0")
+            db.set_setting("temperature", str(self.s_temp.value()))
+            db.set_setting("speed_auto", "1" if self.s_speed_auto.isChecked() else "0")
+            db.set_setting("speed", str(self.s_speed.value()))
+            db.set_setting("trial_enabled", "1" if self.s_trial_on.isChecked() else "0")
+            db.set_setting("trial_start", self.s_trial_start.date().toString("yyyy-MM-dd"))
+            db.set_setting("trial_days", str(self.s_trial_days.value()))
+            self._update_trial_status()
+            db.set_setting("ad_interval_min", str(self.s_ad_int.value()))
+            algos = [k for k, cb in self.s_ad_algos.items() if cb.isChecked()]
+            db.set_setting("ad_algorithm", ",".join(algos) or "weighted")
+            db.set_setting("media_ad_slots", self.s_media_slots.currentData())
+            db.set_setting("kiosk_location", self.s_location.text().strip())
+            # Standart ro'yxat o'zgartirilmagan bo'lsa bo'sh saqlanadi — kiosk
+            # uni i18n orqali 3 tilda ko'rsatishda davom etadi.
+            sos_txt = self.s_sos.toPlainText().strip()
+            db.set_setting("sos_numbers", "" if sos_txt == DEFAULT_SOS else sos_txt)
+            db.set_setting("sos_enabled", self.s_sos_on.currentData())
+            db.set_setting("media_cache", "1" if self.s_mcache.isChecked() else "0")
+            db.set_setting("cache_limit_gb", str(self.s_cache_limit.value()))
+            db.log_action("settings_saved",
+                          f"train={self.s_train.text()!r} wagon={wagon!r}")
+        except Exception as e:                       # noqa: BLE001
+            self.toast(f"Saqlashda xato: {e}", "err")
+            return
         self._broadcast_sync("settings")
-        self.statusBar().showMessage("Sozlamalar saqlandi.", 3000)
+        self.toast("Sozlamalar saqlandi", "ok")
 
     @staticmethod
     def _update_mcache_lbl_text(on):
@@ -874,25 +880,38 @@ class SettingsPageMixin:
             f"color: {color}; font-weight: 700; background: transparent;")
 
     def _web_apply(self):
-        """Veb sozlamasini saqlaydi va darhol qo'llaydi (yoqadi/o'chiradi)."""
+        """Veb sozlamasini saqlaydi va darhol qo'llaydi (yoqadi/o'chiradi).
+        start() fon oqimida — shuning uchun DARHOL "yoqildi" demaymiz; bir
+        lahzadan keyin haqiqiy holatni tekshirib tasdiq yoki xato ko'rsatamiz."""
         on = self.s_web_on.isChecked()
         db.set_setting("web_enabled", "1" if on else "0")
         db.log_action("web_enabled", "on" if on else "off")
         web = getattr(self, "web", None)
         if web:
-            if on:
-                web.start()
-            else:
-                web.stop()
-        # start() fon oqimida — holatni bir lahzadan keyin ham yangilaymiz
+            try:
+                web.start() if on else web.stop()
+            except Exception as e:                       # noqa: BLE001
+                self.toast(f"Veb ilova xatosi: {e}", "err")
+                return
+        self._update_web_status()
+        if not on:
+            self.toast("Veb ilova o'chirildi", "ok")
+            return
+        self.toast("Veb ilova yoqilmoqda…", "info")
         try:
             from PyQt6.QtCore import QTimer
-            QTimer.singleShot(1800, self._update_web_status)
+
+            def _confirm():
+                self._update_web_status()
+                w = getattr(self, "web", None)
+                if w and w.is_running():
+                    self.toast("Veb ilova yoqildi", "ok")
+                else:
+                    self.toast("Veb ilova ko'tarilmadi — Node.js va 80-portni "
+                               "tekshiring", "err")
+            QTimer.singleShot(1800, _confirm)
         except Exception:                                # noqa: BLE001
             pass
-        self._update_web_status()
-        self.statusBar().showMessage(
-            "Veb ilova yoqildi." if on else "Veb ilova o'chirildi.", 4000)
 
     def _web_stop_now(self):
         """Veb'ni darhol to'xtatadi (sozlamani o'zgartirmasdan)."""

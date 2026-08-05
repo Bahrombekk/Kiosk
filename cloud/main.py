@@ -151,7 +151,7 @@ async def _offline_watch():
 # urilib "Not Found" bermaydi, balki aniq "qayta ishga tushiring" deb aytadi.
 # (Statik fayllar diskdan o'qiladi, ya'ni UI restartsiz yangilanadi; endpointlar
 # esa yangilanmaydi — chalkashlik aynan shundan chiqadi.)
-APP_BUILD = "2026-08-04.10"
+APP_BUILD = "2026-08-05.10"
 
 
 @app.get("/api/health")
@@ -296,6 +296,9 @@ async def _handle_agent_msg(server_id, msg, ws):
             # Serverning joriy sozlamalari — panel shu qiymatlarni forma
             # sifatida ko'rsatadi (JSON bo'lib saqlanadi)
             fields["settings"] = json.dumps(msg["settings"], ensure_ascii=False)
+        if isinstance(msg.get("catalog"), dict):
+            # Lokal katalog hisoblari (har heartbeatда keladi — yengil)
+            fields["catalog_counts"] = json.dumps(msg["catalog"], ensure_ascii=False)
         db.update_server(server_id, **fields)
         ks = msg.get("kiosks")
         if isinstance(ks, list):
@@ -354,6 +357,17 @@ async def _handle_agent_msg(server_id, msg, ws):
             n = db.insert_logs(server_id, en)
             if n:
                 await ws.send_json({"type": "logs_ack", "n": n})
+
+    elif kind == "local_catalog":
+        # Serverning lokal katalogi (poyezdда qo'shilgan kontent/reklama/sayt/
+        # bekat) — faqat O'ZGARGANда keladi. Panel KO'RSATISHI uchun saqlaymiz.
+        # Tasdiqlanmagan serverdan QABUL QILMAYMIZ (stats/logs bilan bir xil
+        # chegara — begona qurilma panel telemetriyasини buzmasин).
+        if not db.is_approved(server_id):
+            return
+        cat = msg.get("catalog")
+        if isinstance(cat, dict):
+            db.set_local_catalog(server_id, cat)
 
 
 @app.get("/dl/{token}")
@@ -466,6 +480,8 @@ def _srv_view(s):
             "assigned": len(db.assigned_ids(s["id"])),
             "settings": _j(s.get("settings")),
             "license_info": _j(s.get("license_info")),
+            # Serverning lokal katalog hisoblari (poyezdda mavjud kontent)
+            "catalog_counts": _j(s.get("catalog_counts")),
             "ops_pending": db.pending_op_count(s["id"])}
 
 
@@ -517,6 +533,8 @@ def server_detail(server_id: str, _=A):
         "ops": db.get_pending_ops(server_id),
         "stops": db.get_stops(server_id),
         "branding": {b["kind"]: b for b in db.get_branding(server_id)},
+        # Serverning O'ZIDA (poyezdda) mavjud lokal katalog — panel ko'rsatadi
+        "local_catalog": db.get_local_catalog(server_id),
     }
 
 
@@ -938,6 +956,18 @@ def storage_usage(_=A):
 # =====================================================================
 #  Reklama · Saytlar · Bekatlar (kontent bilan bir xil desired-state)
 # =====================================================================
+def _clean_placement(v):
+    """Reklama joylashuvини normallashtiradi — kanallar to'plami (popup/banner/
+    media) vergul bilan. Eski qiymatlar mos: 'both' → 'popup,banner'. Bo'sh yoki
+    yaroqsiz → 'popup'."""
+    s = str(v or "").strip().lower()
+    if s == "both":
+        return "popup,banner"
+    parts = [p.strip() for p in s.split(",") if p.strip()]
+    valid = [p for p in ("popup", "banner", "media") if p in parts]
+    return ",".join(valid) if valid else "popup"
+
+
 @app.get("/api/admin/ads")
 def ads_list(_=A):
     return db.get_ads()
@@ -952,9 +982,7 @@ def ad_create(payload: dict, _=A):
         "subtitle": str(payload.get("subtitle") or "")[:300],
         "link_url": str(payload.get("link_url") or "")[:500],
         "duration": db.to_int(payload.get("duration"), 10),
-        "placement": (payload.get("placement")
-                      if payload.get("placement") in ("popup", "banner", "both")
-                      else "popup"),
+        "placement": _clean_placement(payload.get("placement")),
         "is_active": 0 if payload.get("is_active") is False else 1,
         "sort_order": db.to_int(payload.get("sort_order")),
     }
@@ -992,8 +1020,8 @@ async def ad_patch(ad_id: int, payload: dict, _=A):
     for k in ("start_time", "end_time"):
         if k in payload:
             clean[k] = str(payload[k] or "")[:8] or None
-    if payload.get("placement") in ("popup", "banner", "both"):
-        clean["placement"] = payload["placement"]
+    if "placement" in payload:
+        clean["placement"] = _clean_placement(payload["placement"])
     if "is_active" in payload:
         clean["is_active"] = 1 if payload["is_active"] else 0
     p = payload.get("media")
@@ -1103,6 +1131,18 @@ async def site_delete(site_id: int, _=A):
     return {"ok": True}
 
 
+BRANDING_MAX = 5   # bitta turdagi bannerlar kutubxonasining chegarasi
+
+
+def _branding_full(kind, sha=None):
+    """Kutubxona to'lganmi. Agar `sha` allaqachon bor bo'lsa — to'la emas
+    (o'sha rasmni qayta ishlatish/tanlash mumkin)."""
+    rows = db.lib_list(kind)
+    if sha and any(r.get("sha") == sha for r in rows):
+        return False
+    return len(rows) >= BRANDING_MAX
+
+
 @app.get("/api/admin/branding/library")
 def branding_library(kind: str = "hero", _=A):
     """Yuklangan bannerlar ro'yxati (umumiy kutubxona)."""
@@ -1124,6 +1164,9 @@ def branding_library_add(payload: dict, _=A):
     sha = str(p["sha256"])
     if not storage.exists(sha):
         raise HTTPException(400, "blob topilmadi (avval yuklang)")
+    if _branding_full(kind, sha):
+        raise HTTPException(400, f"Eng ko'pi {BRANDING_MAX} ta banner — "
+                                 "avval bittasini o'chiring")
     lid = db.lib_add(kind, sha, str(p.get("name") or "")[:200],
                      storage.size_of(sha))
     return {"id": lid}
@@ -1168,7 +1211,11 @@ async def branding_set(server_id: str, payload: dict, _=A):
     lib_id = payload.get("library_id")
     cleared = False
     if lib_id:
-        row = db.lib_get(int(lib_id))
+        try:
+            lib_id = int(lib_id)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "library_id noto'g'ri")
+        row = db.lib_get(lib_id)
         if not row or row["kind"] != kind:
             raise HTTPException(404, "kutubxonada topilmadi")
         db.set_branding(server_id, kind, row["sha"], row["name"], row["size"])
@@ -1182,6 +1229,9 @@ async def branding_set(server_id: str, payload: dict, _=A):
         sha = str(p["sha256"])
         if not storage.exists(sha):
             raise HTTPException(400, "blob topilmadi (avval yuklang)")
+        if _branding_full(kind, sha):
+            raise HTTPException(400, f"Eng ko'pi {BRANDING_MAX} ta banner — "
+                                     "avval bittasini o'chiring")
         name = str(p.get("name") or "")[:200]
         db.lib_add(kind, sha, name, storage.size_of(sha))   # kutubxonaga ham
         db.set_branding(server_id, kind, sha, name, storage.size_of(sha))
@@ -1348,9 +1398,19 @@ def stats(days: int = 14, server_id: str = "", source: str = "", _=A):
         "totals": db.stats_totals(days, sid, src),
         "daily": db.stats_daily(days, sid, src),
         "top_content": db.stats_top_content(days, 8, sid, src),
+        "top_ads": db.stats_top_ads(days, 8, sid, src),
         "top_servers": db.stats_top_servers(days, 8),
         "by_source": db.stats_by_source(days, sid),
         "devices": db.stats_by_device(days, sid, src, 20),
+        # Boyitilган analitika (donut/ro'yxat/soat)
+        "ads_placement": db.stats_ads_placement(days, sid, src),
+        "content_types": db.stats_content_types(days, sid, src),
+        "langs": db.stats_langs(days, sid, src),
+        "screens": db.stats_screens(days, sid, src, 8),
+        "sites": db.stats_sites(days, sid, src, 8),
+        "event_mix": db.stats_event_mix(days, sid, src),
+        "session_avg": db.stats_session_avg(days, sid, src),
+        "hourly": db.stats_hourly(days, sid, src),
         "sync": {
             "pending": sum(s.get("stats_pending", 0) or 0 for s in servers),
             "server_total": sum(s.get("stats_total", 0) or 0 for s in servers),
@@ -1361,6 +1421,14 @@ def stats(days: int = 14, server_id: str = "", source: str = "", _=A):
                         for s in servers if (s.get("stats_pending") or 0) > 0],
         },
     }
+
+
+@app.post("/api/admin/stats/reset")
+def stats_reset(_=A):
+    """Bulutdagi statistikани 0 ga tushiradi (0 dan test qilish uchun)."""
+    n = db.clear_stats()
+    db.add_event(f"Statistika tozalandi ({n} event o'chirildi)", "info")
+    return {"ok": True, "deleted": n}
 
 
 @app.get("/api/admin/logs")
@@ -1401,7 +1469,15 @@ def index():
     p = os.path.join(STATIC_DIR, "index.html")
     if not os.path.isfile(p):
         return Response("static/index.html topilmadi", status_code=500)
-    return FileResponse(p, media_type="text/html")
+    # Statik fayllarga build versiyasini qo'shamiz — yangi build chiqqanda
+    # brauzer eski keshdagi app.js/styles.css'ni bermasin (aks holda panel
+    # yangilanмайди va "eski UI" muammosi bo'ladi).
+    with open(p, "r", encoding="utf-8") as f:
+        html = f.read()
+    html = (html.replace("/static/styles.css", f"/static/styles.css?v={APP_BUILD}")
+                .replace("/static/app.js", f"/static/app.js?v={APP_BUILD}"))
+    return Response(html, media_type="text/html",
+                    headers={"Cache-Control": "no-cache"})
 
 
 if os.path.isdir(STATIC_DIR):

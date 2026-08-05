@@ -352,6 +352,11 @@ def init_db():
         if "name_custom" not in scols:
             conn.execute("ALTER TABLE servers ADD COLUMN name_custom"
                          " INTEGER DEFAULT 0")
+        # Serverning LOKAL katalogi (poyezdda qo'shilgan kontent/reklama/sayt/
+        # bekat) — telemetriya sifatida panelда KO'RINSIN (desired-state emas).
+        for col in ("catalog_counts", "local_catalog"):
+            if col not in scols:
+                conn.execute(f"ALTER TABLE servers ADD COLUMN {col} TEXT")
         kcols = {r["name"] for r in
                  conn.execute("PRAGMA table_info(server_kiosks)").fetchall()}
         if "cache_enabled" not in kcols:
@@ -573,7 +578,7 @@ def update_server(server_id, **fields):
                "disk_total", "disk_free", "license", "license_note",
                "applied_rev", "queue_active", "queue_pending", "last_seen",
                "stats_pending", "stats_total", "web_running", "settings",
-               "license_info")
+               "license_info", "catalog_counts", "local_catalog")
     data = {k: v for k, v in fields.items() if k in allowed}
     if not data:
         return
@@ -581,6 +586,53 @@ def update_server(server_id, **fields):
     with _conn() as c:
         c.execute(f"UPDATE servers SET {sets} WHERE id=?",
                   (*data.values(), server_id))
+
+
+def set_local_catalog(server_id, catalog):
+    """Serverning lokal katalogini saqlaydi (JSON). Panel server tafsilotiда
+    «poyezdda mavjud kontent» sifatida ko'rsatadi + bekatlar jadvalини
+    serverdagi joriy yo'nalishдан to'ldirish uchun ishlatadi."""
+    import json as _json
+    with _conn() as c:
+        c.execute("UPDATE servers SET local_catalog=?, catalog_counts=? WHERE id=?",
+                  (_json.dumps(catalog, ensure_ascii=False),
+                   _json.dumps(_catalog_counts(catalog), ensure_ascii=False),
+                   server_id))
+
+
+def _catalog_counts(cat):
+    """Lokal katalogдан yengil hisoblar (heartbeatда ham keladi).
+
+    Buzuq shakl (list/int o'rniga kutilган) kelса ham YIQILMAYDI — agent
+    kanalини uzib qo'ymaslik uchun har bir maydonни ehtiyotkorona sanaymiz."""
+    def _n(x):
+        try:
+            return len(x)
+        except TypeError:
+            return 0
+    if not isinstance(cat, dict):
+        return {"content": 0, "ads": 0, "sites": 0, "stops": 0}
+    route = cat.get("route")
+    route = route if isinstance(route, dict) else {}
+    return {
+        "content": _n(cat.get("content")),
+        "ads": _n(cat.get("ads")),
+        "sites": _n(cat.get("sites")),
+        "stops": _n(route.get("0")) + _n(route.get("1")),
+    }
+
+
+def get_local_catalog(server_id):
+    """Serverning lokal katalogi (dict) yoki None."""
+    import json as _json
+    row = get_server(server_id) or {}
+    raw = row.get("local_catalog")
+    if not raw:
+        return None
+    try:
+        return _json.loads(raw)
+    except (ValueError, TypeError):
+        return None
 
 
 def touch_server(server_id):
@@ -1364,6 +1416,25 @@ def _flt(server_id=None, source=None):
     return sql, args
 
 
+def clear_stats():
+    """Bulutdagi barcha statistika eventlarини o'chiradi (0 dan test qilish
+    uchun). Serverlardagi lokal statistika tegilmaydi — lekin ular allaqachon
+    yuborganini qayta yubormaydi, shuning uchun bulut toza qoladi va faqat yangi
+    aktivlik yig'iladi. Panel ko'rsatkichlari ham 0 ga tushadi."""
+    with _conn() as c:
+        n = c.execute("SELECT COUNT(*) FROM stats_events").fetchone()[0]
+        c.execute("DELETE FROM stats_events")
+        try:
+            c.execute("DELETE FROM sqlite_sequence WHERE name='stats_events'")
+        except Exception:
+            pass
+        try:
+            c.execute("UPDATE servers SET stats_pending=0, stats_total=0")
+        except Exception:
+            pass
+    return n
+
+
 def stats_totals(days=14, server_id=None, source=None):
     """Sessiya soni, noyob qurilma, kontent ochilishi, reklama ko'rsatilishi."""
     flt, extra = _flt(server_id, source)
@@ -1411,6 +1482,99 @@ def stats_top_content(days=14, limit=8, server_id=None, source=None):
             " GROUP BY t HAVING t IS NOT NULL ORDER BY n DESC LIMIT ?",
             (*args, limit)).fetchall()
     return [{"title": r["t"], "n": r["n"]} for r in rows]
+
+
+def stats_top_ads(days=14, limit=8, server_id=None, source=None):
+    """Eng ko'p KO'RSATILGAN reklamalar (ad_play eventлари, data.title bo'yicha).
+    Sarlavhasiz eski eventlar 'placement'га yig'iladi (bo'sh bo'lmasin)."""
+    flt, extra = _flt(server_id, source)
+    args = [_since(days)] + extra
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT COALESCE(NULLIF(json_extract(data,'$.title'),''), "
+            "       json_extract(data,'$.placement'), '(nomsiz)') t, "
+            "COUNT(*) n FROM stats_events "
+            "WHERE ts >= ? AND event='ad_play'" + flt +
+            " GROUP BY t ORDER BY n DESC LIMIT ?",
+            (*args, limit)).fetchall()
+    return [{"title": r["t"], "n": r["n"]} for r in rows]
+
+
+def _stats_group(days, event, field, server_id, source, limit=None, dflt=None):
+    """Umumiy: bitta event turини data JSON maydoni bo'yicha guruhlab sanaydi
+    (donut/ro'yxat uchun). `dflt` — maydon NULL bo'lsa o'rniga."""
+    flt, extra = _flt(server_id, source)
+    col = f"json_extract(data,'$.{field}')"
+    if dflt is not None:
+        col = f"COALESCE(NULLIF({col},''),'{dflt}')"
+    q = (f"SELECT {col} k, COUNT(*) n FROM stats_events "
+         f"WHERE ts >= ? AND event=?{flt} GROUP BY k "
+         f"{'HAVING k IS NOT NULL ' if dflt is None else ''}ORDER BY n DESC")
+    if limit:
+        q += " LIMIT ?"
+    with _conn() as c:
+        rows = c.execute(q, (_since(days), event, *extra, *([limit] if limit else []))).fetchall()
+    return [{"k": r["k"], "n": r["n"]} for r in rows]
+
+
+def stats_ads_placement(days=14, server_id=None, source=None):
+    """Reklama qayerda ko'rsatilgani: banner / popup / pre|mid|end (kino ichi)."""
+    return _stats_group(days, "ad_play", "placement", server_id, source, dflt="popup")
+
+
+def stats_content_types(days=14, server_id=None, source=None):
+    """Ochilган kontent turlari (movie/cartoon/music/book/audiobook)."""
+    return _stats_group(days, "content_open", "type", server_id, source, dflt="?")
+
+
+def stats_langs(days=14, server_id=None, source=None):
+    """Sessiyalar tili (session_start.lang)."""
+    return _stats_group(days, "session_start", "lang", server_id, source, dflt="uz")
+
+
+def stats_screens(days=14, server_id=None, source=None, limit=8):
+    """Eng ko'p ochilган ekranlar (screen_view.screen)."""
+    return _stats_group(days, "screen_view", "screen", server_id, source, limit)
+
+
+def stats_sites(days=14, server_id=None, source=None, limit=8):
+    """QR bilan ochilган saytlar (site_qr.site)."""
+    return _stats_group(days, "site_qr", "site", server_id, source, limit)
+
+
+def stats_event_mix(days=14, server_id=None, source=None):
+    """Foydalanuvchi harakatlari taqsimoti (kontent/reklama/QR/SOS/til)."""
+    flt, extra = _flt(server_id, source)
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT event k, COUNT(*) n FROM stats_events WHERE ts >= ?"
+            + flt + " AND event IN ('content_open','ad_play','site_qr',"
+            "'qr_route','sos_open','lang_change') GROUP BY k ORDER BY n DESC",
+            (_since(days), *extra)).fetchall()
+    return [{"k": r["k"], "n": r["n"]} for r in rows]
+
+
+def stats_session_avg(days=14, server_id=None, source=None):
+    """O'rtacha sessiya davomiyligi (soniya) — session_end.duration_s."""
+    flt, extra = _flt(server_id, source)
+    with _conn() as c:
+        r = c.execute(
+            "SELECT AVG(CAST(json_extract(data,'$.duration_s') AS REAL)) a, "
+            "COUNT(*) n FROM stats_events WHERE ts >= ? AND event='session_end'"
+            + flt, (_since(days), *extra)).fetchone()
+    return {"avg_s": int(r["a"] or 0), "n": r["n"] or 0}
+
+
+def stats_hourly(days=14, server_id=None, source=None):
+    """Kunning qaysi soatlarida faollik (0..23) — barcha eventlar."""
+    flt, extra = _flt(server_id, source)
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT CAST(strftime('%H', REPLACE(ts,'T',' ')) AS INTEGER) h, "
+            "COUNT(*) n FROM stats_events WHERE ts >= ?" + flt +
+            " GROUP BY h", (_since(days), *extra)).fetchall()
+    by = {r["h"]: r["n"] for r in rows if r["h"] is not None}
+    return [{"h": h, "n": by.get(h, 0)} for h in range(24)]
 
 
 def stats_by_source(days=14, server_id=None):

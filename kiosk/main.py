@@ -217,7 +217,7 @@ class MainWindow(QWidget):
         self._blocked = False
         hit = cache.load_json("license")
         if hit and isinstance(hit[0], dict) and hit[0].get("blocked"):
-            self._apply_block(True)
+            self._apply_block(True, hit[0].get("reason"))
 
         self.saver = ScreenSaver()
         self.idle_timer = QTimer(self)
@@ -327,18 +327,28 @@ class MainWindow(QWidget):
     # --- Real-time (WebSocket) ---
     def _on_status(self, data):
         """Serverdan status_update kelganda Asosiy ekranni jonli yangilaydi."""
-        self._apply_block(bool(data.get("blocked")))
+        self._apply_block(bool(data.get("blocked")), data.get("lock_reason"))
         self.pages["home"]._apply_status(data)
 
-    def _apply_block(self, blocked):
-        """Sinov muddati/litsenziya bloki holatini qo'llaydi (qulf ekrani).
-        Holat keshlanadi — server o'chsa ham oxirgi blok saqlanadi."""
-        if blocked == self._blocked:
+    def _apply_block(self, blocked, reason=None):
+        """Sinov muddati/litsenziya bloki YOKI texnik rejim (qulf ekrani).
+        `reason`: 'maintenance' — "Texnik ishlar" xabari; aks holda litsenziya.
+        Holat keshlanadi — server o'chsa ham oxirgi blok saqlanadi.
+
+        MUHIM: hamma chaqiruvchi ham sababni bilmaydi — health-checker va
+        heartbeat FAQAT bool yuboradi (reason=None). Bunday holда oxirgi
+        MA'LUM sababni saqlaymiz, aks holda WS 'maintenance' qo'ygan sabab
+        heartbeat kelganda 'litsenziya'ga aylanib, qulf ekрани har necha
+        soniyada matnini almashtirib turardi (flip-flop)."""
+        if reason is None:
+            reason = getattr(self, "_lock_reason", None)
+        if blocked == self._blocked and reason == getattr(self, "_lock_reason", None):
             return
         self._blocked = blocked
-        cache.save_json("license", {"blocked": blocked})
+        self._lock_reason = reason
+        cache.save_json("license", {"blocked": blocked, "reason": reason})
         if blocked:
-            self.lock.show_over()
+            self.lock.show_over(reason)
         else:
             self.lock.hide()
 

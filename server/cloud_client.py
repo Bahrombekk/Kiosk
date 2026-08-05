@@ -83,6 +83,9 @@ REMOTE_SETTINGS = {
     "trial_enabled", "trial_start", "trial_days", "trial_blocked",
     # Veb ilova
     "web_enabled",
+    # Texnik rejim — kiosklarга "Texnik ishlar" qulf ekrани chiqadi (kontent
+    # o'chmaydi, xavfsiz va qaytariladi). Bulut/vendor boshqaradi.
+    "maintenance",
     # Wi-Fi (qiymat yoziladi; qo'llanishi uchun server qayta ishga tushadi)
     "wifi_hotspot", "wifi_ssid", "wifi_password",
 }
@@ -155,6 +158,9 @@ class CloudClient:
         self.progress = {"pct": 0, "bytes": 0, "total": 0}
         self._task = None
         self._stop = asyncio.Event()
+        # Lokal katalogning oxirgi yuborilgan imzosi — faqat O'ZGARGANда qayta
+        # yuboramiz (SIM-trafik tejaladi).
+        self._catalog_sig = None
 
     # ------------------------------------------------------------ holat
     def _load_state(self):
@@ -279,7 +285,12 @@ class CloudClient:
                                       max_size=8 * 1024 * 1024) as sock:
             self.connected = True
             log.info("Bulut: ulandi (%s)", config.CLOUD_URL)
-            await self._send(sock, {"type": "register", **self._state_payload()})
+            cat = self._local_catalog()
+            await self._send(sock, {"type": "register", **self._state_payload(),
+                                    "catalog": self._catalog_counts(cat)})
+            # Ulanishда lokal katalogni har doim bir marta yuboramiz — panel
+            # darhol «bu serverда nima bor»ni ko'rsatadi.
+            await self._push_catalog(sock, cat, force=True)
             hb = asyncio.create_task(self._heartbeat_loop(sock))
             push = asyncio.create_task(self._push_loop(sock))
             try:
@@ -364,10 +375,70 @@ class CloudClient:
             } for k in kiosks],
         }
 
+    # ----------------------------------------------------- lokal katalog
+    def _local_catalog(self):
+        """Serverning O'ZIDA mavjud katalogi — bulut panel KO'RSATISHI uchun
+        (telemetriya, desired-state emas). Poyezdда admin qo'lда qo'shган
+        (`origin='local'`) yoki bulutдан kelgan (`origin='cloud'`) — hammasi
+        ko'rinadi, shunда panel «bu serverда nima bor» degan savolga javob
+        beradi va bekatlar jadvали bo'sh qolmaydi."""
+        def _content(r):
+            return {"id": r.get("id"), "type": r.get("type"),
+                    "title": r.get("title"), "author": r.get("author"),
+                    "origin": r.get("origin") or "local",
+                    "visible": 1 if r.get("visible", 1) else 0,
+                    "has_media": bool(r.get("file_path")),
+                    "has_text": bool(r.get("text_path"))}
+        def _ad(a):
+            return {"id": a.get("id"), "title": a.get("title"),
+                    "placement": a.get("placement"),
+                    "is_active": 1 if a.get("is_active") else 0,
+                    "origin": a.get("origin") or "local"}
+        def _site(s):
+            return {"id": s.get("id"), "name": s.get("name"),
+                    "url": s.get("url"), "origin": s.get("origin") or "local"}
+        def _stop(s):
+            return {"name": s.get("name"), "arrival_time": s.get("arrival_time"),
+                    "departure_time": s.get("departure_time"),
+                    "distance_km": s.get("distance_km"),
+                    # Xarita uchun koordinatalar ham yuboriladi (import qilganda
+                    # bekatlar xaritada to'g'ri joyda tursin).
+                    "latitude": s.get("latitude"), "longitude": s.get("longitude"),
+                    "direction": s.get("direction", 0)}
+        return {
+            "content": [_content(r) for r in db.get_content()],
+            "ads": [_ad(a) for a in db.get_ads(active_only=False)],
+            "sites": [_site(s) for s in db.get_sites()],
+            "route": {"0": [_stop(s) for s in db.get_route(0)],
+                      "1": [_stop(s) for s in db.get_route(1)]},
+            "active_direction": db.effective_direction(),
+        }
+
+    @staticmethod
+    def _catalog_counts(cat):
+        route = cat.get("route") or {}
+        return {"content": len(cat.get("content") or []),
+                "ads": len(cat.get("ads") or []),
+                "sites": len(cat.get("sites") or []),
+                "stops": len(route.get("0") or []) + len(route.get("1") or [])}
+
+    async def _push_catalog(self, sock, cat, force=False):
+        """Lokal katalogni faqat O'ZGARGANда (yoki `force`) yuboradi."""
+        sig = hashlib.sha256(
+            json.dumps(cat, sort_keys=True, ensure_ascii=False).encode("utf-8")
+        ).hexdigest()
+        if not force and sig == self._catalog_sig:
+            return
+        self._catalog_sig = sig
+        await self._send(sock, {"type": "local_catalog", "catalog": cat})
+
     async def _heartbeat_loop(self, sock):
         while True:
             await asyncio.sleep(config.CLOUD_HEARTBEAT_S)
-            await self._send(sock, {"type": "heartbeat", **self._state_payload()})
+            cat = self._local_catalog()
+            await self._send(sock, {"type": "heartbeat", **self._state_payload(),
+                                    "catalog": self._catalog_counts(cat)})
+            await self._push_catalog(sock, cat)
 
     async def _push_loop(self, sock):
         """Statistika va loglarni davriy yuboradi. Loglar tez-tez (15s), chunki

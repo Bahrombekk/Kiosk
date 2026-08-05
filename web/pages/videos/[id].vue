@@ -11,6 +11,7 @@
     <AdOverlay
       v-if="prerollAd && !prerollDone"
       :ad="prerollAd"
+      context="pre"
       @done="prerollDone = true"
     />
     <VideoPlayer v-else :video="video" />
@@ -48,7 +49,7 @@ const route = useRoute();
 // KEYIN chaqirilsa Nuxt konteksti yo'qoladi — reklama ma'lumoti yuklanmay,
 // media (pre-roll) reklama umuman chiqmas edi.
 const moviesReq = useFetch<Video[]>("/api/movies");
-const { popupAds, algorithm, ready } = useAds();
+const { mediaAds, ready } = useAds();
 const prerollIdx = useState("ad-preroll-idx", () => 0);
 const { track } = useStats();
 const { data: videos, error: fetchError, refresh } = moviesReq;
@@ -104,14 +105,11 @@ watchEffect(() => {
   }
 });
 
-if (
-  algorithm.value === "media" &&
-  !isAudio.value &&
-  video.value &&
-  popupAds.value.length
-) {
+// Pre-roll — 'media' joylashuvига belgilangan reklamalardан (endi global
+// algoritmga bog'liq emas; har reklama o'zi tanlaydi).
+if (!isAudio.value && video.value && mediaAds.value.length) {
   prerollAd.value =
-    popupAds.value[prerollIdx.value % popupAds.value.length] ?? null;
+    mediaAds.value[prerollIdx.value % mediaAds.value.length] ?? null;
   prerollIdx.value = prerollIdx.value + 1;
 }
 </script>

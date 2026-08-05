@@ -83,10 +83,15 @@ class LockScreen(QWidget):
         self.clock.setFixedSize(w, h)
         self.clock.move(self.width() - w - m, m)
 
-    def show_over(self):
-        """Ekranni to'liq qoplab, eng ustki qatlamda ko'rsatadi."""
-        self.title.setText(tr("lock.title"))   # joriy tilда (UZ/RU/EN)
-        self.sub.setText(tr("lock.sub"))
+    def show_over(self, reason=None):
+        """Ekranni to'liq qoplab, eng ustki qatlamda ko'rsatadi.
+        reason='maintenance' — "Texnik ishlar" xabari; aks holda litsenziya."""
+        if reason == "maintenance":
+            self.title.setText(tr("lock.maint_title"))
+            self.sub.setText(tr("lock.maint_sub"))
+        else:
+            self.title.setText(tr("lock.title"))   # joriy tilда (UZ/RU/EN)
+            self.sub.setText(tr("lock.sub"))
         self._tick()
         self.showFullScreen()
         self._place_clock()

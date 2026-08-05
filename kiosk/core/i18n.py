@@ -299,6 +299,13 @@ STRINGS = {
     "lock.sub":   ("Iltimos, ma'muriyat bilan bog'laning.",
                    "Пожалуйста, обратитесь к администрации.",
                    "Please contact the administration."),
+    # --- Qulf ekrani (texnik rejim — bulutdan yoqiladi) ---
+    "lock.maint_title": ("Texnik ishlar olib borilmoqda",
+                         "Ведутся технические работы",
+                         "Under maintenance"),
+    "lock.maint_sub":   ("Xizmat tez orada tiklanadi.",
+                         "Сервис скоро возобновится.",
+                         "Service will resume shortly."),
 }
 
 MONTHS = {

@@ -120,11 +120,15 @@ class ContentPageMixin:
         dlg = ContentDialog(self)
         if dlg.exec():
             vals = dlg.values()
-            new_id = db.add_content(vals)
+            try:
+                new_id = db.add_content(vals)
+            except Exception as e:                       # noqa: BLE001
+                self.toast(f"Saqlashda xato: {e}", "err")
+                return
             db.log_action("content_added", f"#{new_id} {vals.get('title')!r}")
             self.refresh_content()
             self._broadcast_sync("content")
-            self.statusBar().showMessage("Kontent qo'shildi.", 3000)
+            self.toast(f"Saqlandi: {vals.get('title') or 'kontent'}", "ok")
             self._offer_translations(new_id, vals)
 
     def _offer_translations(self, base_id, vals):
@@ -171,19 +175,27 @@ class ContentPageMixin:
             return
         dlg = ContentDialog(self, item)
         if dlg.exec():
-            db.update_content(cid, dlg.values())
+            try:
+                db.update_content(cid, dlg.values())
+            except Exception as e:                       # noqa: BLE001
+                self.toast(f"Saqlashda xato: {e}", "err")
+                return
             db.log_action("content_updated", f"#{cid}")
             self.refresh_content()
             self._broadcast_sync("content")
-            self.statusBar().showMessage("Kontent yangilandi.", 3000)
+            self.toast("Kontent yangilandi", "ok")
 
     def delete_content(self, item):
         if QMessageBox.question(
                 self, "Tasdiqlang",
                 f"«{item.get('title', '')}» o'chirilsinmi?") \
                 == QMessageBox.StandardButton.Yes:
-            db.delete_content(item["id"])
+            try:
+                db.delete_content(item["id"])
+            except Exception as e:                       # noqa: BLE001
+                self.toast(f"O'chirishda xato: {e}", "err")
+                return
             db.log_action("content_deleted", f"#{item['id']}")
             self.refresh_content()
             self._broadcast_sync("content")
-            self.statusBar().showMessage("Kontent o'chirildi.", 3000)
+            self.toast("Kontent o'chirildi", "ok")

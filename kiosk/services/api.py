@@ -205,6 +205,11 @@ class ApiClient:
         """Reklama media manzili (rasm uchun — ImageFetch netpin bilan oladi)."""
         return f"{self.base_url}/api/ads/{ad_id}/media{self._url_key}"
 
+    def branding_url(self, kind="hero"):
+        """Brending rasmi (asosiy sahifa hero banneri). Admin/bulut yuklagan
+        bo'lsa rasm, aks holda 404 — kiosk o'zining standart bezagini ko'rsatadi."""
+        return f"{self.base_url}/api/branding/{kind}{self._url_key}"
+
     def ad_media_play_url(self, ad_id):
         """Video reklama pleyeri (Qt Multimedia) uchun:
           1) lokal keshda tayyor fayl bo'lsa — fayl yo'li (oflaynда ham);

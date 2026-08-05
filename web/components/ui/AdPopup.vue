@@ -1,5 +1,5 @@
 <template>
-  <AdOverlay v-if="current" :key="showKey" :ad="current" @done="current = null" />
+  <AdOverlay v-if="current" :key="showKey" :ad="current" context="popup" @done="current = null" />
 </template>
 
 <script setup lang="ts">
@@ -7,16 +7,16 @@ import type { Ad } from "~/types/app";
 
 /**
  * Qalqib chiquvchi reklama (kiosk services/ads.py soddalashtirilgan versiyasi):
- * har `ad_interval_min` daqiqada bitta popup|both reklama navbat bilan chiqadi,
- * `duration` soniya ko'rinib o'zi yopiladi. ad_algorithm="media" bo'lsa popup
- * chiqmaydi (reklama faqat kino oldidan — pre-roll, videos/[id].vue).
+ * har `ad_interval_min` daqiqada 'popup' joylashuvли reklama navbat bilan
+ * chiqadi, `duration` soniya ko'rinib o'zi yopiladi. 'media' joylashuvли
+ * reklama esa kino oldidan (pre-roll, videos/[id].vue) alohida ko'rsatiladi.
  *
  * Bu komponent default layout ichida — to'liq ekran pleyer/o'quvchi sahifalar
  * (layout: false) da umuman ulanmaydi, ya'ni playback vaqtida popup chiqmaydi.
  */
 const FIRST_DELAY_MS = 20000;
 
-const { popupAds, settingsStatus, algorithm, intervalMs } = useAds();
+const { popupAds, settingsStatus, intervalMs } = useAds();
 
 const current = ref<Ad | null>(null);
 const showKey = ref(0);
@@ -41,7 +41,8 @@ watch(
   (st) => {
     if (started || st === "pending" || st === "idle") return;
     started = true;
-    if (algorithm.value === "media") return; // media: popup emas, pre-roll
+    // Popup faqat 'popup' joylashuvли reklama bo'lsa chiqadi (popupAds bo'sh
+    // bo'lsa showNext hech narsa qilmaydi). 'media' endi alohida — pre-roll.
     firstTimer = setTimeout(() => {
       showNext();
       slotTimer = setInterval(showNext, intervalMs.value);

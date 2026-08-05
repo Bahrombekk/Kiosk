@@ -62,6 +62,17 @@ def _api_key():
     return _API_KEY
 
 
+def _key_ok(supplied):
+    """API kalitni timing-safe solishtiradi. baytda solishtiramiz — aks holda
+    ASCII bo'lmagan kalit (masalan ?k=café) compare_digest'да TypeError berib,
+    401 o'rniga 500 chiqarardi."""
+    try:
+        return secrets.compare_digest(
+            str(supplied or "").encode("utf-8"), _api_key().encode("utf-8"))
+    except Exception:                                    # noqa: BLE001
+        return False
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()   # baza yaratiladi va kerak bo'lsa seed qilinadi
@@ -141,7 +152,7 @@ async def require_api_key(request: Request, call_next):
     if p.startswith("/api") and p not in _EXEMPT_PATHS:
         supplied = (request.headers.get("x-api-key")
                     or request.query_params.get("k", ""))
-        if not secrets.compare_digest(supplied, _api_key()):
+        if not _key_ok(supplied):
             return JSONResponse({"detail": "API kalit noto'g'ri yoki yo'q"},
                                 status_code=401)
     return await call_next(request)
@@ -632,10 +643,16 @@ def status_payload():
         "route": s.get("route"),
         # Blok = IMZOLANGAN litsenziya holati (yo'q/yaroqsiz/muddati o'tgan/
         # boshqa kompyuter) YOKI eski qo'lda blok (trial_blocked — vendor
-        # admin paneldan darhol qulflashi uchun saqlangan).
-        "blocked": (licensing.state()["blocked"]
-                    or db.trial_state(s)["blocked"]),
+        # admin paneldan darhol qulflashi uchun saqlangan) YOKI texnik rejim
+        # (bulutdan yoqiladi — kiosklarga "Texnik ishlar" qulf ekrani chiqadi).
     }
+    lic_blocked = licensing.state()["blocked"] or db.trial_state(s)["blocked"]
+    maintenance = str(s.get("maintenance") or "0") == "1"
+    payload["blocked"] = bool(lic_blocked or maintenance)
+    # Kiosk qulf ekranida to'g'ri xabar ko'rsatishi uchun sabab (litsenziya
+    # bloki bo'lsa u ustun — vendor xabari muhimroq).
+    payload["lock_reason"] = ("license" if lic_blocked
+                              else "maintenance" if maintenance else None)
     _status_cache["data"] = payload
     _status_cache["ts"] = now_mono
     return payload

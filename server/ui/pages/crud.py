@@ -104,6 +104,9 @@ class CrudPagesMixin:
                     item.setForeground(QColor(C_MUTED))
                 table.setItem(r, col, item)
         cfg["count"].setText(f"Jami: {len(items)} ta")
+        # Bekatlar jadvali o'zgarganda faol-yo'nalish qamrovини qayta tekshiramiz
+        if name == "route":
+            self._update_route_warning()
 
     def _crud_selected(self, name):
         cfg = self._crud[name]
@@ -119,11 +122,15 @@ class CrudPagesMixin:
         else:
             dlg = RecordDialog(self, f"Yangi: {cfg['title']}", cfg["fields"])
         if dlg.exec():
-            cfg["add"](dlg.values())
+            try:
+                cfg["add"](dlg.values())
+            except Exception as e:                       # noqa: BLE001
+                self.toast(f"Saqlashda xato: {e}", "err")
+                return
             db.log_action(f"{name}_added")
             self._crud_refresh(name)
             self._broadcast_sync(name)
-            self.statusBar().showMessage("Yozuv qo'shildi.", 3000)
+            self.toast("Saqlandi", "ok")
 
     def _crud_edit(self, name):
         cfg = self._crud[name]
@@ -137,11 +144,15 @@ class CrudPagesMixin:
             dlg = RecordDialog(self, f"Tahrirlash: {cfg['title']}",
                                cfg["fields"], item)
         if dlg.exec():
-            cfg["update"](item["id"], dlg.values())
+            try:
+                cfg["update"](item["id"], dlg.values())
+            except Exception as e:                       # noqa: BLE001
+                self.toast(f"Saqlashda xato: {e}", "err")
+                return
             db.log_action(f"{name}_updated", f"#{item['id']}")
             self._crud_refresh(name)
             self._broadcast_sync(name)
-            self.statusBar().showMessage("Yozuv yangilandi.", 3000)
+            self.toast("Yangilandi", "ok")
 
     def _crud_delete(self, name):
         cfg = self._crud[name]
@@ -152,11 +163,15 @@ class CrudPagesMixin:
         if QMessageBox.question(self, "Tasdiqlang",
                                 f"#{item['id']} o'chirilsinmi?") \
                 == QMessageBox.StandardButton.Yes:
-            cfg["delete"](item["id"])
+            try:
+                cfg["delete"](item["id"])
+            except Exception as e:                       # noqa: BLE001
+                self.toast(f"O'chirishda xato: {e}", "err")
+                return
             db.log_action(f"{name}_deleted", f"#{item['id']}")
             self._crud_refresh(name)
             self._broadcast_sync(name)
-            self.statusBar().showMessage("Yozuv o'chirildi.", 3000)
+            self.toast("O'chirildi", "ok")
 
     # --- Saytlar sahifasi ---
     def _sites_page(self):
@@ -197,7 +212,17 @@ class CrudPagesMixin:
                                 "(Avto — jadval va vaqt bo'yicha o'zi)")
         self._route_active_combo = active_combo
 
-        return self._crud_page(
+        # Ogohlantirish: faol yo'nalishda bekat bo'lmasa kiosklarda xarita bo'sh
+        # chiqadi (eng ko'p uchraydigan xato — bekat bir yo'nalishga kiritiladi,
+        # faol esa boshqasi). Shu label buni darhol ko'rsatadi.
+        warn = QLabel("")
+        warn.setStyleSheet("color:#B45309;background:#FEF3C7;border-radius:8px;"
+                           "padding:6px 10px;font-weight:600;")
+        warn.setWordWrap(True)
+        warn.setVisible(False)
+        self._route_warn_label = warn
+
+        page = self._crud_page(
             "route", "Bekatlar", "Yo'nalish bekatlari — xarita va timeline uchun",
             columns=[("ID", "id"), ("Bekat", "name"), ("Kelish", "arrival_time"),
                      ("Jo'nash", "departure_time"), ("Km", "distance_km"),
@@ -213,9 +238,31 @@ class CrudPagesMixin:
             add_fn=db.add_route_stop, update_fn=db.update_route_stop,
             delete_fn=db.delete_route_stop,
             dialog_title="bekat", dialog_cls=StopDialog,
-            lead_widgets=[edit_combo, active_combo],
+            lead_widgets=[edit_combo, active_combo, warn],
             extra_buttons=[("Xaritada ko'rish", "globe",
                             self._show_route_map, "ghost")])
+        self._update_route_warning()
+        return page
+
+    def _update_route_warning(self):
+        """Faol yo'nalishda bekat yo'q bo'lsa ogohlantiradi (kiosklarda bo'sh
+        xarita chiqmasin). Route jadvali yangilanganda va yo'nalish
+        almashganda chaqiriladi."""
+        lbl = getattr(self, "_route_warn_label", None)
+        if lbl is None:
+            return
+        n0, n1 = len(db.get_route(0)), len(db.get_route(1))
+        eff = db.effective_direction()
+        n_eff = n0 if eff == 0 else n1
+        if (n0 + n1) > 0 and n_eff == 0:
+            name = "Borish" if eff == 0 else "Qaytish"
+            other = "Qaytish" if eff == 0 else "Borish"
+            lbl.setText(f"⚠ Faol yo'nalish ({name})da bekat yo'q — "
+                        f"kiosklarda bekatlar ko'rinmaydi. Shu yo'nalishga bekat "
+                        f"qo'shing yoki '{other}'ni faol qiling.")
+            lbl.setVisible(True)
+        else:
+            lbl.setVisible(False)
 
     def _on_route_dir_changed(self):
         self._route_dir = self._route_edit_combo.currentData()
@@ -235,6 +282,7 @@ class CrudPagesMixin:
         db.set_setting("active_route_direction", str(d))
         db.log_action("route_active_direction", str(d))
         self._broadcast_sync("route")
+        self._update_route_warning()
         label = {"auto": "Avto (kun+vaqt)", "1": "Qaytish"}.get(str(d), "Borish")
         self.statusBar().showMessage("Kioskda faol yo'nalish: " + label, 3000)
 

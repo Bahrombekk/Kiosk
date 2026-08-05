@@ -104,9 +104,19 @@ function currentLang(): string {
   }
 }
 
+/** LOKAL vaqt "YYYY-MM-DDTHH:MM:SS" ko'rinishida — kiosk (datetime.now) bilan
+ *  bir xil. Avval `toISOString().slice(0,19)` UTC berardi (Z olib tashlangan)
+ *  va panel uni lokal deб o'qib, vaqtlar noto'g'ri (masalan +5 soat) chiqardi. */
+function localTs(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+    + `T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
 function pushRaw(event: StatEvent, data: Record<string, unknown>) {
   queue.push({
-    ts: new Date().toISOString().slice(0, 19),
+    ts: localTs(),
     session: sessionId,
     event,
     data,

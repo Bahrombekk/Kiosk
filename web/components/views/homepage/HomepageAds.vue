@@ -95,16 +95,25 @@ function prev() {
   idx.value = (idx.value - 1 + bannerAds.value.length) % bannerAds.value.length;
 }
 
-// Proof-of-play: har banner ko'rinishida ad_play (kiosk bilan parity)
+// Proof-of-play: banner ko'rsatilgani yoziladi, LEKIN har reklama uchun ko'pi
+// bilan intervalда bir marta (banner har 7s aylanadi — har aylanishni sanasak
+// hisob juda shishib ketardi; kiosk bilan bir xil mantiq).
+const bannerLogged = new Map<number, number>();
 function logBanner(ad?: Ad) {
-  if (ad) {
-    track("ad_play", {
-      ad_id: ad.id,
-      title: ad.title,
-      media_type: ad.mediaType,
-      placement: "banner",
-    });
-  }
+  if (!ad) return;
+  // Faqat sahifa ko'rinib turganda sanaymiz — tab orqada (yashirin) bo'lsa
+  // banner aylanaversa ham "ko'rildi" hisoblanmaydi.
+  if (typeof document !== "undefined" && document.hidden) return;
+  const intervalMs = Math.max(60000, (Number(ad.intervalMin) || 0) * 60000);
+  const now = Date.now();
+  if (now - (bannerLogged.get(ad.id) ?? 0) < intervalMs) return;
+  bannerLogged.set(ad.id, now);
+  track("ad_play", {
+    ad_id: ad.id,
+    title: ad.title,
+    media_type: ad.mediaType,
+    placement: "banner",
+  });
 }
 watch(idx, () => logBanner(bannerAds.value[idx.value]));
 watch(
@@ -114,6 +123,8 @@ watch(
     if (list.length) {
       logBanner(list[0]);
       startTimer();
+    } else {
+      stopTimer(); // ro'yxat bo'shaса — eski 7s taymer NaN idx bilan ishlab qolmasin
     }
   },
   { immediate: true },

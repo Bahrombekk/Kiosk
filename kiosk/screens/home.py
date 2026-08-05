@@ -11,6 +11,7 @@ Kontent va holat serverdan yuklanadi (dinamik).
 """
 import logging
 import os
+import time
 from datetime import datetime
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel,
                              QPushButton, QSizePolicy, QGraphicsView,
@@ -349,6 +350,10 @@ class _HomeCanvas(QWidget):
         self.banner_ads = []
         self._banner_idx = -1
         self._banner_cur_id = None
+        # Banner "proof-of-play" — har reklama uchun oxirgi hisoblangan vaqt.
+        # Banner 5-10s da aylanadi, lekin HAR aylanishни sanamaymiz (aks holda
+        # bir seansда yuzlab "ko'rish" yig'ilib, hisob juda shishib ketardi).
+        self._banner_logged = {}
         self._banner_fetch = None
         self.setObjectName("homeCanvas")
         self.setFixedSize(BASE_W, BASE_H)
@@ -422,9 +427,9 @@ class _HomeCanvas(QWidget):
         # reklamalar shu yerda aylanib turadi (_rotate_banner); banner
         # reklama yo'q yoki oflayn bo'lsa — statik bezak rasmi (ad.png).
         self.ad = BannerImage(mode="box", radius=T.RADIUS["card"])
-        if not self.ad.set_file(AD_IMAGE):
-            self.ad.hide()
+        self._apply_banner_base()          # hero (admin/bulut) yoki ad.png
         left.addWidget(self.ad, 1)
+        self._load_hero()                  # serverdan hero'ni yangilab olamiz
 
         # ---- O'ng ustun (oq karta) ----
         self.right = _card()
@@ -578,23 +583,72 @@ class _HomeCanvas(QWidget):
         self._sloader.done.connect(self._apply_status)
         self._sloader.start()
 
+    # ---- Asosiy banner bazasi: hero (admin/bulut) yoki statik ad.png ----
+    def _hero_cache_path(self):
+        from core import cache as _c
+        return os.path.join(_c.CACHE_DIR, "hero.img")
+
+    def _apply_banner_base(self):
+        """Banner reklama yo'q payt ko'rinadigan «baza» rasm. Admin/bulut hero
+        yuklagan bo'lsa (keshda) o'sha, aks holda ilovadagi ad.png. Ikkalasi ham
+        bo'lmasa banner yashiriladi."""
+        hero = self._hero_cache_path()
+        if os.path.isfile(hero) and self.ad.set_file(hero):
+            self.ad.show()
+            return True
+        if self.ad.set_file(AD_IMAGE):
+            self.ad.show()
+            return True
+        self.ad.hide()
+        return False
+
+    def _load_hero(self):
+        """Serverdan hero bannerни (agar admin/bulut qo'ygan bo'lsa) olamiz va
+        keshga yozamiz. 404 yoki oflayn bo'lsa — mavjud kesh/ad.png qoladi."""
+        try:
+            f = ImageFetch(self.api.branding_url("hero"), self)
+        except Exception:                       # noqa: BLE001
+            return
+        self._hero_fetch = f                     # GC dan saqlash
+        f.done.connect(self._on_hero)
+        f.fail.connect(lambda: None)             # 404/oflayn — hech narsa
+        f.start()
+
+    def _on_hero(self, data, ctype):
+        pm = QPixmap()
+        pm.loadFromData(data)
+        if pm.isNull():
+            return
+        try:
+            os.makedirs(os.path.dirname(self._hero_cache_path()), exist_ok=True)
+            with open(self._hero_cache_path(), "wb") as fp:
+                fp.write(data)
+        except OSError:
+            pass
+        # Faqat hozir banner REKLAMA ko'rsatilmayotgan bo'lsa bazani yangilaymiz
+        # (reklama aylanmasига xalaqit bermaymiz).
+        if getattr(self, "_banner_cur_id", None) is None:
+            self.ad._orig = pm
+            self.ad._rescale()
+            self.ad.show()
+
     # ---- Banner reklama aylanmasi ----
     def _set_banner_ads(self, ads):
         """Admin «banner»/«both» qilgan RASM reklamalarni oladi va aylanmani
         (qayta) boshlaydi. Banner reklama yo'q bo'lsa statik rasm qoladi."""
+        from services.ads import AdManager
         self.banner_ads = [
             a for a in ads if a.get("media_path")
             and a.get("media_type") != "video"   # banner faqat rasm
-            and (a.get("placement") or "popup") in ("banner", "both")]
+            and "banner" in AdManager.channels(a)]
         self.banner_timer.stop()
         if self.banner_ads:
             self._rotate_banner()
         elif self._banner_cur_id is not None:
-            # Reklamalar olib tashlandi — statik bezakka qaytamiz
+            # Reklamalar olib tashlandi — baza rasmga qaytamiz (hero yoki ad.png)
             self._banner_cur_id = None
             self._banner_idx = -1
-            if self.ad.set_file(AD_IMAGE):
-                self.ad.show()
+            self._apply_banner_base()
 
     def _banner_eligible(self):
         """Kunlik vaqt oralig'i (start/end_time) ichidagi banner reklamalar."""
@@ -606,11 +660,10 @@ class _HomeCanvas(QWidget):
     def _rotate_banner(self):
         elig = self._banner_eligible()
         if not elig:
-            # Hozir birortasining vaqti emas — statik rasm; keyinroq qaytamiz
+            # Hozir birortasining vaqti emas — baza rasm; keyinroq qaytamiz
             if self._banner_cur_id is not None:
                 self._banner_cur_id = None
-                if self.ad.set_file(AD_IMAGE):
-                    self.ad.show()
+                self._apply_banner_base()
             if self.banner_ads:
                 self.banner_timer.start(60_000)
             return
@@ -638,10 +691,26 @@ class _HomeCanvas(QWidget):
         self.ad.show()
         changed = ad.get("id") != self._banner_cur_id
         self._banner_cur_id = ad.get("id")
-        if changed:
-            # Proof-of-play: banner namoyishi ham statistikaga yoziladi
-            stats.event("ad_play", ad_id=ad.get("id"), title=ad.get("title"),
-                        media_type="image", placement="banner")
+        # Proof-of-play: banner ko'rsatilgani yoziladi, LEKIN har reklama uchun
+        # ko'pi bilan intervalда bir marta (aylanish har 5-10s bo'lса ham) —
+        # bu real "ko'rish"ni aks ettiradi, hisobни shishirmaydi.
+        # FAQAT haqiqatan ko'ringanда sanaymiz: kino/audio pleyer ochiq bo'lса
+        # (foydalanuvchi kontent ko'ryapti, banner ustида) yoki sahifa ko'rinmasa
+        # — bu "ko'rildi" emas. (Sahifадан chiqqanда timer hideEvent'да to'xtaydi.)
+        seen = (changed and self.isVisible()
+                and not getattr(self, "_player", None)
+                and not getattr(self, "_audio", None))
+        if seen:
+            aid = ad.get("id")
+            try:
+                interval_s = max(60, float(ad.get("interval_min") or 0) * 60)
+            except (TypeError, ValueError):
+                interval_s = 60
+            now = time.monotonic()
+            if now - self._banner_logged.get(aid, 0) >= interval_s:
+                self._banner_logged[aid] = now
+                stats.event("ad_play", ad_id=aid, title=ad.get("title"),
+                            media_type="image", placement="banner")
         dur = ad.get("duration") or 0
         self.banner_timer.start(max(5, int(dur) if dur else 10) * 1000)
 
@@ -753,12 +822,29 @@ class _HomeCanvas(QWidget):
             self._audio.start()
             return
         from players.video import VideoPlayer
+        url = self.api.play_url(item["id"])   # lokal kesh bo'lsa — fayl yo'li
+        # Oflayn + lokal nusxa yo'q (http striming) — qora ekran chaqnamasin,
+        # Videolar ekranidagi kabi "oflayn" xabarини ko'rsatamiz.
+        if self.api.offline and str(url).startswith("http"):
+            vids = getattr(self.host, "pages", {})
+            vids = vids.get("videos") if isinstance(vids, dict) else None
+            try:
+                if vids is not None and hasattr(vids, "status"):
+                    vids.status.text(tr("videos.offline"))
+            except Exception:                            # noqa: BLE001
+                pass
+            return
         old = getattr(self, "_player", None)
         if old is not None:
             old.stop_and_close()
+        # Musiqа/audiokitob ochiq bo'lса — video ochishдан oldin uni ham
+        # to'xtatamiz (aks holda ovoz video ostида davom etardi).
+        old_a = getattr(self, "_audio", None)
+        if old_a is not None:
+            old_a.stop_and_close()
         stats.event("content_open", id=item.get("id"),
                     title=item.get("title"), type=item.get("type"))
-        self._player = VideoPlayer(self.api.play_url(item["id"]),
+        self._player = VideoPlayer(url,
                                    item.get("title", ""), host=self.host)
         # "Media" reklama algoritmida kino boshida/o'rtasida/oxirida reklama
         # chiqadi (boshqa rejimlarda hook hech narsa qilmaydi).

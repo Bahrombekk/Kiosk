@@ -255,13 +255,55 @@ class AdminWindow(DashboardPageMixin, CachePageMixin, ContentPageMixin,
         return b
 
     def _broadcast_sync(self, scope="all"):
-        """Kiosk ilovalariga katalog/sozlama o'zgarganini darhol bildiradi."""
+        """Kiosk ilovalariga katalog/sozlama o'zgarganini darhol bildiradi.
+        Bu — optimizatsiya (kiosklar baribir davriy so'raydi), shuning uchun
+        xato bo'lsa saqlashni buzmaymiz — faqat logga yozamiz (avval jimgina
+        yutilardi, muammoni topib bo'lmasди)."""
         try:
             import ws
             ws.manager.broadcast_threadsafe(
                 {"type": "catalog_update", "scope": scope})
         except Exception:
-            pass
+            import logging
+            logging.getLogger("kiosk.admin").warning(
+                "Kiosklarga sinx signali yuborilmadi (scope=%s)", scope,
+                exc_info=True)
+
+    # ------------------------------------------------------------------
+    #  Toast — ko'zga tashlanadigan qisqa bildirishnoma
+    # ------------------------------------------------------------------
+    def toast(self, msg, kind="ok"):
+        """Saqlash/o'chirish natijasini ANIQ ko'rsatadi (statusbar xabari juda
+        bilinmasdi). kind: ok=yashil, err=qizil, info=kulrang. 3.5s da yo'qoladi."""
+        lbl = getattr(self, "_toast_label", None)
+        if lbl is None:
+            lbl = QLabel(self)
+            lbl.setWordWrap(True)
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl.setMaximumWidth(560)
+            self._toast_label = lbl
+            self._toast_timer = QTimer(self)
+            self._toast_timer.setSingleShot(True)
+            self._toast_timer.timeout.connect(lbl.hide)
+        colors = {"ok": ("#047857", "#D1FAE5"), "err": ("#B91C1C", "#FEE2E2"),
+                  "info": ("#0F172A", "#E2E8F0")}
+        fg, bg = colors.get(kind, colors["ok"])
+        lbl.setStyleSheet(f"background:{bg};color:{fg};border-radius:12px;"
+                          f"padding:13px 22px;font-weight:700;font-size:14px;")
+        lbl.setText(msg)
+        lbl.adjustSize()
+        self._position_toast()
+        lbl.show()
+        lbl.raise_()
+        self._toast_timer.start(3500)
+
+    def _position_toast(self):
+        lbl = getattr(self, "_toast_label", None)
+        if not lbl:
+            return
+        x = (self.width() - lbl.width()) // 2
+        y = self.height() - lbl.height() - 46   # statusbar tepasida, markazda
+        lbl.move(max(16, x), max(16, y))
 
     @staticmethod
     def _setup_table(table):
@@ -280,6 +322,9 @@ class AdminWindow(DashboardPageMixin, CachePageMixin, ContentPageMixin,
         super().resizeEvent(e)
         # Layout viewport'ga yetib borgach tekshiramiz (singleShot(0) — navbatdan keyin)
         QTimer.singleShot(0, self._recheck_cols)
+        lbl = getattr(self, "_toast_label", None)
+        if lbl is not None and lbl.isVisible():
+            self._position_toast()
 
     # --- Yopilganda backendni to'xtatamiz ---
     def closeEvent(self, e):

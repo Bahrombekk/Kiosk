@@ -497,17 +497,27 @@ class AdDialog(QDialog):
         self.dur_note.setWordWrap(True)
         self._video_dur = None   # yangi tanlangan videoning davomiyligi
 
-        # Joylashuv: popup (qalqib chiquvchi), asosiy sahifa banneri yoki ikkalasi.
-        # Banner — bosh sahifa chap ustunidagi katta rasm: bir nechta banner
-        # reklama bo'lsa «Namoyish vaqti» soniyasida aylanib turadi.
-        self.placement = QComboBox()
-        self.placement.addItem("Qalqib chiquvchi oyna (popup)", "popup")
-        self.placement.addItem("Asosiy sahifa banneri", "banner")
-        self.placement.addItem("Ikkalasi — popup ham, banner ham", "both")
-        idx = self.placement.findData(self.item.get("placement") or "popup")
-        self.placement.setCurrentIndex(max(0, idx))
-        self.placement.currentIndexChanged.connect(
-            lambda _i: self._sync_dur_row())
+        # Joylashuv — BIR NECHTA joyni birga tanlash mumkin (bitta reklama
+        # bir vaqtda popup, banner va kino ichida chiqishi mumkin). Shu bitta
+        # joyda hammasi jamlangan — admin adashmaydi.
+        #   popup  — qalqib chiquvchi oyna
+        #   banner — bosh sahifadagi katta rasm (faqat rasm; aylanma)
+        #   media  — kino boshi/o'rtasi/oxirida (video ham bo'ladi)
+        chans = self._parse_channels(self.item.get("placement"))
+        self.pl_popup = QCheckBox("Qalqib chiquvchi (popup)")
+        self.pl_banner = QCheckBox("Asosiy sahifa banneri")
+        self.pl_media = QCheckBox("Kino ichida (media)")
+        self.pl_popup.setChecked("popup" in chans)
+        self.pl_banner.setChecked("banner" in chans)
+        self.pl_media.setChecked("media" in chans)
+        place_box = QWidget()
+        pbl = QVBoxLayout(place_box)
+        pbl.setContentsMargins(0, 0, 0, 0)
+        pbl.setSpacing(4)
+        for cb in (self.pl_popup, self.pl_banner, self.pl_media):
+            cb.toggled.connect(lambda _c: self._sync_dur_row())
+            pbl.addWidget(cb)
+        self.placement_box = place_box
 
         # Har necha daqiqada chiqishi (takrorlanish oralig'i)
         self.interval = QSpinBox()
@@ -532,7 +542,7 @@ class AdDialog(QDialog):
         self.form = form
         form.addRow("Sarlavha:", self.title)
         form.addRow("Media (rasm/video):", cont)
-        form.addRow("Joylashuv:", self.placement)
+        form.addRow("Joylashuv:", self.placement_box)
         form.addRow("Namoyish vaqti:", self.duration)
         form.addRow("", self.dur_note)
         form.addRow("Har necha daqiqada:", self.interval)
@@ -591,20 +601,44 @@ class AdDialog(QDialog):
         self._sync_dur_row()
         self._update_preview(path)
 
+    @staticmethod
+    def _parse_channels(s):
+        """placement matnini kanallar to'plamiga aylantiradi (moslik saqlanadi):
+        'popup'/'banner' → o'zi; 'both' → popup+banner; vergulli ro'yxat ham."""
+        s = str(s or "").strip().lower()
+        if not s:
+            return {"popup"}
+        if s == "both":
+            return {"popup", "banner"}
+        parts = {p.strip() for p in s.split(",") if p.strip()}
+        valid = parts & {"popup", "banner", "media"}
+        return valid or {"popup"}
+
+    def _checked_channels(self):
+        chans = set()
+        if self.pl_popup.isChecked():
+            chans.add("popup")
+        if self.pl_banner.isChecked():
+            chans.add("banner")
+        if self.pl_media.isChecked():
+            chans.add("media")
+        return chans
+
     def _sync_dur_row(self):
         """Rasm — «Namoyish vaqti» ko'rinadi; video — izoh ko'rinadi.
-        «Har necha daqiqada» faqat popup uchun ma'noli (banner aylanmasini
+        «Har necha daqiqada» popup/media uchun ma'noli (banner aylanmasini
         «Namoyish vaqti» boshqaradi)."""
         is_video = self._is_video(self.media_src or self.item.get("media_path"))
-        place = self.placement.currentData()
-        self.form.setRowVisible(self.interval, place != "banner")
+        chans = self._checked_channels()
+        self.form.setRowVisible(self.interval,
+                                bool(chans & {"popup", "media"}))
         self.form.setRowVisible(self.duration, not is_video)
         self.form.setRowVisible(self.dur_note,
-                                is_video or place in ("banner", "both"))
-        if is_video and place in ("banner", "both"):
+                                is_video or "banner" in chans)
+        if is_video and "banner" in chans:
             self.dur_note.setText(
-                "DIQQAT: video bannerda ko'rsatilmaydi (faqat popup'da). "
-                "Banner uchun rasm tanlang.")
+                "DIQQAT: video bannerda ko'rsatilmaydi (faqat popup/media'da). "
+                "Banner uchun rasm ham qo'shing yoki bannerni olib tashlang.")
         elif is_video:
             self.dur_note.setText(
                 "Video davomiyligi fayldan avtomatik olinadi — reklama video "
@@ -663,12 +697,17 @@ class AdDialog(QDialog):
         # Sarlavha bo'sh bo'lsa fayl nomidan to'ldiramiz (admin yozmasa ham bo'ladi)
         if not self.title.text().strip():
             self.title.setText(_title_from_filename(media_name))
-        # Banner faqat rasm ko'rsatadi — video bilan banner-only saqlanmasin
-        if (self.placement.currentData() == "banner"
-                and self._is_video(media_name)):
+        chans = self._checked_channels()
+        if not chans:
+            QMessageBox.warning(self, "Xato",
+                                "Kamida bitta joyni tanlang: popup, banner "
+                                "yoki kino ichida (media).")
+            return
+        # Banner faqat rasm ko'rsatadi — banner-ONLY reklama video bo'lmasin
+        if chans == {"banner"} and self._is_video(media_name):
             QMessageBox.warning(self, "Xato",
                                 "Video bannerda ko'rsatilmaydi — banner uchun "
-                                "rasm tanlang yoki joylashuvni popup qiling.")
+                                "rasm tanlang yoki popup/media ni ham belgilang.")
             return
         st, en = self.start_t.text().strip(), self.end_t.text().strip()
         if bool(st) != bool(en):
@@ -698,7 +737,10 @@ class AdDialog(QDialog):
             "interval_min": self.interval.value(),
             "start_time": self.start_t.text().strip() or None,
             "end_time": self.end_t.text().strip() or None,
-            "placement": self.placement.currentData(),
+            # Kanallar to'plami vergul bilan: "popup,media" kabi (moslik uchun
+            # bitta qiymat ham bo'ladi). Tartib barqaror bo'lsin.
+            "placement": ",".join(c for c in ("popup", "banner", "media")
+                                   if c in self._checked_channels()) or "popup",
             "is_active": 1 if self.active.isChecked() else 0,
         }
         if self.media_src:

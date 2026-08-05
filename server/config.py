@@ -107,4 +107,4 @@ CLOUD_URL = _norm_cloud_url(os.environ.get("KIOSK_CLOUD_URL")
 CLOUD_ENROLL = os.environ.get("KIOSK_CLOUD_ENROLL") or _CLOUD.get("enroll") or ""
 CLOUD_HEARTBEAT_S = int(os.environ.get("KIOSK_CLOUD_HEARTBEAT", "30"))
 # Kiosk statistikasi bulutga qancha vaqtda bir yuboriladi (batch)
-CLOUD_STATS_S = int(os.environ.get("KIOSK_CLOUD_STATS", "300"))
+CLOUD_STATS_S = int(os.environ.get("KIOSK_CLOUD_STATS", "60"))

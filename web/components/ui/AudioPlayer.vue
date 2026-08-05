@@ -80,7 +80,7 @@
       </div>
 
       <!-- Controls -->
-      <div class="flex items-center gap-[24px]">
+      <div class="flex max-w-full flex-wrap items-center justify-center gap-x-[10px] gap-y-[14px] sm:gap-x-[24px]">
         <UButton
           v-if="hasPlaylist"
           icon="i-lucide-skip-back"
@@ -104,7 +104,7 @@
         <UButton
           :icon="isPlaying ? 'i-fa7-solid-pause' : 'i-fa7-solid-play'"
           size="xl"
-          class="h-[64px] w-[64px] justify-center rounded-full"
+          class="h-[56px] w-[56px] justify-center rounded-full sm:h-[64px] sm:w-[64px]"
           aria-label="Play"
           :ui="{
             base: 'bg-(--accent-gold) text-(--text-on-gold) active:bg-(--accent-gold)/70 hover:bg-(--accent-gold-light) hover:text-(--text-on-gold) shadow-[0px_8px_35px_rgba(201,154,60,0.35)]',

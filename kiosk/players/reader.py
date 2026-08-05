@@ -28,9 +28,12 @@ class _TextLoader(QThread):
         self.content_id = content_id
 
     def run(self):
+        # Har qanday xatoda fail() — faqat RequestException emas. Buzuq/yarim
+        # JSON javob .json()да ValueError beradi; u ushlanmasа thread'дан
+        # chiqib, global excepthook butun kioskни o'chirib yuborardi (os._exit).
         try:
             self.done.emit(self.api.get_book_text(self.content_id))
-        except requests.RequestException:
+        except Exception:                                # noqa: BLE001
             self.fail.emit()
 
 

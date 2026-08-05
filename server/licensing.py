@@ -130,7 +130,10 @@ def _evaluate():
     try:
         with open(LICENSE_PATH, "r", encoding="ascii") as f:
             raw = f.read()
-    except OSError as e:
+    except (OSError, ValueError) as e:
+        # ValueError = UnicodeDecodeError (ascii bo'lmagan buzuq fayl) ham.
+        # Ushlanmasа /api/heartbeat (threadpool) va cloud_client 500/uzilish
+        # loopигa tushardi; endi toza "bloklangan" holat qaytadi.
         state["reason"] = f"faylni o'qib bo'lmadi: {e}"
         state["blocked"] = True
         return state

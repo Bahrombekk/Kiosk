@@ -15,11 +15,12 @@ import db
 from ui.cards import AD_CARD_W, AdCard, CardFlow
 from ui.dialogs import AdDialog
 
-# Joylashuv tablari (Kontent sahifasidagi tur tablari kabi)
+# Joylashuv tablari — endi KANALLAR (bitta reklama bir nechta kanalда bo'lishi
+# mumkin, shuning uchun bir reklama bir necha tabда sanaladi).
 PLACE_GROUPS = (
     ("popup", "Popup"),
     ("banner", "Banner"),
-    ("both", "Popup + Banner"),
+    ("media", "Kino ichida"),
 )
 
 
@@ -110,23 +111,23 @@ class AdsPageMixin:
         self.refresh_ads()
 
     @staticmethod
-    def _ad_place(ad):
-        """Reklamaning joylashuvi (eski yozuvlarda NULL = popup)."""
-        key = ad.get("placement") or "popup"
-        return key if key in ("popup", "banner", "both") else "popup"
+    def _ad_channels(ad):
+        """Reklama joylashuv kanallari to'plami (popup/banner/media).
+        Eski qiymatlar mos: NULL→popup, 'both'→popup+banner."""
+        return AdDialog._parse_channels(ad.get("placement"))
 
     def refresh_ads(self):
         items = self._ads_rows()
-        # Tab yorliqlarida sonlar ko'rinadi
+        # Tab yorliqlarida sonlar — reklama har bir kanalида sanaladi
         counts = {}
         for ad in items:
-            k = self._ad_place(ad)
-            counts[k] = counts.get(k, 0) + 1
+            for ch in self._ad_channels(ad):
+                counts[ch] = counts.get(ch, 0) + 1
         self._aplace_btns[None].setText(f"Barchasi ({len(items)})")
         for key, label in PLACE_GROUPS:
             self._aplace_btns[key].setText(f"{label} ({counts.get(key, 0)})")
         if self._aplace:
-            items = [ad for ad in items if self._ad_place(ad) == self._aplace]
+            items = [ad for ad in items if self._aplace in self._ad_channels(ad)]
         self.ads_flow.set_cards(
             AdCard(ad, self.edit_ad, self.delete_ad) for ad in items)
         self.ads_empty.setVisible(not items)
@@ -136,11 +137,15 @@ class AdsPageMixin:
         dlg = AdDialog(self)
         if dlg.exec():
             vals = dlg.values()
-            new_id = db.add_ad(vals)
+            try:
+                new_id = db.add_ad(vals)
+            except Exception as e:                       # noqa: BLE001
+                self.toast(f"Saqlashda xato: {e}", "err")
+                return
             db.log_action("ads_added", f"#{new_id} {vals.get('title')!r}")
             self.refresh_ads()
             self._broadcast_sync("ads")
-            self.statusBar().showMessage("Reklama qo'shildi.", 3000)
+            self.toast(f"Reklama saqlandi: {vals.get('title') or ''}", "ok")
 
     def edit_ad(self, ad):
         aid = ad["id"]
@@ -150,19 +155,27 @@ class AdsPageMixin:
             return
         dlg = AdDialog(self, fresh)
         if dlg.exec():
-            db.update_ad(aid, dlg.values())
+            try:
+                db.update_ad(aid, dlg.values())
+            except Exception as e:                       # noqa: BLE001
+                self.toast(f"Saqlashda xato: {e}", "err")
+                return
             db.log_action("ads_updated", f"#{aid}")
             self.refresh_ads()
             self._broadcast_sync("ads")
-            self.statusBar().showMessage("Reklama yangilandi.", 3000)
+            self.toast("Reklama yangilandi", "ok")
 
     def delete_ad(self, ad):
         if QMessageBox.question(
                 self, "Tasdiqlang",
                 f"«{ad.get('title', '')}» reklamasi o'chirilsinmi?") \
                 == QMessageBox.StandardButton.Yes:
-            db.delete_ad(ad["id"])
+            try:
+                db.delete_ad(ad["id"])
+            except Exception as e:                       # noqa: BLE001
+                self.toast(f"O'chirishda xato: {e}", "err")
+                return
             db.log_action("ads_deleted", f"#{ad['id']}")
             self.refresh_ads()
             self._broadcast_sync("ads")
-            self.statusBar().showMessage("Reklama o'chirildi.", 3000)
+            self.toast("Reklama o'chirildi", "ok")

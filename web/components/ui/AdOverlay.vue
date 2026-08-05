@@ -35,18 +35,24 @@
 <script setup lang="ts">
 import type { Ad } from "~/types/app";
 
-const props = defineProps<{ ad: Ad }>();
+const props = withDefaults(
+  defineProps<{ ad: Ad; context?: string }>(),
+  { context: "popup" },
+);
 const emit = defineEmits<{ done: [] }>();
 
 const isVideo = computed(() => props.ad.mediaType === "video");
 
-// Proof-of-play: reklama ekranga chiqqani statistikaga yoziladi (popup/pre-roll)
+// Proof-of-play: reklama ekranga chiqqani statistikaga yoziladi. `context`
+// joylashuvni belgilaydi ("pre" = kino boshi/pre-roll, "popup" = qalqib
+// chiquvchi) — statistika donutida to'g'ri guruhga tushishi uchun.
 const { track } = useStats();
 onMounted(() =>
   track("ad_play", {
     ad_id: props.ad.id,
     title: props.ad.title,
     media_type: props.ad.mediaType,
+    placement: props.context,
   }),
 );
 
