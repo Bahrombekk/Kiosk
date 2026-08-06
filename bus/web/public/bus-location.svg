@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="#243b6b">
+  <!-- Lokatsiya pin -->
+  <path d="M32 4c-7.2 0-13 5.6-13 12.6 0 8.7 11.2 18.4 12.2 19.3.5.4 1.1.4 1.6 0C33.8 35 45 25.3 45 16.6 45 9.6 39.2 4 32 4z"/>
+  <circle cx="32" cy="16.6" r="5.4" fill="#ffffff"/>
+  <!-- Avtobus (yon ko'rinish) -->
+  <rect x="12" y="40" width="40" height="18" rx="4"/>
+  <rect x="15" y="43" width="14" height="7" rx="2" fill="#ffffff"/>
+  <rect x="32" y="43" width="14" height="7" rx="2" fill="#ffffff"/>
+  <circle cx="21" cy="59" r="4"/>
+  <circle cx="43" cy="59" r="4"/>
+</svg>

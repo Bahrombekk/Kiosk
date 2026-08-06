@@ -18,6 +18,39 @@ Kerak bo'ladigan narsa:            Python 3.10+ va 3 ta paket
 
 ---
 
+## Tavsiya etilgan yo'l: Docker + Caddy (avtomatik HTTPS)
+
+Eng oson — bir buyruq. VPS'da Docker + Docker Compose bo'lsa yetarli
+(nginx/certbot/venv KERAK EMAS; HTTPS'ni Caddy avtomatik oladi).
+
+```bash
+git clone https://github.com/UCT-LLC/cloud-kiosk.git /opt/kioskcloud
+cd /opt/kioskcloud
+cp .env.example .env
+nano .env            # CLOUD_ADMIN_PASS, CLOUD_DOMAIN, ACME_EMAIL, CLOUD_PUBLIC_URL
+docker compose up -d --build
+```
+
+DNS'da `CLOUD_DOMAIN` → VPS IP (A yozuvi) bo'lsin, 80/443 ochiq bo'lsin — Caddy
+Let's Encrypt sertifikatini o'zi oladi. Loglar: `docker compose logs -f`.
+
+Ma'lumot (baza, ombor, imzo kaliti) `clouddata` volume'da — konteyner qayta
+qurilса ham saqlanadi. Yangilash: `git pull && docker compose up -d --build`
+(yoki CD avtomatik). Zaxira:
+```bash
+docker run --rm -v cloud_clouddata:/data -v "$PWD":/bak alpine \
+    tar czf /bak/kioskcloud-$(date +%F).tgz -C /data .
+```
+
+> Mavjud (systemd) bulutdan KO'CHIRAYOTGAN bo'lsangiz: eski `cloud.db`,
+> `cloud_signing_key.pem`, `storage/` ni volume'ga joylang:
+> `docker run --rm -v cloud_clouddata:/data -v "$PWD":/src alpine sh -c \
+>  "cp /src/cloud.db /src/cloud_signing_key.pem /data/ && cp -r /src/storage /data/"`
+
+---
+
+## Muqobil yo'l: systemd + nginx (Docker'siz)
+
 ## 1. Fayllarni ko'chirish
 
 ```bash
@@ -35,7 +68,7 @@ aynan shu 3 narsani ham olib o'tish kerak — pastdagi "Ko'chirish" bo'limiga qa
 apt update && apt install -y python3 python3-venv python3-pip nginx
 cd /opt/kioskcloud
 python3 -m venv venv
-venv/bin/pip install -r requirements.txt
+venv/bin/pip install -r backend/requirements.txt
 ```
 
 ## 3. Xizmat sifatida ishga tushirish (systemd)
@@ -125,5 +158,5 @@ sahifasidagi "Ombor" kartasi band va bo'sh joyni ko'rsatadi.
 | `CLOUD_MAX_UPLOAD` | fayl chegarasi (bayt), standart 8 GB |
 | `CLOUD_DL_TTL` | yuklab olish havolasining muddati (soniya) |
 
-Parolni keyin almashtirish: `venv/bin/python tools/set_password.py <parol>`
+Parolni keyin almashtirish: `venv/bin/python backend/tools/set_password.py <parol>`
 (bulutni to'xtatish shart emas).

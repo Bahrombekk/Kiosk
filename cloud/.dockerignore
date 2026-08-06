@@ -1,0 +1,18 @@
+# Docker build kontekstiga sir/ma'lumot TUSHMASIN (image faqat kod)
+.git
+.github
+.gitignore
+*.pem
+cloud.db*
+*.sqlite*
+storage/
+logs/
+*.log
+.env
+.env.*
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+README.md
+deploy/

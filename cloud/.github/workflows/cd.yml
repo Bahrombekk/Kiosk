@@ -1,0 +1,74 @@
+name: CD (deploy)
+
+# main'ga push bo'lganda (yoki qo'lda) VPS'ga yetkazadi — DOCKER yo'li:
+#   1) kodni rsync bilan serverga ko'chiradi (.env va ma'lumot TEGILMAYDI),
+#   2) `docker compose up -d --build` bilan qayta quradi/ishga tushiradi.
+#
+# Kerakli GitHub Secrets (Settings -> Secrets and variables -> Actions):
+#   DEPLOY_HOST     - VPS IP yoki domen
+#   DEPLOY_USER     - SSH foydalanuvchi (docker ishlata oladigan)
+#   DEPLOY_SSH_KEY  - shu foydalanuvchining MAXFIY SSH kaliti (butun matn)
+# Ixtiyoriy Variables:
+#   DEPLOY_PORT     - SSH port (standart 22)
+#   DEPLOY_PATH     - server papkasi (standart /opt/kioskcloud)
+#
+# Server tomonda bir martalik tayyorgarlik (DOCKER yo'li):
+#   - Docker + Docker Compose plugin o'rnatilgan bo'lsin
+#   - <DEPLOY_PATH>/.env mavjud bo'lsin (.env.example dan; sirlar shu yerda —
+#     rsync uni exclude qiladi, o'chirmaydi)
+#   - DNS: CLOUD_DOMAIN -> VPS IP ; 80/443 portlar ochiq
+# (systemd yo'lini afzal ko'rsangiz — deploy/README.md ga qarang.)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: SSH kalitni sozlash
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          PORT="${{ vars.DEPLOY_PORT || '22' }}"
+          ssh-keyscan -p "$PORT" -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Kodni yetkazish (rsync — .env va ma'lumot tegilmaydi)
+        run: |
+          PORT="${{ vars.DEPLOY_PORT || '22' }}"
+          DEST="${{ vars.DEPLOY_PATH || '/opt/kioskcloud' }}"
+          # .env, ma'lumot va sirlar exclude — serverdagi .env saqlanadi.
+          rsync -az --no-perms --omit-dir-times \
+            --exclude='.git' \
+            --exclude='.env' --exclude='.env.*' \
+            --exclude='cloud.db*' --exclude='storage/' --exclude='logs/' \
+            --exclude='*.pem' --exclude='__pycache__/' --exclude='venv/' \
+            -e "ssh -p $PORT -i ~/.ssh/id_deploy" \
+            ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:$DEST/"
+
+      - name: Docker compose — qayta qurish va ishga tushirish
+        run: |
+          PORT="${{ vars.DEPLOY_PORT || '22' }}"
+          DEST="${{ vars.DEPLOY_PATH || '/opt/kioskcloud' }}"
+          ssh -p "$PORT" -i ~/.ssh/id_deploy \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" bash -s <<EOF
+          set -e
+          cd "$DEST"
+          docker compose up -d --build
+          docker image prune -f || true
+          echo "Deploy tugadi (docker): \$(date)"
+          EOF
+
+      - name: SSH kalitni tozalash
+        if: always()
+        run: rm -f ~/.ssh/id_deploy

@@ -1,0 +1,39 @@
+# KioskCloud — bir buyruq bilan deploy:  docker compose up -d --build
+#
+# Oldindan:  .env.example -> .env  (nusxalab to'ldiring), DNS: CLOUD_DOMAIN -> VPS IP
+#
+# Ma'lumot (cloud.db, storage/, cloud_signing_key.pem) `clouddata` volume'да —
+# konteyner qayta qurilса ham SAQLANADI. Zaxira: `docker run --rm -v
+# cloud_clouddata:/data -v $PWD:/bak alpine tar czf /bak/backup.tgz -C /data .`
+
+services:
+  cloud:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - clouddata:/data          # baza + ombor + imzo kaliti (DOIMIY)
+    expose:
+      - "9000"                    # faqat ichki tarmoq — tashqariga Caddy chiqaradi
+    stop_grace_period: 30s
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [cloud]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"            # HTTP/3
+    environment:
+      CLOUD_DOMAIN: ${CLOUD_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data          # olingan sertifikatlar (DOIMIY)
+      - caddyconfig:/config
+
+volumes:
+  clouddata:
+  caddydata:
+  caddyconfig:

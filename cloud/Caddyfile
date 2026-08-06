@@ -1,0 +1,16 @@
+# Caddy — domenга AVTOMATIK HTTPS (Let's Encrypt) va bulutga reverse-proxy.
+# {$CLOUD_DOMAIN} va {$ACME_EMAIL} .env dan (docker-compose orqali) keladi.
+
+{$CLOUD_DOMAIN} {
+	tls {$ACME_EMAIL}
+
+	# Katta media yuklash (8 GB gacha PUT /api/admin/blob) uchun cheklovni
+	# kengaytiramiz. Caddy oqim bilan uzatadi (xotirada buferlamaydi).
+	request_body {
+		max_size 9GB
+	}
+
+	# WebSocket (/agent) va REST — hammasi bulutga. Caddy WS'ni o'zi upgrade
+	# qiladi, alohida sozlash shart emas.
+	reverse_proxy cloud:9000
+}

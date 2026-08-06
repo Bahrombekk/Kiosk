@@ -1,0 +1,27 @@
+# Sirlar / muhit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Ma'lumot (baza, kontent, loglar)
+backend/*.db
+backend/*.db-*
+backend/content/
+backend/logs/
+backend/weather_cache.json
+backend/cloud.txt
+backend/license.key*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Web (Nuxt)
+web/node_modules/
+web/.nuxt/
+web/.output/
+*.log

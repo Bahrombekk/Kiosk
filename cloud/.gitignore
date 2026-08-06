@@ -1,0 +1,37 @@
+# ===== Sirlar va ma'lumot — HECH QACHON repoga tushmasin =====
+# Ed25519 imzo kaliti (maxfiy!) va boshqa kalitlar
+*.pem
+*.key
+# SQLite bazasi (admin parol xeshi, real ma'lumot)
+cloud.db
+cloud.db-journal
+cloud.db-wal
+cloud.db-shm
+*.sqlite
+*.sqlite3
+# Fayl ombori (sha256 bloblar — GB'larcha bo'lishi mumkin)
+storage/
+# Loglar
+logs/
+*.log
+# Muhit o'zgaruvchilari (LEKIN .env.example namunasi tracked qoladi)
+.env
+.env.*
+!.env.example
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# ===== OS / muharrir =====
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

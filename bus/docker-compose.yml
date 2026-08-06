@@ -1,0 +1,31 @@
+# Avtobus — LOKAL qurilma (mini-PC/Pi avtobusда). Bir buyruq bilan:
+#   cp .env.example .env   (to'ldiring)   &&   docker compose up -d --build
+#
+# Yo'lovchilar avtobus Wi-Fi'idan  http://<qurilma-IP>/  ga kiradi (HTTP —
+# lokal tarmoq, domen/HTTPS shart emas; u BULUT tarafда). Qurilma bulutga
+# CHIQUVCHI WSS bilan ulanadi (KIOSK_CLOUD_URL) — panelдан boshqariladi.
+
+services:
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - busdata:/data          # baza + kontent fayllar (DOIMIY, oflayn kesh)
+    expose:
+      - "8000"
+    stop_grace_period: 30s
+
+  web:
+    build: ./web
+    restart: unless-stopped
+    depends_on: [backend]
+    environment:
+      # Web -> backend (ichki tarmoq). Kalit .env'даги bilan BIR XIL bo'lsin.
+      NUXT_KIOSK_SERVER: http://backend:8000
+      NUXT_KIOSK_API_KEY: ${KIOSK_API_KEY}
+    ports:
+      - "80:3000"              # yo'lovchilar: http://<avtobus-qurilma-IP>/
+
+volumes:
+  busdata:

@@ -15,7 +15,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/kioskcloud
-ExecStart=/opt/kioskcloud/venv/bin/python main.py
+ExecStart=/opt/kioskcloud/venv/bin/python backend/main.py
 
 # --- Sozlamalar ---
 # Admin paroli. DIQQAT: bu yerda tursa har qayta ishga tushirishda SHUNGA

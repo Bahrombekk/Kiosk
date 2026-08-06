@@ -1,0 +1,5 @@
+# Bulut (markaziy admin) kutubxonalari — VPS uchun. PyQt KERAK EMAS.
+fastapi>=0.110
+uvicorn[standard]>=0.29   # WebSocket (websockets) shu paket bilan keladi
+cryptography>=42.0        # Ed25519 buyruq imzosi (security.py)
+python-dotenv>=1.0        # .env fayldan sozlamalarni o'qish (ixtiyoriy)

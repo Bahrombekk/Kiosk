@@ -1,0 +1,13 @@
+# Image'ga sir/ma'lumot tushmasin
+__pycache__/
+*.py[cod]
+*.pem
+*.db
+*.db-*
+content/
+logs/
+*.log
+cloud.txt
+license.key*
+weather_cache.json
+.env

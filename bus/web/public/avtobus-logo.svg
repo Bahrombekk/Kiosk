@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 340" width="300" height="340" role="img" aria-label="AVTOBUS.UZ">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f0d38f"/>
+      <stop offset="0.5" stop-color="#c99a3c"/>
+      <stop offset="1" stop-color="#e8c87a"/>
+    </linearGradient>
+    <linearGradient id="nv" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1445a7"/>
+      <stop offset="1" stop-color="#16265e"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 8-qirrali yulduz emblema -->
+  <g transform="translate(150,132)">
+    <path transform="rotate(22.5)" d="M0,-118 34,-34 118,0 34,34 0,118 -34,34 -118,0 -34,-34Z" fill="url(#g)"/>
+    <path d="M0,-118 34,-34 118,0 34,34 0,118 -34,34 -118,0 -34,-34Z" fill="url(#g)"/>
+    <circle r="88" fill="url(#nv)"/>
+    <circle r="88" fill="none" stroke="#e8c87a" stroke-width="3"/>
+
+    <!-- Avtobus (yon ko'rinish) -->
+    <g transform="translate(0,4)">
+      <rect x="-64" y="-34" width="128" height="62" rx="14" fill="#ffffff"/>
+      <rect x="-64" y="4" width="128" height="24" rx="8" fill="#1c56c4"/>
+      <rect x="-54" y="-26" width="98" height="24" rx="6" fill="#0c1a3f"/>
+      <g stroke="#ffffff" stroke-width="3" opacity="0.85">
+        <line x1="-28" y1="-26" x2="-28" y2="-2"/>
+        <line x1="0" y1="-26" x2="0" y2="-2"/>
+        <line x1="28" y1="-26" x2="28" y2="-2"/>
+      </g>
+      <circle cx="-38" cy="30" r="12" fill="#0c1a3f"/>
+      <circle cx="-38" cy="30" r="5" fill="#e8c87a"/>
+      <circle cx="40" cy="30" r="12" fill="#0c1a3f"/>
+      <circle cx="40" cy="30" r="5" fill="#e8c87a"/>
+    </g>
+    <!-- Bayroq rang aksenti -->
+    <rect x="-40" y="46" width="80" height="6" rx="3" fill="#1eb0e6"/>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="150" y="288" text-anchor="middle" font-family="Unbounded, Arial, sans-serif" font-size="34" font-weight="700" fill="#ffffff">AVTOBUS<tspan fill="#e8c87a">.UZ</tspan></text>
+  <text x="150" y="316" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" font-weight="800" letter-spacing="5" fill="#c99a3c">YO'LDA HAMROHINGIZ</text>
+</svg>

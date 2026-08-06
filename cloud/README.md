@@ -47,8 +47,8 @@ bulutning o'z jarayoni bilan keladi.
 
 ```bash
 cd cloud
-pip install -r requirements.txt
-CLOUD_ADMIN_PASS=<parol> python main.py        # http://0.0.0.0:9000
+pip install -r backend/requirements.txt
+CLOUD_ADMIN_PASS=<parol> python backend/main.py   # http://0.0.0.0:9000
 ```
 
 ## VPS'ga qo'yish (ishlab chiqarish)
@@ -164,15 +164,23 @@ Shundan kelib chiqadigan xossalar:
 
 ```
 cloud/
-├── main.py       FastAPI: /agent WS, /api/enroll, /dl/{token}, /api/admin/*
-├── relay.py      ulangan agentlar reyestri + manifest/buyruq yuborish
-├── db.py         SQLite: servers, server_kiosks, content, assignments,
-│                 jobs/job_targets, stats_events, logs, events, enroll_tokens
-├── storage.py    sha256 ombori (dedup, Range berish, yetim blob tozalash)
-├── security.py   Ed25519 imzo, yuklab olish tokenlari, admin parol/sessiya
-├── static/       admin paneli (build'siz: index.html + app.js + styles.css)
-└── requirements.txt
+├── backend/          # Python FastAPI (server tomoni)
+│   ├── main.py       FastAPI: /agent WS, /api/enroll, /dl/{token}, /api/admin/*
+│   ├── relay.py      ulangan agentlar reyestri + manifest/buyruq yuborish
+│   ├── db.py         SQLite: servers, content, assignments, jobs, stats, events
+│   ├── storage.py    sha256 ombori (dedup, Range, yetim blob tozalash)
+│   ├── security.py   Ed25519 imzo, yuklab olish tokenlari, admin parol/sessiya
+│   ├── config.py     muhit o'zgaruvchilari (CLOUD_*); BASE_DIR = cloud/ (ota-papka)
+│   ├── ws.py  tools/  requirements.txt
+├── web/              # frontend SPA (build'siz: statik JS, backend /static da beradi)
+│   ├── index.html  app.js  styles.css  default-hero*.  uz_stations.json
+├── Dockerfile  docker-compose.yml  Caddyfile  deploy/   # deploy
+└── (runtime, git-ignore) cloud.db  storage/  cloud_signing_key.pem  .env  logs/
 ```
+
+> **Ma'lumot `cloud/` ILDIZIDA** (kod `backend/` da): `config.BASE_DIR` kod
+> papkasining ota-papkasi — shuning uchun `cloud.db`, `storage/`, imzo kaliti,
+> `.env` joyida qoladi. Ishga tushirish har doim `cloud/` dan: `python backend/main.py`.
 
 Poyezd tomoni: [`../server/cloud_client.py`](../server/cloud_client.py) —
 enroll, heartbeat, buyruqlar, downloader, manifest qo'llash, statistika/loglar.
