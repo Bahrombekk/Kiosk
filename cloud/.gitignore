@@ -35,3 +35,7 @@ env/
 Thumbs.db
 .idea/
 .vscode/
+
+# VENDOR litsenziya maxfiy kaliti — HECH QACHON commit qilinmasin
+vendor_private.pem
+backend/vendor_private.pem

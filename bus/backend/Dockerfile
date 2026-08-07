@@ -23,7 +23,11 @@ ENV KIOSK_VERTICAL=bus \
     KIOSK_HOST=0.0.0.0 \
     KIOSK_PORT=8000 \
     KIOSK_DB=/data/data.db \
-    KIOSK_CONTENT=/data/content
+    KIOSK_CONTENT=/data/content \
+    KIOSK_WEB_DISABLE=1
+# KIOSK_WEB_DISABLE=1 — Docker'да veb ALOHIDA konteynerда (Nuxt). Backend
+# jarayoni ichidagi web_server node'ni ko'tarmasin (native Windows build'да
+# esa u yoqiq — bitta exe backend+web'ni birga ishga tushiradi).
 
 VOLUME ["/data"]
 EXPOSE 8000

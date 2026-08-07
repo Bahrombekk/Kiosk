@@ -1,0 +1,4 @@
+# Haydovchi uyqu nazorati — kutubxonalar
+# Haar cascade modellari opencv-python ICHIDA keladi (alohida yuklab olish shart emas).
+opencv-python>=4.8
+numpy>=1.24

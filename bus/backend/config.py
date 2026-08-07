@@ -34,10 +34,13 @@ HOST = os.environ.get("KIOSK_HOST", "0.0.0.0")
 PORT = int(os.environ.get("KIOSK_PORT", "8765"))
 
 # --- Xavfsizlik / topish (discovery) ---
-# TLS (HTTPS/WSS): yoqilganda server self-signed sertifikat bilan ishlaydi va
-# kiosklar uni "pin" qiladi. Faqat dev/diagnostika uchun KIOSK_TLS=0 bilan
-# o'chirsa bo'ladi (u holda kanal ochiq HTTP bo'ladi — ishlab chiqarishda EMAS).
-USE_TLS = os.environ.get("KIOSK_TLS", "1") != "0"
+# TLS (HTTPS/WSS): avtobusда backend FAQAT lokal (127.0.0.1) da ishlaydi —
+# node/Nitro veb proksi shu mashinaда unga ulanadi, yo'lovchilar esa faqat
+# 80-portдаgi veb'ni HTTP orqali ko'radi (avtobus Wi-Fi, LAN). Shuning uchun
+# lokal backend uchun TLS standart O'CHIQ (self-signed sertifikat, node'ga
+# tanitish kabi ortiqcha murakkablik shart emas). KIOSK_TLS=1 bilan yoqsa
+# bo'ladi (poyezddagi kabi LAN pinning kerak bo'lганда).
+USE_TLS = os.environ.get("KIOSK_TLS", "0") != "0"
 
 # Discovery: server LAN'ga imzolangan UDP "beacon" tarqatadi, kiosklar uni
 # tutib serverni avtomatik topadi (qo'lda IP yozish shart emas).
@@ -115,6 +118,12 @@ def _norm_cloud_url(u):
 CLOUD_URL = _norm_cloud_url(os.environ.get("KIOSK_CLOUD_URL")
                             or _CLOUD.get("url") or CLOUD_URL_DEFAULT)
 CLOUD_ENROLL = os.environ.get("KIOSK_CLOUD_ENROLL") or _CLOUD.get("enroll") or ""
+
+# Avtobus nomi cloud.txt'да ham bo'lishi mumkin (ichki admin runtime'да
+# o'zgartirsa shu yerга yozadi) — env berilmaган bo'lsa o'shani ishlatamiz.
+# Shunday qilib nom restartдан keyin ham saqlanadi.
+if not os.environ.get("KIOSK_NAME") and _CLOUD.get("name"):
+    SERVER_NAME = _CLOUD["name"]
 CLOUD_HEARTBEAT_S = int(os.environ.get("KIOSK_CLOUD_HEARTBEAT", "30"))
 # Kiosk statistikasi bulutga qancha vaqtda bir yuboriladi (batch)
 CLOUD_STATS_S = int(os.environ.get("KIOSK_CLOUD_STATS", "60"))

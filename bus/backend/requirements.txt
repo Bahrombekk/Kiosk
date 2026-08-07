@@ -1,6 +1,6 @@
-# Server (admin) dasturi kutubxonalari
+# Avtobus backend — HEADLESS (PyQt YO'Q; faqat veb + API + bulut agenti).
+# Poyezd serveridan farqli: PyQt6 / PyQt6-WebEngine olib tashlandi — avtobusда
+# desktop oyna yo'q, exe ham shuncha yengil bo'ladi.
 fastapi>=0.110
 uvicorn[standard]>=0.29   # WebSocket (websockets) shu paket bilan keladi
-PyQt6>=6.6                # admin desktop oynasi
-PyQt6-WebEngine>=6.6      # Bekat dialogidagi oflayn xarita (ixtiyoriy — bo'lmasa xaritasiz ishlaydi)
-cryptography>=42.0        # Ed25519 imzo (discovery) + TLS sertifikat (security.py)
+cryptography>=42.0        # Ed25519 imzo (litsenziya/identity) + TLS sertifikat

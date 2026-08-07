@@ -33,6 +33,7 @@ import json
 import logging
 import os
 import shutil
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -53,6 +54,14 @@ K_STATS = "cloud_stats_last_id"
 
 RECONNECT_MIN_S = 5
 RECONNECT_MAX_S = 60
+
+
+def _ver_tuple(v):
+    """'1.2.0' -> (1,2,0). Versiyalarни solishtirish uchun (yangilanish guard)."""
+    try:
+        return tuple(int(x) for x in str(v).strip().split(".")[:4])
+    except (TypeError, ValueError):
+        return (0,)
 PROGRESS_EVERY_S = 2
 DL_CHUNK = 512 * 1024
 DL_TIMEOUT_S = 60
@@ -232,7 +241,9 @@ class CloudClient:
         if r.get("cloud_pubkey"):
             db.set_setting(K_PUBKEY, r["cloud_pubkey"])
         self._load_state()
-        self.approved = bool(r.get("approved", True))
+        # Sukut FALSE: enroll javobida "approved" bo'lmasa — TASDIQLANMAGAN.
+        # (Xavfsizlik: yo'q maydon tasdiq bermasin.)
+        self.approved = bool(r.get("approved", False))
         log.info("Bulut: ro'yxatdan o'tdik — %s (tasdiqlangan=%s)",
                  self.server_id, self.approved)
         db.log_action("cloud_enrolled", self.server_id)
@@ -260,8 +271,19 @@ class CloudClient:
             except asyncio.CancelledError:
                 raise
             except Exception as e:                               # noqa: BLE001
-                log.warning("Bulut: aloqa uzildi (%s) — %ss dan keyin qayta",
-                            type(e).__name__, delay)
+                if self._is_auth_reject(e):
+                    # Token rad etildi — server panelдан O'CHIRILGAN (yoki qayta
+                    # o'rnatilган) bo'lishi mumkin. Enrollни tozalaymiz — keyingi
+                    # aylanishда qurilma QAYTADAN ro'yxatdan o'tadi va panelда
+                    # «kutilmoqda» bo'lib qayta chiqadi (tasdiqlagach avto-litsenziya).
+                    log.warning("Bulut: token rad etildi — qayta ro'yxatdan o'tamiz")
+                    cloud_log("Server panelдан o'chirilган — qayta ro'yxatdan "
+                              "o'tilmoqda (tasdiqlashни kuting)", "WARN")
+                    self._reset_enrollment()
+                    delay = RECONNECT_MIN_S
+                else:
+                    log.warning("Bulut: aloqa uzildi (%s) — %ss dan keyin qayta",
+                                type(e).__name__, delay)
             finally:
                 self.connected = False
             await self._sleep(delay)
@@ -272,6 +294,35 @@ class CloudClient:
             await asyncio.wait_for(self._stop.wait(), timeout=s)
         except asyncio.TimeoutError:
             pass
+
+    def _reset_enrollment(self):
+        """Saqlangan server_id/token/pubkey ni tozalaydi — keyingi aylanishда
+        qurilma QAYTADAN enroll qiladi. Litsenziya faylига TEGMAYDI (u lokal,
+        imzolangan — qurilma baribir ishlab turadi)."""
+        self.server_id = None
+        self.token = None
+        self.pubkey = None
+        self.approved = False
+        for k in (K_ID, K_TOKEN, K_PUBKEY):
+            try:
+                db.set_setting(k, "")
+            except Exception:                                # noqa: BLE001
+                pass
+
+    @staticmethod
+    def _is_auth_reject(e):
+        """WS handshake auth rad etilганmi (403/401 yoki 4401). Bunда saqlangan
+        token endi yaroqsiz (server o'chirilган/almashtirilган) — qayta enroll
+        kerak. Oddiy tarmoq uzilishi (timeout/ConnectionRefused)дан farqlaymiz —
+        aks holда har uzilishда enroll tashlab, panelда dublikat yaratardi."""
+        status = getattr(e, "status_code", None)
+        resp = getattr(e, "response", None)
+        if resp is not None:
+            status = getattr(resp, "status_code", status)
+        if status in (401, 403):
+            return True
+        s = f"{type(e).__name__}: {e}"
+        return ("4401" in s) or (" 403" in s) or (" 401" in s)
 
     def _ws_url(self):
         base = config.CLOUD_URL.replace("https://", "wss://").replace(
@@ -540,7 +591,7 @@ class CloudClient:
         elif kind in ("hello", "hb_ack"):
             # Tasdiqlash holati o'zgarganini kuzatamiz (admin panelda bosilganda)
             was = self.approved
-            self.approved = bool(msg.get("approved", True))
+            self.approved = bool(msg.get("approved", False))
             if not was and self.approved:
                 log.info("Bulut: server TASDIQLANDI — sinxronizatsiya boshlanadi")
                 cloud_log("Server bulutda tasdiqlandi")
@@ -572,6 +623,8 @@ class CloudClient:
             await self._kiosk_cmd(sock, cmd)
         elif kind == "set_license":
             await self._set_license(sock, cmd.get("text"))
+        elif kind == "update":
+            await self._apply_update(cmd)
         elif kind == "reboot":
             # Ataylab bajarilmaydi: masofadan qayta ishga tushirish poyezdda
             # kioskni ishlamay qoldirish xavfini tug'diradi. Faqat qayd etamiz.
@@ -664,6 +717,53 @@ class CloudClient:
                     os.remove(tmp)
             except OSError:
                 pass
+
+    async def _apply_update(self, cmd):
+        """Bulut yuborган DASTUR yangilanishини (kod-only AvtobusUpdate.exe)
+        yuklab olib, JIMGINA ishga tushiradi. Installer xizmatni to'xtatib,
+        fayllarni almashtirib (data.db/content/license SAQLANADI), qayta yoqadi.
+
+        Xavfsizlik: `update` buyrug'i bulut Ed25519 kaliti bilan IMZOLANGAN
+        (_verify o'tмаса bu yergacha kelmaydi) + fayl sha256 tekshiriladi
+        (_download). Ya'ni soxta yangilanish yuborib bo'lmaydi. Versiya
+        pasaytirilса yoki ayni versiya bo'lса — o'tkazib yuboramiz."""
+        ver = str(cmd.get("version") or "").strip()
+        part = {"url": cmd.get("url"), "sha256": cmd.get("sha256"),
+                "name": cmd.get("name") or "AvtobusUpdate.exe"}
+        if not part["url"] or not part["sha256"]:
+            cloud_log("Yangilanish: url/sha256 yo'q — tashlandi", "WARN")
+            return
+        if not getattr(sys, "frozen", False):
+            cloud_log("Yangilanish faqat o'rnatilган (exe) rejimда bajariladi",
+                      "WARN")
+            return
+        if ver and _ver_tuple(ver) <= _ver_tuple(config.APP_VERSION):
+            cloud_log(f"Yangilanish o'tkazildi — joriy {config.APP_VERSION} "
+                      f">= yangi {ver}")
+            return
+        updir = os.path.join(config.BASE_DIR, "update")
+        cloud_log(f"Yangilanish {ver or '?'} yuklab olinmoqda…")
+        try:
+            name = await asyncio.to_thread(self._download, part, updir,
+                                           lambda *a: None)
+        except Exception as e:                                   # noqa: BLE001
+            cloud_log(f"Yangilanish yuklab bo'lmadi: {e}", "ERROR")
+            return
+        exe = os.path.join(updir, name)
+        cloud_log(f"Yangilanish {ver or ''} o'rnatilmoqda (jimgina, qayta "
+                  "ishga tushadi)…")
+        db.log_action("cloud_update", ver or exe)
+        # DETACHED: installer bu (Avtobus.exe) jarayonni to'xtatadi — updater
+        # alohida jarayon bo'lib davom etsin.
+        import subprocess
+        flags = (getattr(subprocess, "DETACHED_PROCESS", 0)
+                 | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+        try:
+            subprocess.Popen([exe, "/VERYSILENT", "/SUPPRESSMSGBOXES",
+                              "/NORESTART"], cwd=updir, creationflags=flags,
+                             close_fds=True)
+        except OSError as e:
+            cloud_log(f"Yangilanishни ishga tushirib bo'lmadi: {e}", "ERROR")
 
     async def _kiosk_cmd(self, sock, cmd):
         """Bitta kioskка tegishli buyruq (bulut paneldagi kiosk qatoridan)."""
@@ -1076,3 +1176,15 @@ async def stop():
         except (asyncio.CancelledError, Exception):              # noqa: BLE001
             pass
         client._task = None
+
+
+async def restart():
+    """Bulut agentini QAYTA ulaydi — ichki admin `config.CLOUD_URL` ni
+    o'zgartirгач chaqiriladi. run() har ulanишда `config.CLOUD_URL` ni qayta
+    o'qiydi, shuning uchun stop()+start() yangi manzilга ulanadi.
+
+    Approved holatini tozalaymiz — yangi bulut (boshqa super-admin) uchun
+    qaytadan tasdiq talab qilinadi."""
+    await stop()
+    client.approved = False
+    return start()

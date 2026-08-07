@@ -33,7 +33,7 @@
 //  Vertikalga qarab yorliqlar: vmeta(s) (poyezd/avtobus). Server matni HTML'ga
 //  chiqsa DOIM esc() bilan. Kesh-bust: UI_BUILD == cloud/main.py APP_BUILD.
 // ═══════════════════════════════════════════════════════════════════════════
-const UI_BUILD = "2026-08-06.2";
+const UI_BUILD = "2026-08-07.4";
 
 // ======================================================== 1) API klient
 async function req(method, url, body) {
@@ -353,6 +353,7 @@ const NAV = [
   ["ads", "Reklama", "megaphone"],
   ["sites", "Saytlar", "globe"],
   ["queue", "Navbat", "send"],
+  ["update", "Yangilanish", "download"],
   ["stats", "Statistika", "barChart"],
   ["logs", "Loglar", "fileText"],
   ["tokens", "Ulash kalitlari", "lock"],
@@ -362,6 +363,7 @@ const TITLES = {
   servers: ["Serverlar", "Har bir poyezd serveri va uning kiosklari"],
   library: ["Kontent kutubxonasi", "Bulutdagi manba katalog — shundan serverlarga tarqatiladi"],
   queue: ["Tarqatish navbati", "Faol va tugagan ishlar, jonli jarayon"],
+  update: ["Yangilanish", "Dastur (Avtobus.exe) versiyasini masofadan yangilash"],
   stats: ["Statistika", "Barcha kiosklardan yig'ilgan foydalanish ma'lumoti"],
   logs: ["Loglar", "Serverlardan kelgan hodisalar"],
   tokens: ["Ulash kalitlari", "Yangi poyezd serverini bulutga ulash uchun bir martalik token"],
@@ -390,6 +392,10 @@ async function load(silent) {
       S.data.library = await api.get("/api/admin/content?" + p);
       S.data.servers = await api.get("/api/admin/servers");
     } else if (S.page === "queue") S.data.jobs = await api.get("/api/admin/jobs");
+    else if (S.page === "update") {
+      S.data.update = await api.get("/api/admin/update");
+      S.data.servers = await api.get("/api/admin/servers");
+    }
     else if (S.page === "stats") {
       const p = new URLSearchParams({ days: String(S.statDays) });
       if (S.statSource) p.set("source", S.statSource);
@@ -665,6 +671,7 @@ function pageBody() {
     case "server": return pageServer();
     case "library": return pageLibrary();
     case "queue": return pageQueue();
+    case "update": return pageUpdate();
     case "stats": return pageStats();
     case "logs": return pageLogs();
     case "tokens": return pageTokens();
@@ -673,6 +680,114 @@ function pageBody() {
     case "stops": return pageStops();
     default: return "";
   }
+}
+
+// --------------------------------------------------------------- Yangilanish
+/** Dastur (Avtobus.exe) versiyasini masofadan yangilash — kod-only paket. */
+function pageUpdate() {
+  const u = S.data.update || {};
+  const servers = S.data.servers || [];
+  const approved = servers.filter((s) => s.approved);
+  const has = !!u.version;
+  // Har bir qurilma versiyasini eng yangi yuklangан bilan solishtiramiz
+  const statusOf = (s) => {
+    const v = (s.version || "").trim();
+    if (!v) return ["mut", "noma'lum"];
+    if (!has) return ["acc", "v" + v];
+    return verCmp(v, u.version) >= 0 ? ["ok", "Yangilangan"] : ["warn", "Eski"];
+  };
+  const nNew = has ? approved.filter((s) => (s.version || "") && verCmp(s.version, u.version) >= 0).length : 0;
+  const nOld = has ? approved.length - nNew : 0;
+  return `
+  <div class="grid" style="gap:18px;max-width:920px">
+  <div class="card">
+    <div class="upd-hero">
+      <div class="upd-ico">${ic("download", 24, "#fff")}</div>
+      <div>
+        <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:600;letter-spacing:-.3px">Dastur yangilanishi</div>
+        <div class="dim">Avtomatik — qurilma o'zi tortib olib o'rnatadi</div>
+      </div>
+    </div>
+    <div class="dim" style="margin:14px 0 16px;line-height:1.6">
+      Kod-only <b>AvtobusUpdate.exe</b> ni yuklang va qurilmalarga yuboring.
+      Qurilma onlayn bo'lganda <b>o'zi</b> tortib oladi, sha256 tekshiradi va
+      jimgina o'rnatadi — <b>qo'lda borish shart emas</b>. Ma'lumot (baza,
+      kontent, litsenziya) saqlanadi. Offlayn bo'lsa navbatda turadi.
+    </div>
+    <div class="row" style="gap:12px;align-items:center;flex-wrap:wrap">
+      <input id="upd-ver" placeholder="Yangi versiya (masalan 1.0.1)"
+        value="${esc(u.version || "")}"
+        style="padding:10px 13px;border:1px solid #e2e8f0;border-radius:11px;font-size:14px">
+      <label class="btn pri" style="cursor:pointer">
+        ${ic("download", 16, "#fff")} AvtobusUpdate.exe tanlash
+        <input type="file" accept=".exe" data-act="update-file" style="display:none">
+      </label>
+    </div>
+    <div id="upd-prog" class="dim" style="margin-top:12px"></div>
+    ${has ? `<div class="card" style="margin-top:18px;background:#f8fafc;border:1px solid #eef2f7">
+        <div style="font-weight:600;font-size:15px">Joriy yuklangan: v${esc(u.version)}</div>
+        <div class="dim" style="margin-top:4px">${bytes(u.size)} · yuklangan ${esc(u.at || "")}</div>
+        <div class="dim" style="word-break:break-all;margin-top:2px">sha256: ${esc((u.sha256 || "").slice(0, 24))}…</div>
+        <button class="btn pri" style="margin-top:14px" data-act="update-push">
+          ${ic("send", 15, "#fff")} ${approved.length} ta tasdiqlangan qurilmaga yuborish</button>
+        <div class="dim" style="margin-top:8px">Faqat joriy versiyadan yuqori bo'lsa o'rnatiladi (pasaytirmaydi).</div>
+      </div>`
+    : `<div class="card empty" style="margin-top:18px">Hali yangilanish yuklanmagan —
+        yuqoridan <b>AvtobusUpdate.exe</b> ni tanlang.</div>`}
+  </div>
+
+  <div class="card">
+    <div class="row" style="margin-bottom:14px">
+      <h3 class="sec-title" style="margin:0;flex:1">Qurilmalar versiyasi (${approved.length})</h3>
+      ${has ? `<span class="pill ok">${nNew} yangilangan</span>
+               ${nOld ? `<span class="pill warn">${nOld} eski</span>` : ""}` : ""}
+    </div>
+    ${approved.length ? `<div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th>Avtobus</th><th>Holat</th><th>Versiya</th><th>Yangilanish</th></tr></thead>
+      <tbody>${approved.map((s) => {
+        const [cls, txt] = statusOf(s);
+        return `<tr>
+          <td><b>${esc(s.name)}</b><div class="dim">${esc(s.route || "yo'nalish ko'rsatilmagan")}</div></td>
+          <td>${s.online ? `<span class="pill ok">onlayn</span>`
+                         : `<span class="pill mut">oflayn</span>`}</td>
+          <td class="mono">${esc(s.version || "—")}</td>
+          <td><span class="pill ${cls}">${txt}</span></td>
+        </tr>`;
+      }).join("")}</tbody></table></div>
+      ${has ? `<div class="dim" style="margin-top:12px">Eng yangi yuklangan:
+        <b>v${esc(u.version)}</b>. «Eski» qurilmalar keyingi «Yuborish»да yoki
+        o'zi ulanganда yangilanadi.</div>` : ""}`
+      : `<div class="empty">Tasdiqlangan qurilma yo'q.</div>`}
+  </div>
+  </div>`;
+}
+
+/** Versiyalarni solishtiradi: a<b -> -1, a==b -> 0, a>b -> 1 (1.0.10 > 1.0.9). */
+function verCmp(a, b) {
+  const pa = String(a).split("."), pb = String(b).split(".");
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (parseInt(pa[i]) || 0) - (parseInt(pb[i]) || 0);
+    if (d) return d < 0 ? -1 : 1;
+  }
+  return 0;
+}
+
+/** AvtobusUpdate.exe ni xom tana (PUT) bilan yuklaydi — progress uchun XHR. */
+function putUpdate(file, version, onPct) {
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open("PUT", "/api/admin/update/upload?version=" + encodeURIComponent(version));
+    x.upload.onprogress = (e) => {
+      if (e.lengthComputable && onPct) onPct(Math.round(100 * e.loaded / e.total));
+    };
+    x.onload = () => {
+      let d = null; try { d = JSON.parse(x.responseText); } catch { /* bo'sh */ }
+      if (x.status >= 200 && x.status < 300) resolve(d);
+      else reject(new Error((d && d.detail) || `Yuklash xatosi ${x.status}`));
+    };
+    x.onerror = () => reject(new Error("tarmoq xatosi"));
+    x.send(file);
+  });
 }
 
 // --------------------------------------------------------------- Boshqaruv
@@ -1466,10 +1581,15 @@ function typePill(t) {
 function pageLibrary() {
   const list = S.data.library || [];
   const tabs = [["", "Barchasi"]].concat(Object.entries(TYPES).map(([k, v]) => [k, v[0]]));
+  // Joriy ro'yxatdagi HAMMA element tanlanganmi (filtr/qidiruv bo'yicha)
+  const allOn = list.length > 0 && list.every((c) => S.sel.has(c.id));
   return `
   <div class="filters">
     ${tabs.map(([k, label]) => `<button class="chip ${S.libType === k ? "on" : ""}"
         data-act="lib-type" data-type="${k}">${label}</button>`).join("")}
+    ${list.length ? `<button class="chip ${allOn ? "on" : ""}" data-act="sel-all"
+        style="margin-left:auto">${ic("check", 14, allOn ? "#fff" : "#64748b", 3)}
+        ${allOn ? "Tanlovni olib tashlash" : `Barchasini tanlash (${list.length})`}</button>` : ""}
   </div>
   ${list.length ? `<div class="lib">${list.map(libCard).join("")}</div>`
     : `<div class="card empty">Kutubxona bo'sh — yuqoridagi
@@ -1561,14 +1681,14 @@ function pageQueue() {
   return `
   <div class="row wrap" style="gap:16px;align-items:stretch">
     <div class="card" style="flex:1;min-width:300px;display:flex;gap:26px;align-items:center">
-      ${kpi("#2563EB", "FAOL", activeJobs.length)}
+      ${kpi("#4F46E5", "FAOL", activeJobs.length)}
       ${kpi("#94A3B8", "NAVBATDA", queuedJobs.length)}
       ${kpi("#EF4444", "XATO", errJobs.length)}
       ${kpi("#0F172A", "YUBORILMOQDA", bytes(inFlight))}
     </div>
     <div class="card" style="flex:1.2;min-width:280px;display:flex;align-items:center;
-      gap:12px;background:#EFF6FF;box-shadow:none">
-      ${ic("wifi", 18, "#2563EB")}
+      gap:12px;background:var(--accent-soft);box-shadow:none;border-color:transparent">
+      ${ic("wifi", 18, "#4F46E5")}
       <div class="dim" style="color:#334155;line-height:1.6">Offlayn obyektlar
         navbatda turadi — SIM-internet tiklanishi bilan <b>o'zi</b> davom etadi,
         fayl to'xtagan joyidan (Range) yuklanadi.</div>
@@ -1603,20 +1723,36 @@ function jobRow(j) {
   const size = (j.items || []).reduce((a, c) => a + (c.media_size || 0), 0);
   const err = (j.targets.find((t) => t.state === "error") || {}).error;
 
-  // O'ng tomon: foiz + qolgan vaqt/izoh + amal tugmasi
-  let right, action;
-  if (j.state === "running") {
-    const allWait = n.done === 0 && n.running === 0;
-    right = allWait ? ["—", "onlayn kutilmoqda"] : [pct + "%", etaText(j)];
-    action = allWait
-      ? `<button class="btn sm ghost" data-act="job-cancel" data-id="${j.id}">Bekor qilish</button>`
-      : `<button class="btn sm ghost" data-act="job-cancel" data-id="${j.id}">To'xtatish</button>`;
-  } else if (j.state === "error") {
-    right = [pct + "%", err ? esc(err.slice(0, 40)) : "xato"];
-    action = `<button class="btn sm ghost" data-act="job-retry" data-id="${j.id}">Qayta urinish</button>`;
+  const isRun = j.state === "running";
+  const isErr = j.state === "error";
+  const allWait = isRun && n.done === 0 && n.running === 0;
+
+  // O'RTA: faqat FAOL ishда ingichka progress + legenda ko'rinadi. Tugagan/xato
+  // ishда katta bar o'rniga bo'sh spacer — qator ixcham qoladi.
+  const mid = isRun
+    ? `<div class="job-p">
+         <div class="segs">${segs || `<i class="seg wait"></i>`}</div>
+         <div class="job-legend">${legend}</div>
+       </div>`
+    : `<div class="job-p"></div>`;
+
+  // O'NG: holat pill + izoh + amal
+  let pill, sub, action = "";
+  if (isRun) {
+    pill = allWait ? `<span class="pill mut">Kutilmoqda</span>`
+                   : `<span class="pill acc mono">${pct}%</span>`;
+    sub = allWait ? "onlayn kutilmoqda" : etaText(j);
+    action = `<button class="btn sm ghost" data-act="job-cancel" data-id="${j.id}">${allWait ? "Bekor" : "To'xtatish"}</button>`;
+  } else if (isErr) {
+    pill = `<span class="pill err">✕ Xato</span>`;
+    sub = err ? esc(err.slice(0, 42)) : "";
+    action = `<button class="btn sm ghost" data-act="job-retry" data-id="${j.id}">Qayta</button>`;
+  } else if (j.state === "cancelled") {
+    pill = `<span class="pill mut">Bekor qilindi</span>`;
+    sub = ago(j.done_at || j.created_at);
   } else {
-    right = ["100%", ago(j.done_at || j.created_at)];
-    action = "";
+    pill = `<span class="pill ok">✓ Tugadi</span>`;
+    sub = ago(j.done_at || j.created_at);
   }
 
   return `<div class="job">
@@ -1626,13 +1762,10 @@ function jobRow(j) {
         ? ` — ${bytes(size)}` : ""}</div>
       <div class="dim">${esc(kindLabel)} · ${j.n_targets} obyektga</div>
     </div>
-    <div class="job-p">
-      <div class="segs">${segs || `<i class="seg wait"></i>`}</div>
-      <div class="job-legend">${legend}</div>
-    </div>
+    ${mid}
     <div class="job-r">
-      <div class="strong mono">${right[0]}</div>
-      <div class="dim">${right[1]}</div>
+      ${pill}
+      ${sub ? `<div class="dim" style="margin-top:5px">${sub}</div>` : ""}
     </div>
     <div class="job-a">${action}</div>
   </div>`;
@@ -2697,6 +2830,24 @@ document.addEventListener("click", async (e) => {
     render(); return;
   }
   if (act === "sel-clear") { S.sel.clear(); render(); return; }
+  if (act === "sel-all") {
+    // Joriy ro'yxat (filtr/qidiruv bo'yicha) — hammasi tanlangan bo'lsa olib
+    // tashlaydi, aks holda hammasini tanlaydi (toggle).
+    const list = S.data.library || [];
+    const allOn = list.length > 0 && list.every((c) => S.sel.has(c.id));
+    if (allOn) list.forEach((c) => S.sel.delete(c.id));
+    else list.forEach((c) => S.sel.add(c.id));
+    render(); return;
+  }
+  if (act === "update-push") {
+    const u = S.data.update || {};
+    if (!confirm(`v${u.version} yangilanishini barcha tasdiqlangan qurilmalarga yuborilsinmi?`)) return;
+    try {
+      const r = await api.post("/api/admin/update/push", {});
+      toast(`Yangilanish ${r.sent} qurilmaga yuborildi`);
+    } catch (err) { toast("Xato: " + err.message, "err"); }
+    return;
+  }
 
   // ---- serverlar
   if (act === "sync-all") {
@@ -3291,6 +3442,16 @@ document.addEventListener("change", (e) => {
   if (e.target.dataset.act === "log-server") { S.logFilter.server_id = e.target.value; load(); }
   if (e.target.dataset.act === "stat-server") { S.statServer = e.target.value; load(); }
   if (e.target.dataset.act === "file-input") pickFiles([...e.target.files]);
+  if (e.target.dataset.act === "update-file") {
+    const file = e.target.files[0];
+    if (!file) return;
+    const ver = (document.getElementById("upd-ver")?.value || "").trim();
+    const prog = document.getElementById("upd-prog");
+    if (!ver) { if (prog) prog.textContent = "Avval versiya raqamini kiriting (masalan 1.0.1)."; return; }
+    putUpdate(file, ver, (p) => { if (prog) prog.textContent = `Yuklanmoqda… ${p}%`; })
+      .then(() => { if (prog) prog.textContent = "✓ Yuklandi."; load(true); })
+      .catch((err) => { if (prog) prog.textContent = "Xato: " + err.message; });
+  }
   const sc = e.target.dataset.sched;
   if (sc) { S.schedule[sc] = e.target.value; }
 });

@@ -32,6 +32,7 @@ import config
 import db
 import security
 import storage
+import license_issuer
 from relay import relay
 
 log = logging.getLogger("cloud")
@@ -164,7 +165,7 @@ async def _offline_watch():
 #  MUHIM: har admin marshruti `_=A` (sessiya) bilan; buyruqlar Ed25519 imzolanadi
 #  (send_cmd→sign_command); tasdiqlanmagan serverga kontent/buyruq ketmaydi.
 # ═══════════════════════════════════════════════════════════════════════════
-APP_BUILD = "2026-08-06.2"
+APP_BUILD = "2026-08-07.4"
 
 
 @app.get("/api/health")
@@ -280,6 +281,32 @@ async def agent_ws(ws: WebSocket, server_id: str = Query(""),
         relay.detach(server_id, ws)
 
 
+async def _maybe_auto_license(server_id, msg):
+    """Tasdiqlangan, ammo litsenziyasi YO'Q/bloklangan qurilma ulanган zahoti
+    VENDOR imzoli litsenziya yuboradi (token bilan avto-tasdiq yoki qurilmani
+    qayta o'rnatish holatlari — approve endpointга kirmasdан ham qamrab olinadi).
+    Idempotent: yaroqli litsenziyasi bor qurilmaga qayta yubormaydi."""
+    if not license_issuer.available() or not db.is_approved(server_id):
+        return
+    li = msg.get("license_info") if isinstance(msg.get("license_info"), dict) else {}
+    lic_state = str(msg.get("license") or "").lower()
+    needs = bool(li.get("blocked")) or lic_state in ("blocked", "expired")
+    if not needs:
+        return
+    srv = db.get_server(server_id) or {}
+    hw = str(li.get("hw") or srv.get("hw_id") or "").strip()
+    if not hw:
+        return
+    try:
+        text = license_issuer.issue(hw, customer=(srv.get("name") or "Avtobus"))
+        await _send_or_queue(server_id, "set_license", {"text": text},
+                             "Auto-litsenziya (ulanganда)")
+        db.add_event(f"{srv.get('name') or server_id} — litsenziya "
+                     "avtomatik yuborildi", "ok")
+    except Exception:                                        # noqa: BLE001
+        log.exception("Auto-litsenziya (register) xatosi")
+
+
 async def _handle_agent_msg(server_id, msg, ws):
     kind = msg.get("type")
 
@@ -326,6 +353,7 @@ async def _handle_agent_msg(server_id, msg, ws):
                             "desired_rev": srv.get("desired_rev", 0),
                             "approved": bool(srv.get("approved"))})
         if kind == "register":
+            await _maybe_auto_license(server_id, msg)
             await relay.on_register(server_id)
             # Ulanish tiklandi — navbatда turgan buyruqlarni darhol yuboramiz
             # ("saqlash"ni oflaynда bosgan bo'lsa shu yerda qo'llanadi)
@@ -605,10 +633,38 @@ async def server_approve(server_id: str, payload: dict | None = None, _=A):
         db.update_server(server_id, vertical=v)
     db.approve_server(server_id, True)
     db.add_event(f"{s['name']} TASDIQLANDI", "ok")
+
+    # ── AUTO-LITSENZIYA ──────────────────────────────────────────────────
+    # Frozen qurilma (Avtobus.exe) litsenziyasiz BLOKLANGAN turadi. Tasdiqlaган
+    # zahoti qurilma hw_id siga VENDOR imzoli litsenziya yasab, `set_license`
+    # bilan yuboramiz — qurilma uni o'rnatib OCHILADI. Shu bilan "o'rnatgach
+    # super-admindan tasdiqlanmaguncha ishlamaydi, tasdiqlagach litsenziyani
+    # o'zi oladi" oqimi to'liq avtomat bo'ladi.
+    # Vendor kaliti bo'lmasa (available()==False) — jimgina o'tamiz, panelдан
+    # qo'lда license.key yuborish mumkin (/license endpoint).
+    licensed = False
+    hw = str(s.get("hw_id") or "").strip()
+    if license_issuer.available() and hw:
+        try:
+            text = license_issuer.issue(hw, customer=(s.get("name") or "Avtobus"))
+            await _send_or_queue(server_id, "set_license", {"text": text},
+                                 "Auto-litsenziya (tasdiqlashда)")
+            db.add_event(f"{s['name']} — litsenziya avtomatik yuborildi", "ok")
+            licensed = True
+        except Exception:                                    # noqa: BLE001
+            log.exception("Auto-litsenziya xatosi")
+            db.add_event(f"{s['name']} — auto-litsenziya XATOsi", "warn")
+    elif not license_issuer.available():
+        db.add_event(f"{s['name']} — auto-litsenziya o'chiq "
+                     "(vendor kaliti yo'q); litsenziyani qo'lда yuboring", "warn")
+    elif not hw:
+        db.add_event(f"{s['name']} — hw_id hali noma'lum; litsenziya "
+                     "qurilma ulanganда yuboriladi", "warn")
+
     # Darhol sinxronizatsiya (tayinlangan kontent bo'lsa yuklab oladi)
     if relay.is_online(server_id):
         await relay.on_register(server_id)
-    return {"ok": True}
+    return {"ok": True, "licensed": licensed}
 
 
 @app.delete("/api/admin/servers/{server_id}")
@@ -769,6 +825,66 @@ async def server_kiosk(server_id: str, payload: dict, _=A):
     db.add_event(f"Kiosk {device_id}: {action} (bulutdan)" +
                  (" — navbatда" if r["queued"] else ""), "info")
     return r
+
+
+# ----------------------------------------------------- DASTUR YANGILANISHI
+# Kod-only AvtobusUpdate.exe ni bulutга yuklaysiz, so'ng qurilmalarга IMZOLANGAN
+# `update` buyrug'ini yuborasiz. Qurilma faylni /dl/<token> orqali tortib,
+# sha256 tekshirib, jimgina o'rnatadi (data.db/content/license saqlanadi).
+K_UPDATE = "software_update"
+
+
+@app.put("/api/admin/update/upload")
+async def update_upload(request: Request, version: str = Query(""), _=A):
+    """AvtobusUpdate.exe ni omborга yozadi (xom tana) va joriy yangilanish
+    sifatida belgilaydi. `version` — yangi versiya raqami (masalan 1.0.1)."""
+    version = (version or "").strip()
+    if not version:
+        raise HTTPException(400, "version kerak (masalan 1.0.1)")
+    try:
+        sha, size, dedup = await storage.save_upload(request)
+    except ValueError as e:
+        raise HTTPException(413 if "katta" in str(e) else 400, str(e))
+    meta = {"version": version, "sha256": sha, "size": size,
+            "name": "AvtobusUpdate.exe", "at": db.now()}
+    db.set_setting(K_UPDATE, json.dumps(meta, ensure_ascii=False))
+    db.add_event(f"Yangilanish yuklandi: v{version}", "info")
+    return {"ok": True, **meta}
+
+
+@app.get("/api/admin/update")
+def update_info(_=A):
+    """Joriy yuklangan yangilanish (bo'lsa)."""
+    raw = db.get_setting(K_UPDATE)
+    return (json.loads(raw) if raw else {})
+
+
+@app.post("/api/admin/update/push")
+async def update_push(payload: dict | None = None, _=A):
+    """Yangilanишни qurilmalarга yuboradi. `server_ids` berilса — o'shalarга,
+    aks holда BARCHA tasdiqlanган qurilmalarга. Offlayn bo'lса navbatда turadi."""
+    raw = db.get_setting(K_UPDATE)
+    if not raw:
+        raise HTTPException(400, "avval yangilanish faylini yuklang")
+    meta = json.loads(raw)
+    sha, ver = meta["sha256"], meta["version"]
+    name = meta.get("name") or "AvtobusUpdate.exe"
+    if not storage.exists(sha):
+        raise HTTPException(400, "yangilanish fayli omborда topilmadi — qayta yuklang")
+    ids = (payload or {}).get("server_ids")
+    if ids and isinstance(ids, list):
+        targets = [str(i) for i in ids]
+    else:
+        targets = [s["id"] for s in db.get_servers() if s.get("approved")]
+    sent = 0
+    for sid in targets:
+        url = "/dl/" + security.make_dl_token(sha, sid, name)
+        await _send_or_queue(sid, "update",
+                             {"version": ver, "url": url, "sha256": sha,
+                              "name": name}, f"Yangilanish v{ver}")
+        sent += 1
+    db.add_event(f"Yangilanish v{ver} — {sent} qurilmага yuborildi", "ok")
+    return {"ok": True, "version": ver, "sent": sent}
 
 
 @app.post("/api/admin/servers/{server_id}/license")
@@ -1525,6 +1641,50 @@ def _port_busy(port, host="127.0.0.1"):
         return s.connect_ex((host, port)) == 0
 
 
+def _lan_ips():
+    """Mashinaning LAN IPv4 manzillari — panelга IP orqali (boshqa qurilmadan)
+    kirish uchun. 127.* va 169.254.* (APIPA) chiqarib tashlanadi."""
+    import socket
+    ips, primary = [], None
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))     # paket yubormaydi — faqat manba IP
+        primary = s.getsockname()[0]
+        s.close()
+    except OSError:
+        pass
+    if primary:
+        ips.append(primary)
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ip = info[4][0]
+            if ip not in ips and not ip.startswith(("127.", "169.254.")):
+                ips.append(ip)
+    except socket.gaierror:
+        pass
+    return ips
+
+
+def _ensure_firewall_windows(port):
+    """Windows: panel portiga INBOUND ruxsat — LAN'dagi boshqa qurilmalar
+    (telefon/kompyuter) http://<IP>:port ga kira olsin. Idempotent."""
+    if os.name != "nt":
+        return
+    import subprocess
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    name = f"KioskCloud-{port}"
+    try:
+        subprocess.run(["netsh", "advfirewall", "firewall", "delete", "rule",
+                        f"name={name}"], capture_output=True, timeout=15,
+                       creationflags=flags)
+        subprocess.run(["netsh", "advfirewall", "firewall", "add", "rule",
+                        f"name={name}", "dir=in", "action=allow", "protocol=TCP",
+                        f"localport={port}", "enable=yes", "profile=any"],
+                       capture_output=True, timeout=15, creationflags=flags)
+    except Exception:                                        # noqa: BLE001
+        pass
+
+
 if __name__ == "__main__":
     import sys
 
@@ -1544,5 +1704,13 @@ if __name__ == "__main__":
     kw = {}
     if config.USE_TLS:
         kw = {"ssl_certfile": config.TLS_CERT, "ssl_keyfile": config.TLS_KEY}
+    # LAN'dan (IP orqali) kirish: firewall'ni ochamiz va manzillarni ko'rsatamiz.
+    _ensure_firewall_windows(config.PORT)
+    _scheme = "https" if config.USE_TLS else "http"
+    print("\n  +-- KioskCloud super-admin panel " + "-" * 20)
+    print(f"  |  Shu mashina:  {_scheme}://127.0.0.1:{config.PORT}")
+    for _ip in _lan_ips():
+        print(f"  |  LAN (IP):     {_scheme}://{_ip}:{config.PORT}   <-- boshqa qurilmalar shu manzildan kiradi")
+    print("  +" + "-" * 52 + "\n", flush=True)
     uvicorn.run("main:app", host=config.HOST, port=config.PORT,
                 log_level="warning", **kw)

@@ -1,94 +1,196 @@
-# Avtobus — lokal veb-kiosk (web-only)
+# Avtobus — lokal veb-kiosk
 
-Avtobuslar uchun **faqat veb** variant: yo'lovchi telefondan avtobus Wi-Fi'iga
+Avtobuslar uchun **faqat veb** tizim: yo'lovchi telefondan avtobus Wi-Fi'iga
 ulanib kino/multfilm/musiqa, kitob/audiokitob ko'radi, yo'nalish (bekatlar) va
-reklamani ko'radi. **Kiosk ekrani / desktop KERAK EMAS** — hammasi telefonда.
+reklamani ko'radi. **Kiosk ekrani / desktop KERAK EMAS** — hammasi telefonda.
 
-Poyezd tizimining ukasi: bir xil **KioskCloud** (markaziy bulut) dan boshqariladi
-— huddi poyezddek. Farqi: PyQt kiosk/desktop yo'q, faqat **backend + web**.
+Ikki o'rnatish yo'li bor:
+
+| | **Native (Windows)** — TAVSIYA | Docker (Linux/alt) |
+|---|---|---|
+| Qurilma | Windows mini-PC | Linux / Raspberry Pi (yoki Windows+Docker) |
+| Ko'rinishi | `AvtobusSetup.exe` (bitta o'rnatgich) | `git clone` + `docker compose` |
+| Kod himoyasi | **Kuchli** — manba `.py` qurilmaga tushmaydi, maxfiy modullar mashina kodida (Nuitka) | Zaif — image ичida `.py` ochiq |
+| Afto-start | **Windows Service** (boot'da, login shart emas) + watchdog | Docker `restart: unless-stopped` |
+| Node/ffmpeg | Bundle qilingan (alohida o'rnatilmaydi) | Konteyner ичida |
+
+Quyida asosan **native (Windows)** yo'li tavsiflanadi. Docker yo'li oxirida.
+
+---
+
+## 1. Arxitektura (native)
 
 ```
-AVTOBUS (lokal mini-PC / Raspberry Pi + Wi-Fi)
-┌──────────────────────────────────────────────┐
-│  docker compose:                              │
-│   ├─ backend  (FastAPI, headless — server/    │   ──chiquvchi WSS──►  KioskCloud
-│   │   backend'i, PyQt'siz; /api, striming, WS)│   ◄──manifest (imzo)──   (bulut)
-│   └─ web      (Nuxt SPA — AVTOBUS.UZ)         │
-│  Ma'lumot: busdata volume (oflayn kesh)       │
-└──────────────────────────────────────────────┘
-        ▲ yo'lovchilar: http://<qurilma-IP>/  (avtobus Wi-Fi, HTTP)
+AVTOBUS qurilmasi (Windows mini-PC)  —  C:\Avtobus\
+┌───────────────────────────────────────────────────────────┐
+│  "Avtobus" Windows XIZMATI (NSSM) — boot'da avto, login yo'q │
+│    └─ Avtobus.exe  (compiled backend, FastAPI, headless)    │──WSS──► KioskCloud
+│         ├─ 127.0.0.1:8765  API/WS  (faqat lokal)            │◄─manifest─ (bulut)
+│         └─ node.exe .output  → 0.0.0.0:80  (Nuxt veb)       │
+│  AvtobusWatchdog (rejalashtirilgan vazifa) — hang bo'lsa qayta│
+│  Ma'lumot: data.db + content\  (oflayn kesh, saqlanadi)     │
+└───────────────────────────────────────────────────────────┘
+        ▲ yo'lovchilar: http://<qurilma-IP>/   (avtobus Wi-Fi, HTTP)
 ```
 
-## Ishga tushirish (avtobus qurilmasида) — 1 buyruq
+- **Bitta jarayon** — `Avtobus.exe` backend'ni ko'taradi VA yonidagi `node.exe`
+  bilan Nuxt veb'ni 80-portда ishga tushiradi (Docker/konteyner shart emas).
+- Backend faqat `127.0.0.1` da; yo'lovchilar faqat 80-portдаgi veb'ni ko'radi.
+- Qurilma bulutga o'zi ulanadi (chiquvchi WSS) — oq IP kerak emas.
 
-Faqat **Docker** o'rnatilган bo'lsin. Keyin o'rnatgichni ishga tushiring — u
-API kalitни o'zi yaratadi, bulut domeni + avtobus nomini so'raydi, image'ni
-quradi va ishga tushiradi:
+---
 
-```bash
-git clone <repo> /opt/avtobus && cd /opt/avtobus/bus
-bash setup.sh              # Linux / mini-PC / Raspberry Pi
-```
+## 2. Build (DASTURCHI mashinasida — mijozda emas)
 
-Windows qurilmasida (PowerShell):
+> Bu bosqich **sizning** kompyuteringizda bir marta bajariladi. Natija —
+> `AvtobusSetup.exe`. Mijoz faqat shu faylni oladi (manba kodni emas).
 
+### 2.1. Talablar (build mashinasi)
+- **Python 3.11** (`py -3.11`), so'ng: `pip install pyinstaller nuitka`
+- **Node.js + npm** (web build uchun)
+- **Visual Studio Build Tools (MSVC)** — Nuitka C kompilyatori uchun
+- **Inno Setup 6** — o'rnatgichni yasash uchun (https://jrsoftware.org/isdl.php)
+- `bus\vendor\` ichiga: `node.exe`, `ffmpeg.exe`, `nssm.exe`
+  (qarang: [vendor/README.md](vendor/README.md))
+
+### 2.2. Buyruqlar (PowerShell, `bus\` ichida)
 ```powershell
-.\setup.ps1
+.\build.ps1                          # web build → Nuitka → PyInstaller → release\Avtobus\
+$env:AVTOBUS_SETUP_PASS = "kuchli-parol"
+& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+# Natija: Output\AvtobusSetup.exe  (shifrlangan, parol bilan)
 ```
 
-Skript so'raydi: **bulut domeni** (masalan `cloud.poyezd.uz`), **avtobus nomi**,
-va ixtiyoriy **ulash kaliti**. Tugagach manzilni ko'rsatadi.
+`build.ps1` bayroqlari: `-NoHarden` (Nuitka'siz, tez), `-SkipWeb` (web `.output`
+tayyor bo'lsa qayta qurmaslik).
 
-Qo'lда (skriptsiz) ham bo'ladi:
-```bash
-cp .env.example .env && nano .env    # KIOSK_API_KEY, KIOSK_NAME, KIOSK_CLOUD_URL
-docker compose up -d --build
-```
+### 2.3. Kod himoyasi qatlamlari
+1. **PyInstaller** — exe ичida faqat `.pyc` (manba `.py` YO'Q). Python 3.11
+   bayt-kodini ommaviy dekompilyatorlar ishonchli ocholmaydi.
+2. **Nuitka** — maxfiy modullar (`licensing`, `security`, `cloud_client`)
+   `.pyd` (haqiqiy **mashina kodi**) — dekompilyatsiya qilinmaydi. Manba `.py`
+   build vaqtida o'chiriladi, exe'ga tushmaydi.
+3. **Ed25519 HW-lock litsenziya** — exe boshqa kompyuterга ko'chirilsa
+   ishlamaydi (`data.db`/fayllarni ko'chirish foyda bermaydi).
+4. **Inno Setup** — o'rnatgichning o'zi shifrlangan + parol bilan.
+
+---
+
+## 3. Litsenziya (majburiy — frozen exe litsenziyasiz BLOKLANADI)
+
+Litsenziya har bir avtobus qurilmasiga **alohida** (uning HARDWARE ID siга)
+bog'lanadi. Oqim:
+
+1. **Qurilmadан HW ID olish** — o'rnatgandan keyin qurilmada Ish stolidagi
+   **«Avtobus — holat»** yorlig'ini oching (yoki):
+   ```
+   C:\Avtobus\Avtobus.exe --hwid
+   ```
+2. **HW ID ni vendorga (sizga) yuboring.**
+3. **Litsenziya yasash** (vendor mashinasida, maxfiy kalit bilan):
+   ```
+   py -3 ..\server\tools\license_tool.py issue --hw <HW-ID> \
+       --customer "Avtobus X" --days 365 --kiosks 1 -o license.key
+   ```
+   (bus va poyezd bir xil vendor kalit juftligidan foydalanadi.)
+4. **Litsenziyani o'rnatish** (qurilmada):
+   ```
+   C:\Avtobus\Avtobus.exe --license C:\yo'l\license.key
+   ```
+   Xizmat faylni avtomatik qayta o'qiydi (restart shart emas). Tekshirish:
+   `Avtobus.exe --license-status`.
+
+> Eng qulay: qurilmani sotishdan oldin build mashinasida license.key ni
+> `release\Avtobus\` ga qo'ysangiz — installerга kirib ketadi (lekin u holda
+> HW ID ni oldindan bilishingiz kerak).
+
+---
+
+## 4. O'rnatish (avtobus qurilmasida)
+
+1. `AvtobusSetup.exe` ni ishga tushiring (admin). Parolni kiriting.
+2. Sehrgar so'raydi: **bulut domeni** (masalan `cloud.poyezd.uz`), **avtobus
+   nomi**, ixtiyoriy **ulash kaliti**.
+3. Tugagach: xizmat ishga tushadi, veb 80-portда, firewall ochiladi.
+4. Litsenziyani o'rnating (3-bo'lim) — aks holda ekran bloklangan bo'ladi.
+5. Bulut panelida qurilmani **«Tasdiqlang»** (ulash kaliti berilган bo'lsa
+   avtomatik).
 
 Yo'lovchi: avtobus Wi-Fi → brauzerда `http://<qurilma-IP>/`.
 
-## Boshqarish
+---
 
-```bash
-docker compose logs -f        # loglar
-docker compose restart        # qayta ishga tushirish
-docker compose down           # to'xtatish (ma'lumot busdata volume'да saqlanadi)
-git pull && docker compose up -d --build    # yangilash (kod), kontent bulutдан
+## 5. "O'chib qolsa afto yonib qolsin" — chidamlilik
+
+| Holat | Nima qoplaydi |
+|---|---|
+| Dastur **qulasa** (crash) | NSSM xizmat 3 soniyada avto-restart |
+| Qurilma **qayta yuklansa** (reboot) | Xizmat `Automatic` — boot'da o'zi yonadi, **login SHART EMAS** |
+| Dastur **osilib qolsa** (hang) | `AvtobusWatchdog` (har 2 daq.) — 3 marta ketma-ket `/api/health` javob bermasa qayta yoqadi |
+| **Tok uzilib, keyin qaytsa** | ⚠ Buni faqat **BIOS** qila oladi — pastga qarang |
+
+### BIOS: tok qaytганda avto-yoqilish (bir martalik sozlama)
+Qurilma BIOS/UEFI ga kiring (odatda `Del`/`F2`) va toping:
+**«Restore on AC Power Loss»** / «AC Back» / «After Power Failure» →
+**«Power On»** (yoki «Last State») ga qo'ying. Shundан keyin tok kelганда
+qurilma o'zi yonadi, Windows boot bo'ladi, xizmat ishga tushadi — hech kim
+tegмaydi.
+
+---
+
+## 6. Boshqarish (qurilmada, admin PowerShell)
+
+```powershell
+C:\Avtobus\nssm.exe status  Avtobus      # holat
+C:\Avtobus\nssm.exe restart Avtobus      # qayta ishga tushirish
+C:\Avtobus\nssm.exe stop    Avtobus      # to'xtatish (watchdog tegmaydi)
+Get-Content C:\Avtobus\logs\service.log -Tail 50   # loglar
+Get-Content C:\Avtobus\logs\web.log     -Tail 50   # veb (node) loglari
 ```
 
-## Bulutga ulash (KioskCloud)
+**Yangilash:** yangi `AvtobusSetup.exe` ni ustidan ishga tushiring — `data.db`,
+`content\`, `license.key` **saqlanadi**, faqat dastur fayllari yangilanadi.
 
-Poyezddagi kabi: `.env`da `KIOSK_CLOUD_URL=cloud.poyezd.uz` → qurilma o'zi
-ulanadi → **bulut panelида «Tasdiqlash»**. Shundan keyin bulutдан kontent,
-reklama, yo'nalish tarqatiladi (desired-state manifest, sha256 dedup, oflayn
-navbat). `KIOSK_CLOUD_ENROLL=<token>` bersangiz — darhol tasdiqlanadi.
+**O'chirish:** «Dasturlar qo'shish/o'chirish» → Avtobus. Xizmat, watchdog va
+firewall qoidasi olib tashlanadi.
 
-## Poyezddan farqlari (moslashtirildi)
+---
 
-| | Poyezd | Avtobus |
-|---|---|---|
-| Kiosk ekrani (PyQt) | bor | **yo'q** (faqat veb) |
-| Desktop admin | bor | **yo'q** (bulutдан boshqariladi) |
-| Bo'limlar | Kino, Kitob, Xarita, **Saytlar** | Kino, Kitob, Xarita (**Saytlar olib tashlandi**) |
-| Brend | POYEZD.UZ | **AVTOBUS.UZ** |
-| LAN beacon/discovery | bor (kiosklar topadi) | **o'chiq** (kiosk yo'q) |
-| TLS | LAN pinning | ichki HTTP (lokal tarmoq) |
+## 7. Docker / Linux yo'li (muqobil)
 
-## Tuzilma
+Windows'siz (Raspberry Pi, Linux mini-PC yoki Docker'li Windows) uchun eski yo'l
+saqlangan — lekin **kod himoyasi zaif** (image ичида `.py` ochiq):
+
+```bash
+git clone <repo> /opt/avtobus && cd /opt/avtobus/bus
+bash setup.sh            # Linux    (yoki .\setup.ps1  — Windows+Docker)
+```
+`.env`: `KIOSK_API_KEY`, `KIOSK_NAME`, `KIOSK_CLOUD_URL`. Boshqarish:
+`docker compose logs -f | restart | down`, yangilash `git pull && docker compose up -d --build`.
+
+---
+
+## 8. Tuzilma
 
 ```
 bus/
-├── backend/            headless FastAPI (server backend'i, PyQt'siz) + Dockerfile
-│   ├── main.py db.py cloud_client.py ws.py config.py ...
+├── backend/            headless FastAPI (PyQt YO'Q)
+│   ├── main.py         API/WS + veb'ni ko'taradi (--hwid/--license CLI)
+│   ├── web_server.py   Nuxt (node) bola jarayonini boshqaradi
+│   ├── licensing.py security.py cloud_client.py   ← Nuitka .pyd bo'ladi
+│   ├── avtobus.spec    PyInstaller (build.ps1 vaqtinchalik nusxada ishlatadi)
 │   └── requirements.txt
-├── web/                Nuxt SPA (poyezd.uz'dan moslab) + Dockerfile
-├── docker-compose.yml  backend + web (web :80)
-└── .env.example
+├── web/                Nuxt SPA (ssr:false) + Nitro proksi
+├── vendor/             node.exe / ffmpeg.exe / nssm.exe (repoga kirmaydi)
+├── build.ps1           web → Nuitka → PyInstaller → release\Avtobus\
+├── installer.iss       Inno Setup → Output\AvtobusSetup.exe
+├── watchdog.ps1        hang bo'lsa xizmatni qayta yoqadi
+├── holat.bat           HW ID / litsenziya holatini ko'rsatadi
+└── docker-compose.yml setup.sh setup.ps1   (Docker/Linux muqobil yo'li)
 ```
 
 ## Eslatma
-- Ma'lumot `busdata` volume'da — konteyner qayta qurilса ham **oflayn kesh
-  saqlanadi**. Bulut uzilса ham avtobus ishlaydi (mavjud kontent bilan).
-- `KIOSK_API_KEY` — backend va web bir xil ishlatadi (.env'дан).
-- Bir nechta avtobusни bir bulutдан boshqarasiz — har biri alohida qurilma
-  sifatida panelда ko'rinadi.
+- Ma'lumot `data.db` + `content\` da — yangilash/restart'да **saqlanadi**.
+  Bulut uzilса ham avtobus ishlaydi (mavjud kontent bilan).
+- `KIOSK_API_KEY` avtomatik yaratiladi (`data.db`) — veb undан foydalanadi.
+- Bir nechta avtobusни bir bulutдан boshqarasiz — har biri alohida qurilma.

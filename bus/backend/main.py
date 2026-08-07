@@ -39,6 +39,7 @@ import security
 import discovery
 import weather
 import cloud_client
+import web_server
 from ws import manager
 
 logging.basicConfig(
@@ -52,6 +53,11 @@ log = logging.getLogger("kiosk.server")
 # Umumiy API kalit (db settings'da; birinchi ishga tushishda yaratiladi).
 # lifespan'gacha ham kerak bo'lishi mumkin, shuning uchun lazy o'qiladi.
 _API_KEY = None
+
+# Veb (Nuxt) ilovani SHU jarayon boshqaradi — alohida Docker/konteyner yoki
+# qo'lda `npm` shart emas. Avtobus exe ishga tushganda veb ham 80-portда
+# ko'tariladi, exe yopilganda veb ham to'xtaydi (bola jarayon).
+_web = web_server.WebServer()
 
 
 def _api_key():
@@ -87,7 +93,9 @@ async def lifespan(app: FastAPI):
     weather.start_refresher()   # internet ob-havoni fonda yuklab/yangilab turadi
     task = asyncio.create_task(_status_loop())   # holatni davriy tarqatish
     cloud_client.start()   # markaziy bulut agenti (KIOSK_CLOUD_URL berilsa)
+    _web.start()   # Nuxt veb-ilova (yo'lovchilar 80-portда ochadi) — fon oqimда
     yield
+    _web.stop()    # veb bola jarayonini yopamiz
     if config.DISCOVERY_ENABLED:
         discovery.stop()
     task.cancel()
@@ -691,6 +699,114 @@ def status():
     return status_payload()
 
 
+# --- Ichki admin: bulut (super-admin) manzili + nom + lokal IP -------------
+# Bu endpointlar /api ostida — API kalit MAJBURIY (middleware himoyalaydi).
+# Super-admin panel yoki qurilmadagi sozlama sahifasi shulardan foydalanadi:
+# bulut manzilini QURILMA ICHIDAN o'zgartirish (restartsiz qayta ulanadi) va
+# LAN IP'ni AVTOMATIK aniqlash uchun.
+def _cloud_txt_path():
+    return os.path.join(config.BASE_DIR, "cloud.txt")
+
+
+def _write_cloud_txt(url=None, enroll=None, name=None):
+    """cloud.txt ni yangilaydi (mavjud qiymatlarni saqlab). config.py ishga
+    tushishда shu fayldan url/enroll/name ni o'qiydi — shuning uchun bu yerда
+    yozganimiz restartдан keyin ham saqlanadi."""
+    path = _cloud_txt_path()
+    cur = {}
+    try:
+        with open(path, "r", encoding="utf-8-sig") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                k, _, v = line.partition("=")
+                if v:
+                    cur[k.strip().lower()] = v.strip()
+    except OSError:
+        pass
+    if url is not None:
+        cur["url"] = url
+    if enroll is not None:
+        cur["enroll"] = enroll
+    if name is not None:
+        cur["name"] = name
+    lines = ["# Avtobus bulut sozlamasi (ichki admin yozdi)"]
+    for k in ("url", "enroll", "name"):
+        if cur.get(k):
+            lines.append(f"{k}={cur[k]}")
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    os.replace(tmp, path)
+
+
+def _admin_config_payload():
+    ips = security._local_ipv4s()
+    st = licensing.state()
+    return {
+        "name": config.SERVER_NAME,
+        "cloud_url": config.CLOUD_URL,
+        "enroll_set": bool(config.CLOUD_ENROLL),
+        "local_ips": ips,
+        # Yo'lovchilar shu manzil(lar)дан ochadi (avto-aniqlangan LAN IP)
+        "web_urls": [f"http://{ip}/" for ip in ips],
+        "vertical": config.VERTICAL,
+        "version": config.APP_VERSION,
+        "cloud_configured": bool(config.CLOUD_URL),
+        "cloud_running": (bool(config.CLOUD_URL)
+                          and getattr(cloud_client.client, "_task", None) is not None
+                          and not cloud_client.client._task.done()),
+        "license": {
+            "valid": st["valid"], "reason": st["reason"],
+            "customer": st["customer"], "expires": st["expires"],
+            "hw_id": st["hw_id"], "blocked": st["blocked"],
+        },
+    }
+
+
+@app.get("/api/admin/config")
+def admin_config_get():
+    """Joriy sozlama: bulut manzili, avtobus nomi, AVTO lokal IP, litsenziya."""
+    return _admin_config_payload()
+
+
+@app.post("/api/admin/config")
+async def admin_config_set(request: Request):
+    """Bulut (super-admin) manzili / avtobus nomi / ulash kalitини QURILMA
+    ICHIDAN o'zgartiradi. cloud.txt'ga yozadi, config'ni jonli yangilaydi va
+    bulut agentini yangi manzil bilan qayta ulaydi (restart shart emas)."""
+    try:
+        body = await request.json()
+    except Exception:                                    # noqa: BLE001
+        raise HTTPException(status_code=400, detail="JSON kutilgan")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="obyekt kutilgan")
+    changed = []
+    if "cloud_url" in body:
+        url = config._norm_cloud_url(str(body.get("cloud_url") or ""))
+        config.CLOUD_URL = url
+        _write_cloud_txt(url=url)
+        changed.append("cloud_url")
+        try:
+            await cloud_client.restart()   # yangi super-admin manziliga ulanadi
+        except Exception:                                # noqa: BLE001
+            log.exception("Bulut agentini qayta ulashда xato")
+    if "enroll" in body:
+        enroll = str(body.get("enroll") or "").strip()
+        config.CLOUD_ENROLL = enroll
+        _write_cloud_txt(enroll=enroll)
+        changed.append("enroll")
+    if "name" in body:
+        name = str(body.get("name") or "").strip()[:60]
+        if name:
+            config.SERVER_NAME = name
+            _write_cloud_txt(name=name)
+            changed.append("name")
+    log.info("Ichki admin: sozlama o'zgardi (%s)", ", ".join(changed) or "-")
+    return {"ok": True, "changed": changed, **_admin_config_payload()}
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
     """Real vaqt kanal (TZ 11.2): register qabul qiladi, status/announcement yuboradi."""
@@ -733,10 +849,65 @@ async def websocket_endpoint(ws: WebSocket):
         log.warning("WebSocket xatosi: %s — jami %d", e, manager.count())
 
 
+def _cli():
+    """Headless CLI — avtobusда admin oyna yo'q, shuning uchun litsenziya
+    oqimi shu bayroqlar orqali:
+
+        Avtobus.exe --hwid              -> shu qurilma HARDWARE ID sini bosadi
+                                           (vendorга yuborasiz, u license.key yasaydi)
+        Avtobus.exe --license <fayl>    -> berilgan license.key ni o'rnatadi
+                                           (exe yoniga ko'chirib, tekshiradi)
+        Avtobus.exe --license-status    -> joriy litsenziya holati
+        Avtobus.exe --version           -> versiya
+
+    Bayroqsiz — serverni ishga tushiradi (odatiy holat, xizmat shunи chaqiradi).
+    """
+    import argparse
+    p = argparse.ArgumentParser(prog="Avtobus", add_help=True)
+    p.add_argument("--hwid", action="store_true", help="qurilma HARDWARE ID")
+    p.add_argument("--license", metavar="FAYL", help="license.key o'rnatish")
+    p.add_argument("--license-status", action="store_true", help="litsenziya holati")
+    p.add_argument("--version", action="store_true", help="versiya")
+    args, _ = p.parse_known_args()
+
+    if args.version:
+        print(config.APP_VERSION)
+        return True
+    if args.hwid:
+        print(licensing.hardware_id())
+        return True
+    if args.license:
+        try:
+            st = licensing.install_file(args.license)
+        except (OSError, ValueError) as e:
+            print(f"XATO: {e}")
+            raise SystemExit(2)
+        print("Litsenziya o'rnatildi." if st.get("valid")
+              else f"Litsenziya o'rnatildi, lekin YAROQSIZ: {st.get('reason')}")
+        print(f"  Mijoz:   {st.get('customer') or '-'}")
+        print(f"  Muddat:  {st.get('expires') or 'muddatsiz'}")
+        print(f"  HW ID:   {st.get('hw_id')}")
+        return True
+    if args.license_status:
+        st = licensing.state()
+        print(f"Yaroqli:  {st.get('valid')}")
+        print(f"Sabab:    {st.get('reason') or '-'}")
+        print(f"Mijoz:    {st.get('customer') or '-'}")
+        print(f"Muddat:   {st.get('expires') or 'muddatsiz'}")
+        print(f"HW ID:    {st.get('hw_id')}")
+        return True
+    return False
+
+
 if __name__ == "__main__":
+    if _cli():
+        raise SystemExit(0)
     import uvicorn
     security.ensure_identity()   # TLS sertifikat uvicorn'gacha tayyor bo'lsin
     ssl_kw = ({"ssl_certfile": security.TLS_CERT_PATH,
                "ssl_keyfile": security.TLS_KEY_PATH} if config.USE_TLS else {})
-    uvicorn.run("main:app", host=config.HOST, port=config.PORT,
+    # `app` OBYEKTINI beramiz (string "main:app" emas) — frozen (exe) rejimда
+    # uvicorn moduln qayta import qilib main.py'ни ikki marta bajarib
+    # yubormasin. reload baribir kerak emas.
+    uvicorn.run(app, host=config.HOST, port=config.PORT,
                 reload=False, **ssl_kw)

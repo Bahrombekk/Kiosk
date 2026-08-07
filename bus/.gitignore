@@ -25,3 +25,14 @@ web/node_modules/
 web/.nuxt/
 web/.output/
 *.log
+
+# Build artefaktlari (build.ps1 / PyInstaller / Inno)
+build/
+dist/
+release/
+Output/
+# node.exe / ffmpeg.exe / nssm.exe — og'ir binar, repoga kirmaydi
+vendor/*.exe
+!vendor/README.md
+backend/*.pyd
+backend/*.pyi

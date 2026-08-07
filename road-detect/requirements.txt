@@ -1,0 +1,5 @@
+# Yo'l to'siqlari detektori — kutubxonalar
+# YOLOv4-tiny OpenCV dnn (cv2.dnn) orqali CPU'da yuritiladi — GPU shart emas.
+# Model fayllari models/ da (yuklab olingan — README ga qarang).
+opencv-python>=4.8
+numpy>=1.24
