@@ -82,7 +82,7 @@ _TRUST_URL, _TRUST_KEY = _read_trust_json()
 SERVER_URL = (os.environ.get("KIOSK_SERVER")
               or _TXT_URL
               or _TRUST_URL
-              or "https://192.168.136.69:8765")
+              or "https://192.168.136.69:19080")
 
 # Discovery topgan manzilmi? (qo'lda berilmagan bo'lsa True) — main shu holatda
 # resolve_server() ni chaqiradi.
@@ -94,7 +94,7 @@ SERVER_CONFIGURED = bool(os.environ.get("KIOSK_SERVER")
 API_KEY = (os.environ.get("KIOSK_API_KEY") or _TXT_KEY or _TRUST_KEY or "")
 
 # Discovery UDP porti (server config.DISCOVERY_PORT bilan bir xil bo'lishi shart)
-DISCOVERY_PORT = int(os.environ.get("KIOSK_DISCOVERY_PORT", "8766"))
+DISCOVERY_PORT = int(os.environ.get("KIOSK_DISCOVERY_PORT", "19081"))
 
 # Kiosk raqami va xona/vagon raqami — o'rnatuvchi server.txt'ga yozadi
 # (kiosk= / xona= qatorlari); admin "Kiosklar" jadvalida ko'rinadi.

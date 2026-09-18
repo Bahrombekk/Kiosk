@@ -111,6 +111,21 @@ def ensure_firewall(port, node_path=None):
         log.warning("Firewall qoidasini sozlab bo'lmadi (admin kerak)")
 
 
+def lan_urls(port=None):
+    """Veb'ni LAN'дан ochish manzillari: `http://<IP>[:port]` ro'yxati.
+
+    Yo'lovchi telefoni domenni (avtobus.uz) yecha olmaydi — hosts yozuvi faqat
+    server mashinasida. Shuning uchun ko'rsatiladigan manzil aynan IP bo'ladi."""
+    port = str(port or os.environ.get("KIOSK_WEB_PORT", "80"))
+    suffix = "" if port == "80" else f":{port}"
+    try:
+        import security
+        ips = security._local_ipv4s()
+    except Exception:                                    # noqa: BLE001
+        ips = []
+    return [f"http://{ip}{suffix}/" for ip in ips]
+
+
 def _default_web_dir():
     """Veb ilova papkasini topadi (yo'q bo'lsa None)."""
     if getattr(sys, "frozen", False):
@@ -290,11 +305,16 @@ class WebServer:
             if self._stopped:   # poyga: Popen paytida stop kelgan bo'lsa
                 self.stop()
                 return
-            # Toza URL (port 80 bo'lsa portsiz). Kiosk qurilmalar shu domen
-            # bilan ochadi (hosts orqali server IP'ga yo'naladi).
-            url = f"http://{WEB_DOMAIN}" if str(port) == "80" else f"http://{WEB_DOMAIN}:{port}"
-            log.info("Veb ishga tushdi (%s) — bind %s:%s | oching: %s",
-                     mode, host, port, url)
+            # Toza URL (port 80 bo'lsa portsiz). Domen faqat SERVER mashinasida
+            # ishlaydi (hosts yozuvi) — yo'lovchi telefonida DNS yo'q, shuning
+            # uchun LAN IP manzillarni ham yozamiz: operator aynan shu manzilni
+            # e'lon qiladi (yoki QR qiladi).
+            suffix = "" if str(port) == "80" else f":{port}"
+            url = f"http://{WEB_DOMAIN}{suffix}"
+            ips = lan_urls(port)
+            log.info("Veb ishga tushdi (%s) — bind %s:%s | oching: %s%s",
+                     mode, host, port, url,
+                     ("  |  IP: " + ", ".join(ips)) if ips else "")
         except Exception:                                # noqa: BLE001
             log.exception("Veb ishga tushirib bo'lmadi")
 

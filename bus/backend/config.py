@@ -31,7 +31,7 @@ BRANDING_DIR = os.path.join(CONTENT_DIR, "branding")
 
 # Server manzili
 HOST = os.environ.get("KIOSK_HOST", "0.0.0.0")
-PORT = int(os.environ.get("KIOSK_PORT", "8765"))
+PORT = int(os.environ.get("KIOSK_PORT", "19080"))
 
 # --- Xavfsizlik / topish (discovery) ---
 # TLS (HTTPS/WSS): avtobusда backend FAQAT lokal (127.0.0.1) da ishlaydi —
@@ -44,7 +44,7 @@ USE_TLS = os.environ.get("KIOSK_TLS", "0") != "0"
 
 # Discovery: server LAN'ga imzolangan UDP "beacon" tarqatadi, kiosklar uni
 # tutib serverni avtomatik topadi (qo'lda IP yozish shart emas).
-DISCOVERY_PORT = int(os.environ.get("KIOSK_DISCOVERY_PORT", "8766"))
+DISCOVERY_PORT = int(os.environ.get("KIOSK_DISCOVERY_PORT", "19081"))
 DISCOVERY_INTERVAL_S = 3        # beacon yuborish oralig'i
 DISCOVERY_ENABLED = os.environ.get("KIOSK_DISCOVERY", "1") != "0"
 
@@ -54,7 +54,7 @@ import socket as _socket
 SERVER_NAME = os.environ.get("KIOSK_NAME") or _socket.gethostname() or "Avtobus"
 
 # Ilova versiyasi (bulut panelida ko'rinadi)
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.2"
 
 # --- Vertikal (mahsulot turi) ---
 # "bus" = avtobus (faqat veb, kiosk yo'q). Bulut panel va veb shu bo'yicha

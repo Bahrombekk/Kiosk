@@ -33,7 +33,7 @@
 //  Vertikalga qarab yorliqlar: vmeta(s) (poyezd/avtobus). Server matni HTML'ga
 //  chiqsa DOIM esc() bilan. Kesh-bust: UI_BUILD == cloud/main.py APP_BUILD.
 // ═══════════════════════════════════════════════════════════════════════════
-const UI_BUILD = "2026-08-07.4";
+const UI_BUILD = "2026-08-08.3";
 
 // ======================================================== 1) API klient
 async function req(method, url, body) {
@@ -377,8 +377,15 @@ const TITLES = {
 async function load(silent) {
   if (!silent) { S.loading = true; render(); }
   try {
-    if (S.page === "dash") S.data.dash = await api.get("/api/admin/overview");
-    else if (S.page === "servers") S.data.servers = await api.get("/api/admin/servers");
+    // Sidebar footer/badge (server onlayn soni) HAR sahifада to'g'ri bo'lishi
+    // uchun yengil kpis'ni doim yuklaymiz (dash'да overview allaqachon beradi).
+    if (S.page !== "dash") {
+      try { S.kpis = await api.get("/api/admin/kpis"); } catch { /* footer eskisicha */ }
+    }
+    if (S.page === "dash") {
+      S.data.dash = await api.get("/api/admin/overview");
+      S.kpis = (S.data.dash && S.data.dash.kpis) || S.kpis;
+    } else if (S.page === "servers") S.data.servers = await api.get("/api/admin/servers");
     else if (S.page === "server") {
       S.data.server = await api.get("/api/admin/servers/" + S.serverId);
       const _vt = (S.data.server && S.data.server.server && S.data.server.server.vertical) || "train";
@@ -569,7 +576,7 @@ function viewLogin() {
 
 function viewShell() {
   const d = S.data.dash || {};
-  const k = d.kpis || {};
+  const k = S.kpis || d.kpis || {};   // har sahifада yuklanadigan yengil kpis
   const jobs = (S.data.jobs || d.jobs || []).filter((j) => j.state === "running");
   // Sidebar badge'lari: Serverlar — jami soni (dizaynda «50»), Navbat — faol ish
   const badges = { servers: k.servers_total || "", queue: jobs.length || "" };
@@ -689,17 +696,36 @@ function pageUpdate() {
   const servers = S.data.servers || [];
   const approved = servers.filter((s) => s.approved);
   const has = !!u.version;
-  // Har bir qurilma versiyasini eng yangi yuklangан bilan solishtiramiz
+  const sel = S.updSel || (S.updSel = new Set());
+  // Faol yuborish (job) — har qurilma HOLATI shu yerдан (jonli)
+  const job = u.job && u.job.state !== "done" && u.job.state !== "cancelled" ? u.job : null;
+  const jt = {};
+  if (u.job) for (const t of (u.job.targets || [])) jt[t.server_id] = t;
+  // Statik: versiya bo'yicha eski/yangilangan
   const statusOf = (s) => {
     const v = (s.version || "").trim();
     if (!v) return ["mut", "noma'lum"];
     if (!has) return ["acc", "v" + v];
     return verCmp(v, u.version) >= 0 ? ["ok", "Yangilangan"] : ["warn", "Eski"];
   };
+  // Yangilanish ustuni: faol job bo'lsa jonli holat, aks holда versiya
+  const updCell = (s) => {
+    const t = jt[s.id];
+    if (job && t) {
+      if (t.state === "queued") return ["mut", "Navbatda (oflayn)"];
+      if (t.state === "error") return ["err", "Xato"];
+      if (t.state === "done") return ["ok", "Yangilandi"];
+      if (t.state === "running")
+        return (t.pct >= 100) ? ["acc", "O'rnatilmoqda…"]
+                              : ["acc", `Yuklanmoqda ${t.pct || 0}%`];
+    }
+    return statusOf(s);
+  };
   const nNew = has ? approved.filter((s) => (s.version || "") && verCmp(s.version, u.version) >= 0).length : 0;
   const nOld = has ? approved.length - nNew : 0;
+  const allSel = approved.length && approved.every((s) => sel.has(s.id));
   return `
-  <div class="grid" style="gap:18px;max-width:920px">
+  <div class="upd-page">
   <div class="card">
     <div class="upd-hero">
       <div class="upd-ico">${ic("download", 24, "#fff")}</div>
@@ -729,8 +755,8 @@ function pageUpdate() {
         <div class="dim" style="margin-top:4px">${bytes(u.size)} · yuklangan ${esc(u.at || "")}</div>
         <div class="dim" style="word-break:break-all;margin-top:2px">sha256: ${esc((u.sha256 || "").slice(0, 24))}…</div>
         <button class="btn pri" style="margin-top:14px" data-act="update-push">
-          ${ic("send", 15, "#fff")} ${approved.length} ta tasdiqlangan qurilmaga yuborish</button>
-        <div class="dim" style="margin-top:8px">Faqat joriy versiyadan yuqori bo'lsa o'rnatiladi (pasaytirmaydi).</div>
+          ${ic("send", 15, "#fff")} ${sel.size ? `${sel.size} ta tanlanganga` : `Barchasiga (${approved.length})`} yuborish</button>
+        <div class="dim" style="margin-top:8px">Pastдаgi jadvalда qurilmani belgilab — faqat o'shanga yuborasiz (qolganlarга tegmaydi). Belgilamasangiz — hammasiga. Faqat versiyasi past bo'lganга o'rnatiladi; oflaynlar ulanганда oladi.</div>
       </div>`
     : `<div class="card empty" style="margin-top:18px">Hali yangilanish yuklanmagan —
         yuqoridan <b>AvtobusUpdate.exe</b> ni tanlang.</div>`}
@@ -743,10 +769,14 @@ function pageUpdate() {
                ${nOld ? `<span class="pill warn">${nOld} eski</span>` : ""}` : ""}
     </div>
     ${approved.length ? `<div class="tbl-wrap"><table class="tbl">
-      <thead><tr><th>Avtobus</th><th>Holat</th><th>Versiya</th><th>Yangilanish</th></tr></thead>
+      <thead><tr>
+        <th style="width:34px"><span class="upd-chk ${allSel ? "on" : ""}" data-act="upd-pick-all">${allSel ? ic("check", 12, "#fff", 3) : ""}</span></th>
+        <th>Avtobus</th><th>Holat</th><th>Versiya</th><th>Yangilanish</th></tr></thead>
       <tbody>${approved.map((s) => {
-        const [cls, txt] = statusOf(s);
+        const [cls, txt] = updCell(s);
+        const on = sel.has(s.id);
         return `<tr>
+          <td><span class="upd-chk ${on ? "on" : ""}" data-act="upd-pick" data-id="${s.id}">${on ? ic("check", 12, "#fff", 3) : ""}</span></td>
           <td><b>${esc(s.name)}</b><div class="dim">${esc(s.route || "yo'nalish ko'rsatilmagan")}</div></td>
           <td>${s.online ? `<span class="pill ok">onlayn</span>`
                          : `<span class="pill mut">oflayn</span>`}</td>
@@ -1660,11 +1690,10 @@ function pageQueue() {
   const inFlight = running.reduce((a, j) =>
     a + j.targets.reduce((b, t) => b + (t.bytes_total || 0), 0), 0);
 
-  const kpi = (color, label, val) => `<div style="min-width:88px">
-    <div class="row" style="gap:6px;margin-bottom:2px">
-      <span class="dot" style="background:${color};animation:none"></span>
-      <span class="kpi-label" style="font-size:10.5px">${label}</span></div>
-    <div style="font-family:Unbounded,sans-serif;font-size:22px;font-weight:600">${val}</div>
+  const kpi = (color, label, val) => `<div class="qkpi">
+    <div class="qkpi-top"><span class="dot" style="background:${color};animation:none"></span>
+      <span class="kpi-label">${label}</span></div>
+    <div class="qkpi-val">${val}</div>
   </div>`;
 
   // Uzun guruh (masalan 50 kioskка ko'p tarqatishдан keyingi «Tugagan»)
@@ -1679,15 +1708,14 @@ function pageQueue() {
       >${list.map(jobRow).join("")}</div>` : "";
 
   return `
-  <div class="row wrap" style="gap:16px;align-items:stretch">
-    <div class="card" style="flex:1;min-width:300px;display:flex;gap:26px;align-items:center">
+  <div class="q-head">
+    <div class="qkpi-row">
       ${kpi("#4F46E5", "FAOL", activeJobs.length)}
       ${kpi("#94A3B8", "NAVBATDA", queuedJobs.length)}
       ${kpi("#EF4444", "XATO", errJobs.length)}
       ${kpi("#0F172A", "YUBORILMOQDA", bytes(inFlight))}
     </div>
-    <div class="card" style="flex:1.2;min-width:280px;display:flex;align-items:center;
-      gap:12px;background:var(--accent-soft);box-shadow:none;border-color:transparent">
+    <div class="q-info">
       ${ic("wifi", 18, "#4F46E5")}
       <div class="dim" style="color:#334155;line-height:1.6">Offlayn obyektlar
         navbatda turadi — SIM-internet tiklanishi bilan <b>o'zi</b> davom etadi,
@@ -1717,7 +1745,8 @@ function jobRow(j) {
     n.err && `<span><i class="dotm" style="background:#EF4444"></i>${n.err} xato</span>`,
   ].filter(Boolean).join("");
 
-  const kindLabel = j.kind === "remove" ? "O'chirish" : j.kind === "deploy"
+  const kindLabel = j.kind === "remove" ? "O'chirish" : j.kind === "sync"
+    ? "Sinxronizatsiya" : j.kind === "deploy"
     ? (j.items && j.items[0] ? (TYPES[j.items[0].type] || [])[0] || "Kontent" : "Kontent")
     : j.kind;
   const size = (j.items || []).reduce((a, c) => a + (c.media_size || 0), 0);
@@ -1755,20 +1784,46 @@ function jobRow(j) {
     sub = ago(j.done_at || j.created_at);
   }
 
-  return `<div class="job">
-    <div class="job-ic">${ic(JOB_ICON[j.kind] || "send", 18, "#475569")}</div>
-    <div class="job-t">
-      <div class="strong">${esc(j.title || j.kind)}${size
-        ? ` — ${bytes(size)}` : ""}</div>
-      <div class="dim">${esc(kindLabel)} · ${j.n_targets} obyektga</div>
+  const open = (S.jobOpen || (S.jobOpen = new Set())).has(j.id);
+  return `<div class="job-wrap${open ? " open" : ""}">
+    <div class="job" data-act="job-toggle" data-id="${j.id}" title="Batafsil — har qurilma holati">
+      <div class="job-ic">${ic(JOB_ICON[j.kind] || "send", 18, "#475569")}</div>
+      <div class="job-t">
+        <div class="strong">${esc(j.title || j.kind)}${size
+          ? ` — ${bytes(size)}` : ""}</div>
+        <div class="dim">${esc(kindLabel)} · ${j.n_targets} obyektga</div>
+      </div>
+      ${mid}
+      <div class="job-r">
+        ${pill}
+        ${sub ? `<div class="dim" style="margin-top:5px">${sub}</div>` : ""}
+      </div>
+      <span class="job-chev">${ic("chevronRight", 15, "#94A3B8")}</span>
+      <div class="job-a">${action}</div>
     </div>
-    ${mid}
-    <div class="job-r">
-      ${pill}
-      ${sub ? `<div class="dim" style="margin-top:5px">${sub}</div>` : ""}
-    </div>
-    <div class="job-a">${action}</div>
+    ${open ? jobDetails(j) : ""}
   </div>`;
+}
+
+/** Job ichidagi HAR QURILMA holati (qatorga bosganда ochiladi). */
+function jobDetails(j) {
+  const rows = (j.targets || []).map((t) => {
+    const st = T_STATE[t.state] || T_STATE.pending;
+    const pct = t.state === "done" ? 100 : (t.pct || 0);
+    const label = t.state === "done" ? "Tugadi"
+      : t.state === "error" ? (t.error ? t.error.slice(0, 60) : "Xato")
+      : t.state === "running" ? (pct >= 100 ? "O'rnatilmoqda…" : `Yuklanmoqda ${pct}%`)
+      : "Navbatda (oflayn)";
+    const sz = t.bytes_total ? ` · ${bytes(t.bytes_done || 0)} / ${bytes(t.bytes_total)}` : "";
+    return `<div class="jt-row">
+      <div class="jt-dot ${st[0]}"></div>
+      <div class="jt-name">${esc(t.name || t.server_name || t.server_id)}</div>
+      <div class="jt-bar"><i class="${st[0]}" style="width:${pct}%"></i></div>
+      <div class="jt-stat ${st[0]}">${esc(label)}<span class="dim">${sz}</span></div>
+    </div>`;
+  }).join("");
+  return `<div class="job-details">${rows
+    || `<div class="dim" style="padding:10px 16px">Nishon yo'q</div>`}</div>`;
 }
 
 /** Qolgan vaqtni baholaydi (tezlikni bilmaymiz — nishonlar nisbatidan). */
@@ -2016,10 +2071,10 @@ function pageLogs() {
 function logTable(rows, showServer) {
   return `<div class="card" style="padding:14px 4px"><div class="tbl-wrap${
     rows.length > 14 ? " scroll-tall" : ""}"><table class="tbl">
-    <thead><tr><th style="padding-left:14px">Vaqt</th><th>Daraja</th>
+    <thead><tr><th style="padding-left:14px">Sana · vaqt</th><th>Daraja</th>
       ${showServer ? "<th>Server</th>" : ""}<th>Manba</th><th>Xabar</th></tr></thead>
     <tbody>${rows.length ? rows.map((l) => `<tr>
-      <td style="padding-left:14px" class="dim mono">${esc(clock(l.ts))}</td>
+      <td style="padding-left:14px;white-space:nowrap" class="dim mono">${esc(String(l.ts || "").slice(0, 10))}<br><span style="opacity:.65">${esc(clock(l.ts))}</span></td>
       <td><span class="pill ${l.level === "ERROR" ? "err" : l.level === "WARN" ? "warn" : "mut"}">
         ${esc(l.level)}</span></td>
       ${showServer ? `<td class="dim">${esc(l.server_name || l.server_id || "—")}</td>` : ""}
@@ -2839,12 +2894,33 @@ document.addEventListener("click", async (e) => {
     else list.forEach((c) => S.sel.add(c.id));
     render(); return;
   }
+  if (act === "upd-pick") {
+    const id = el.dataset.id;
+    const sel = S.updSel || (S.updSel = new Set());
+    sel.has(id) ? sel.delete(id) : sel.add(id);
+    render(); return;
+  }
+  if (act === "upd-pick-all") {
+    const sel = S.updSel || (S.updSel = new Set());
+    const ap = (S.data.servers || []).filter((s) => s.approved);
+    const allOn = ap.length && ap.every((s) => sel.has(s.id));
+    if (allOn) ap.forEach((s) => sel.delete(s.id));
+    else ap.forEach((s) => sel.add(s.id));
+    render(); return;
+  }
   if (act === "update-push") {
     const u = S.data.update || {};
-    if (!confirm(`v${u.version} yangilanishini barcha tasdiqlangan qurilmalarga yuborilsinmi?`)) return;
+    const sel = S.updSel || new Set();
+    const ids = [...sel];
+    const who = ids.length ? `${ids.length} ta tanlangan qurilmaga`
+                           : "BARCHA tasdiqlangan qurilmalarga";
+    if (!confirm(`v${u.version} yangilanishini ${who} yuborilsinmi?`)) return;
     try {
-      const r = await api.post("/api/admin/update/push", {});
-      toast(`Yangilanish ${r.sent} qurilmaga yuborildi`);
+      const body = ids.length ? { server_ids: ids } : {};
+      const r = await api.post("/api/admin/update/push", body);
+      toast(`Yangilanish: ${r.sent} yuborildi, ${r.queued} navbatда`
+            + (r.skipped ? `, ${r.skipped} allaqachon yangi` : ""));
+      load(true);
     } catch (err) { toast("Xato: " + err.message, "err"); }
     return;
   }
@@ -3380,6 +3456,12 @@ document.addEventListener("click", async (e) => {
     try { await api.post(`/api/admin/jobs/${el.dataset.id}/cancel`); load(true); }
     catch (err) { toast(err.message, "err"); }
     return;
+  }
+  if (act === "job-toggle") {
+    const id = +el.dataset.id;
+    const o = S.jobOpen || (S.jobOpen = new Set());
+    o.has(id) ? o.delete(id) : o.add(id);
+    render(); return;
   }
 });
 

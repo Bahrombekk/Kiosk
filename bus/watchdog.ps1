@@ -6,12 +6,12 @@
 #    - Task Scheduler ("Avtobus" nomli vazifa)               -> kill + qayta start
 #
 #  Boot/crash'ni xizmat/vazifaning O'ZI qoplaydi; bu skript esa jarayon tirik-u
-#  JAVOB BERMAY qolган holatni: har 2 daqiqada /api/health, 3 marta ketma-ket
+#  JAVOB BERMAY qolgan holatni: har 2 daqiqada /api/health, 3 marta ketma-ket
 #  javob bermasa qayta yoqadi (bir martalik sekinlik yolg'on trigger bermasin).
 # ============================================================================
 $ErrorActionPreference = "SilentlyContinue"
 $name      = "Avtobus"
-$health    = "http://127.0.0.1:8765/api/health"
+$health    = "http://127.0.0.1:19080/api/health"
 $stateFile = Join-Path $PSScriptRoot "logs\watchdog.state"
 $logFile   = Join-Path $PSScriptRoot "logs\watchdog.log"
 function LogLine($m){ Add-Content $logFile "$(Get-Date -Format s)  $m" }
@@ -47,7 +47,7 @@ $nssm = Join-Path $PSScriptRoot "nssm.exe"
 if ($svc -and (Test-Path $nssm)) {
   & $nssm restart $name | Out-Null
 } else {
-  # Task Scheduler: osilган jarayonni majburan yopib, vazifani qayta boshlaymiz
+  # Task Scheduler: osilgan jarayonni majburan yopib, vazifani qayta boshlaymiz
   taskkill /IM Avtobus.exe /F 2>$null | Out-Null
   taskkill /IM node.exe /F     2>$null | Out-Null
   Start-Sleep -Seconds 2

@@ -20,9 +20,9 @@ ENV CLOUD_DB=/data/cloud.db \
     CLOUD_STORAGE=/data/storage \
     CLOUD_SIGNING_KEY=/data/cloud_signing_key.pem \
     CLOUD_HOST=0.0.0.0 \
-    CLOUD_PORT=9000
+    CLOUD_PORT=19090
 
 VOLUME ["/data"]
-EXPOSE 9000
+EXPOSE 19090
 
 CMD ["python", "backend/main.py"]

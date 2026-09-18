@@ -208,9 +208,22 @@ class Relay:
         need = bool(pend) or srv.get("applied_rev") != srv.get("desired_rev")
         if not need:
             return
+        # Job'ga bog'lanmagan sinx (masalan qurilma qayta o'rnatilib applied<desired,
+        # yoki qo'lда o'chirilган kontent) — panelда PROGRESS ko'rinishi uchun
+        # sintetik "sync" job yaratamiz. Aks holда qurilma job_id'siz sinxlaydi
+        # va progress umuman ko'rsatilmaydi.
+        if job_id is None:
+            # Ochiq sync job bo'lsa qayta ishlatamiz (har ulanishда yangi
+            # yaratib spam qilmaslik uchun), aks holда yangi yaratamiz.
+            job_id = (db.open_job_for(server_id, "sync")
+                      or db.create_job("sync", "Qayta sinxronizatsiya", [server_id]))
         ok = await self.push_manifest(server_id, job_id=job_id)
-        for p in pend:
-            db.set_target(p["job_id"], server_id,
+        if pend:
+            for p in pend:
+                db.set_target(p["job_id"], server_id,
+                              state="running" if ok else "queued")
+        else:
+            db.set_target(job_id, server_id,
                           state="running" if ok else "queued")
 
     async def flush_ops(self, server_id):

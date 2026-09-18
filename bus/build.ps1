@@ -46,7 +46,7 @@ $AppDir  = Join-Path $Build "app"        # backend'ning toza vaqtinchalik nusxas
 $Release = Join-Path $Root "release\Avtobus"
 
 # Maxfiy modullar — Nuitka .pyd ga aylanadi (manbasi exe'ga TUSHMAYDI).
-$Secret = @("licensing.py", "security.py", "cloud_client.py")
+$Secret = @("licensing.py", "security.py", "cloud_client.py", "content_crypto.py")
 
 Say "════════════════════════════════════════════"
 Say "   AVTOBUS — himoyalangan build"

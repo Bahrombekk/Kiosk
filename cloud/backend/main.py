@@ -165,7 +165,7 @@ async def _offline_watch():
 #  MUHIM: har admin marshruti `_=A` (sessiya) bilan; buyruqlar Ed25519 imzolanadi
 #  (send_cmd→sign_command); tasdiqlanmagan serverga kontent/buyruq ketmaydi.
 # ═══════════════════════════════════════════════════════════════════════════
-APP_BUILD = "2026-08-07.4"
+APP_BUILD = "2026-08-08.3"
 
 
 @app.get("/api/health")
@@ -354,6 +354,7 @@ async def _handle_agent_msg(server_id, msg, ws):
                             "approved": bool(srv.get("approved"))})
         if kind == "register":
             await _maybe_auto_license(server_id, msg)
+            await _maybe_push_update(server_id, fields.get("version"))
             await relay.on_register(server_id)
             # Ulanish tiklandi — navbatда turgan buyruqlarni darhol yuboramiz
             # ("saqlash"ni oflaynда bosgan bo'lsa shu yerda qo'llanadi)
@@ -551,6 +552,22 @@ def overview(_=A):
         "servers": servers,
         "jobs": jobs,
         "events": db.recent_events(10),
+    }
+
+
+@app.get("/api/admin/kpis")
+def kpis(_=A):
+    """Yengil hisoblar — sidebar footer/badge HAR sahifада ko'rsatishi uchun
+    (to'liq overview'ni yuklamasдан). Onlayn = relay jonli ulanish YOKI yaqin
+    last_seen (db.is_online)."""
+    servers = db.get_servers()
+    online = sum(1 for s in servers
+                 if relay.is_online(s["id"]) or db.is_online(s))
+    return {
+        "servers_online": online,
+        "servers_total": len(servers),
+        "kiosks_online": sum(s.get("kiosks_online", 0) for s in servers),
+        "kiosks_total": sum(s.get("kiosks_total", 0) for s in servers),
     }
 
 
@@ -854,37 +871,97 @@ async def update_upload(request: Request, version: str = Query(""), _=A):
 
 @app.get("/api/admin/update")
 def update_info(_=A):
-    """Joriy yuklangan yangilanish (bo'lsa)."""
+    """Joriy yuklangan yangilanish + eng oxirgi yuborish job'ining har qurilma
+    holati (panel «jarayonini ko'rish» uchun)."""
     raw = db.get_setting(K_UPDATE)
-    return (json.loads(raw) if raw else {})
+    out = json.loads(raw) if raw else {}
+    job = db.latest_update_job()
+    if job:
+        out["job"] = job
+    return out
+
+
+def _vtuple(v):
+    try:
+        return tuple(int(x) for x in str(v).strip().split(".")[:4])
+    except (TypeError, ValueError):
+        return (0,)
 
 
 @app.post("/api/admin/update/push")
 async def update_push(payload: dict | None = None, _=A):
-    """Yangilanишни qurilmalarга yuboradi. `server_ids` berilса — o'shalarга,
-    aks holда BARCHA tasdiqlanган qurilmalarга. Offlayn bo'lса navbatда turadi."""
+    """Yangilanишни TANLANGAN qurilmalarга yuboradi (`server_ids`) — berilmasa
+    barcha tasdiqlanганга. Har biriga job-target holati (yuborildi/navbatда) —
+    oflayn qurilma ULANGANДА o'zi oladi (register'да qayta yuboriladi). Progress
+    va tugatish job orqali panelда ko'rinadi."""
     raw = db.get_setting(K_UPDATE)
     if not raw:
         raise HTTPException(400, "avval yangilanish faylini yuklang")
     meta = json.loads(raw)
     sha, ver = meta["sha256"], meta["version"]
     name = meta.get("name") or "AvtobusUpdate.exe"
+    size = int(meta.get("size") or 0)
     if not storage.exists(sha):
         raise HTTPException(400, "yangilanish fayli omborда topilmadi — qayta yuklang")
     ids = (payload or {}).get("server_ids")
+    approved = [s for s in db.get_servers() if s.get("approved")]
     if ids and isinstance(ids, list):
-        targets = [str(i) for i in ids]
+        want = {str(i) for i in ids}
+        targets = [s for s in approved if s["id"] in want]
     else:
-        targets = [s["id"] for s in db.get_servers() if s.get("approved")]
-    sent = 0
-    for sid in targets:
+        targets = approved
+    if not targets:
+        raise HTTPException(400, "qurilma tanlanmagan")
+    job_id = db.create_job("update", f"Yangilanish v{ver}",
+                           [s["id"] for s in targets], opts={"version": ver})
+    sent = queued = skip = 0
+    for s in targets:
+        sid = s["id"]
+        # Allaqachon shu (yoki undan yuqori) versiyada bo'lsa — tegmaymiz
+        if _vtuple(s.get("version")) >= _vtuple(ver):
+            db.set_target(job_id, sid, state="done", pct=100)
+            skip += 1
+            continue
         url = "/dl/" + security.make_dl_token(sha, sid, name)
-        await _send_or_queue(sid, "update",
-                             {"version": ver, "url": url, "sha256": sha,
-                              "name": name}, f"Yangilanish v{ver}")
-        sent += 1
-    db.add_event(f"Yangilanish v{ver} — {sent} qurilmага yuborildi", "ok")
-    return {"ok": True, "version": ver, "sent": sent}
+        fields = {"version": ver, "url": url, "sha256": sha, "name": name,
+                  "size": size, "job_id": job_id}
+        if relay.is_online(sid) and await relay.send_cmd(sid, "update", **fields):
+            db.set_target(job_id, sid, state="running")
+            sent += 1
+        else:
+            db.set_target(job_id, sid, state="queued")   # ulanганda yuboriladi
+            queued += 1
+    db.add_event(f"Yangilanish v{ver}: {sent} yuborildi, {queued} navbatда"
+                 + (f", {skip} allaqachon yangi" if skip else ""), "ok")
+    return {"ok": True, "version": ver, "job_id": job_id,
+            "sent": sent, "queued": queued, "skipped": skip}
+
+
+async def _maybe_push_update(server_id, version):
+    """Register'да: ochiq update job bo'lsa — qurilma allaqachon yangi versiyada
+    bo'lsa 'done', aks holда update buyrug'ini (qayta) yuboradi (oflayn bo'lib
+    o'tkazib yuborgan yoki qayta o'rnatilган holat o'zini tuzatadi)."""
+    t = db.open_update_target(server_id)
+    if not t:
+        return
+    job_id, jver = t
+    if version and jver and _vtuple(version) >= _vtuple(jver):
+        db.set_target(job_id, server_id, state="done", pct=100)
+        return
+    raw = db.get_setting(K_UPDATE)
+    if not raw:
+        return
+    meta = json.loads(raw)
+    if jver and meta.get("version") != jver:
+        return                       # boshqa versiya yuklangan — eski jobga tegmaymiz
+    sha = meta["sha256"]; name = meta.get("name") or "AvtobusUpdate.exe"
+    if not storage.exists(sha):
+        return
+    url = "/dl/" + security.make_dl_token(sha, server_id, name)
+    if await relay.send_cmd(server_id, "update", version=meta["version"], url=url,
+                            sha256=sha, name=name, size=int(meta.get("size") or 0),
+                            job_id=job_id):
+        db.set_target(job_id, server_id, state="running")
 
 
 @app.post("/api/admin/servers/{server_id}/license")

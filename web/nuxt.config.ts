@@ -18,7 +18,7 @@ export default defineNuxtConfig({
   // (Nitro proksi) ishlatiladi, brauzerga chiqmaydi. Muhit o'zgaruvchilari
   // bilan bekor qilinadi: NUXT_KIOSK_SERVER, NUXT_KIOSK_API_KEY.
   runtimeConfig: {
-    kioskServer: "https://127.0.0.1:8765",
+    kioskServer: "https://127.0.0.1:19080",
     kioskApiKey: "",
   },
 

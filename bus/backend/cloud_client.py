@@ -39,6 +39,7 @@ import urllib.error
 import urllib.request
 
 import config
+import content_crypto
 import db
 import licensing
 import ws as wsmod
@@ -624,7 +625,7 @@ class CloudClient:
         elif kind == "set_license":
             await self._set_license(sock, cmd.get("text"))
         elif kind == "update":
-            await self._apply_update(cmd)
+            await self._apply_update(sock, cmd)
         elif kind == "reboot":
             # Ataylab bajarilmaydi: masofadan qayta ishga tushirish poyezdda
             # kioskni ishlamay qoldirish xavfini tug'diradi. Faqat qayd etamiz.
@@ -718,7 +719,7 @@ class CloudClient:
             except OSError:
                 pass
 
-    async def _apply_update(self, cmd):
+    async def _apply_update(self, sock, cmd):
         """Bulut yuborган DASTUR yangilanishини (kod-only AvtobusUpdate.exe)
         yuklab olib, JIMGINA ishga tushiradi. Installer xizmatni to'xtatib,
         fayllarni almashtirib (data.db/content/license SAQLANADI), qayta yoqadi.
@@ -728,6 +729,8 @@ class CloudClient:
         (_download). Ya'ni soxta yangilanish yuborib bo'lmaydi. Versiya
         pasaytirilса yoki ayni versiya bo'lса — o'tkazib yuboramiz."""
         ver = str(cmd.get("version") or "").strip()
+        job_id = cmd.get("job_id") if isinstance(cmd.get("job_id"), int) else None
+        size = int(cmd.get("size") or 0)
         part = {"url": cmd.get("url"), "sha256": cmd.get("sha256"),
                 "name": cmd.get("name") or "AvtobusUpdate.exe"}
         if not part["url"] or not part["sha256"]:
@@ -740,18 +743,43 @@ class CloudClient:
         if ver and _ver_tuple(ver) <= _ver_tuple(config.APP_VERSION):
             cloud_log(f"Yangilanish o'tkazildi — joriy {config.APP_VERSION} "
                       f">= yangi {ver}")
+            if job_id:                       # bulut «done» deb belgilasin
+                await self._send(sock, {"type": "progress", "job_id": job_id,
+                                        "state": "done", "pct": 100})
             return
         updir = os.path.join(config.BASE_DIR, "update")
         cloud_log(f"Yangilanish {ver or '?'} yuklab olinmoqda…")
+        # Panelда JONLI progress (job_id bo'lsa) — yuklab olish foizi
+        self.job_id = job_id
+        self.progress = {"pct": 0, "bytes": 0, "total": size}
+        reporter = (asyncio.create_task(self._report_progress(sock))
+                    if job_id else None)
         try:
-            name = await asyncio.to_thread(self._download, part, updir,
-                                           lambda *a: None)
+            name = await asyncio.to_thread(
+                self._download, part, updir,
+                lambda got: self._tick(got, size or got or 1))
         except Exception as e:                                   # noqa: BLE001
+            if reporter:
+                reporter.cancel()
+            self.job_id = None
             cloud_log(f"Yangilanish yuklab bo'lmadi: {e}", "ERROR")
+            if job_id:
+                await self._send(sock, {"type": "progress", "job_id": job_id,
+                                        "state": "error",
+                                        "error": str(e)[:200]})
             return
+        if reporter:
+            reporter.cancel()
         exe = os.path.join(updir, name)
         cloud_log(f"Yangilanish {ver or ''} o'rnatilmoqda (jimgina, qayta "
                   "ishga tushadi)…")
+        if job_id:
+            # 100% yuklandi; installer restart qiladi — «done»ни bulut qurilma
+            # yangi versiyaда qayta ulanганда belgilaydi (register).
+            await self._send(sock, {"type": "progress", "job_id": job_id,
+                                    "state": "running", "pct": 100,
+                                    "bytes": size, "total": size})
+        self.job_id = None
         db.log_action("cloud_update", ver or exe)
         # DETACHED: installer bu (Avtobus.exe) jarayonni to'xtatadi — updater
         # alohida jarayon bo'lib davom etsin.
@@ -837,6 +865,8 @@ class CloudClient:
         reporter = asyncio.create_task(self._report_progress(sock))
         done_bytes = 0
         files = {}          # (cloud_id, part) -> saqlangan fayl nomi
+        failed_cids = set()
+        failed_names = []
         try:
             for cid, part_name, p, dest, sha_col in plan:
                 try:
@@ -847,21 +877,25 @@ class CloudClient:
                     done_bytes += int(p.get("size") or 0)
                     self._tick(done_bytes, total)
                 except Exception as e:                           # noqa: BLE001
+                    # Bitta fayl yuklanmasa — butun deploy TO'XTAMAYDI. Xatoni
+                    # qayd etib, qolgan fayllarni davom ettiramiz (rev qo'llanmaydi
+                    # — keyingi sinxда faqat shu yuklanmagan fayl qayta urinadi).
                     log.warning("Bulut: %s yuklanmadi (%s)", p.get("name"), e)
                     cloud_log(f"Yuklash xatosi: {p.get('name')} — {e}", "ERROR")
-                    if self.job_id:
-                        await self._send(sock, {
-                            "type": "progress", "job_id": self.job_id,
-                            "state": "error", "error": str(e)[:200],
-                            "pct": self.progress["pct"],
-                            "bytes": done_bytes, "total": total})
-                        self.job_id = None
-                    return
+                    failed_cids.add(cid)
+                    failed_names.append(p.get("name") or str(cid))
+                    done_bytes += int(p.get("size") or 0)   # progress oldinga sursin
+                    self._tick(done_bytes, total)
+                    continue
         finally:
             reporter.cancel()
 
-        # 3) Bazaga yozamiz (yangi yoki yangilangan)
+        # 3) Bazaga yozamiz (yangi yoki yangilangan). Fayli YUKLANMAGAN kontent
+        #    o'tkazib yuboriladi — buzuq (faylsiz) yozuv qo'shilmasin; keyingi
+        #    sinxда qayta urinilganда to'liq yoziladi.
         for cid, it in want.items():
+            if cid in failed_cids:
+                continue
             cur = local.get(cid)
             row = self._row_from_item(it, files, cur)
             if cur:
@@ -887,16 +921,34 @@ class CloudClient:
             "name", "arrival_time", "departure_time", "latitude", "longitude",
             "distance_km", "sort_order", "direction"))
 
-        db.set_setting(K_REV, str(rev))
+        # rev FAQAT hammasi muvaffaqiyatли bo'lsa "qo'llandi" deb belgilanadi.
+        # Aks holда applied<desired qoladi — keyingi ulanишда yana urinadi, lekin
+        # sha bo'yicha muvaffaqiyatli fayllar o'tkazib yuboriladi (faqat yuklanmagani).
         await wsmod.manager.broadcast({"type": "catalog_update"})
-        await self._send(sock, {"type": "applied", "rev": rev})
+        if not failed_names:
+            db.set_setting(K_REV, str(rev))
+            await self._send(sock, {"type": "applied", "rev": rev})
         if self.job_id:
-            await self._send(sock, {"type": "progress", "job_id": self.job_id,
-                                    "state": "done", "pct": 100,
-                                    "bytes": total, "total": total})
+            if failed_names:
+                await self._send(sock, {
+                    "type": "progress", "job_id": self.job_id, "state": "error",
+                    "error": f"{len(failed_names)} fayl yuklanmadi — qayta uriniladi",
+                    "pct": self.progress["pct"], "bytes": done_bytes, "total": total})
+            else:
+                await self._send(sock, {"type": "progress", "job_id": self.job_id,
+                                        "state": "done", "pct": 100,
+                                        "bytes": total, "total": total})
         self.job_id = None
-        log.info("Bulut: manifest qo'llanildi (rev=%s)", rev)
-        cloud_log(f"Sinxronizatsiya tugadi — rev {rev}, {len(want)} kontent")
+        if failed_names:
+            preview = ", ".join(str(x) for x in failed_names[:3])
+            log.warning("Bulut: manifest QISMAN qo'llandi — %d fayl yuklanmadi",
+                        len(failed_names))
+            cloud_log(f"Qisman sinx: {len(want) - len(failed_cids)} kontent OK, "
+                      f"{len(failed_names)} fayl yuklanmadi ({preview}) — keyin qayta",
+                      "WARN")
+        else:
+            log.info("Bulut: manifest qo'llanildi (rev=%s)", rev)
+            cloud_log(f"Sinxronizatsiya tugadi — rev {rev}, {len(want)} kontent")
 
     # -------------------------------------- reklama / sayt / bekat qo'llash
     async def _apply_ads(self, ads):
@@ -1063,8 +1115,11 @@ class CloudClient:
         sha = part["sha256"]
         os.makedirs(dest_dir, exist_ok=True)
         final = os.path.join(dest_dir, self._safe_name(sha, part.get("name")))
-        if os.path.isfile(final) and self._sha_of(final) == sha:
-            return os.path.basename(final)          # allaqachon bor
+        # Allaqachon bor: shifrlangan fayl (yangi tartib) YOKI ochiq legacy fayl
+        # sha si mos. (Manifest DB-sha bilan allaqachon gate qiladi.)
+        if os.path.isfile(final) and (content_crypto.is_encrypted(final)
+                                      or self._sha_of(final) == sha):
+            return os.path.basename(final)
         tmp = final + ".part"
         url = part["url"]
         if url.startswith("/"):
@@ -1091,17 +1146,38 @@ class CloudClient:
                             if on_bytes:
                                 on_bytes(have)
                 break
+            except urllib.error.HTTPError as e:
+                # 416 (Range Not Satisfiable): mahalliy `.part` fayl serverdagi
+                # fayldan KATTA/eskirgan (masalan fayl qayta yuklangan yoki
+                # avvalgi yuklash buzuq). Partialni tashlab, boshidan yuklaymiz —
+                # aks holда har safar bir xil offsetда yana 416 chiqib, fayl
+                # butunlay yuklanmasdi (butun deploy shунда to'xtardi).
+                if e.code == 416:
+                    try:
+                        if os.path.isfile(tmp):
+                            os.remove(tmp)
+                    except OSError:
+                        pass
+                    log.info("Bulut: 416 — eskirgan partial tashlandi, boshidan")
+                    continue                         # have=0 bilan qayta urinadi
+                if attempt == 3:
+                    raise
+                log.info("Bulut: yuklash xatosi HTTP %s — qayta", e.code)
+                time.sleep(2 * (attempt + 1))
             except (urllib.error.URLError, OSError) as e:
                 if attempt == 3:
                     raise
                 log.info("Bulut: yuklash uzildi (%s) — davom etamiz", e)
                 time.sleep(2 * (attempt + 1))
 
-        got = self._sha_of(tmp)
+        got = self._sha_of(tmp)          # ASL (plaintext) sha — manifest bilan
         if got != sha:
             os.remove(tmp)
             raise ValueError(f"sha256 mos kelmadi ({got[:12]} != {sha[:12]})")
-        os.replace(tmp, final)
+        # Diskда SHIFRLAB saqlaymiz — nusxa qilinса kalitsiz foydasiz. Ijro
+        # paytida main.py deshifrlaydi (AES-CTR, seek/Range shaffof).
+        content_crypto.encrypt_file(tmp, final)
+        os.remove(tmp)
         return os.path.basename(final)
 
     @staticmethod

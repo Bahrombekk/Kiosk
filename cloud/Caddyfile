@@ -12,5 +12,5 @@
 
 	# WebSocket (/agent) va REST — hammasi bulutga. Caddy WS'ni o'zi upgrade
 	# qiladi, alohida sozlash shart emas.
-	reverse_proxy cloud:9000
+	reverse_proxy cloud:19090
 }

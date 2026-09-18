@@ -38,7 +38,7 @@ STORAGE_DIR = os.environ.get("CLOUD_STORAGE") or os.path.join(BASE_DIR, "storage
 TMP_DIR = os.path.join(STORAGE_DIR, "_tmp")
 
 HOST = os.environ.get("CLOUD_HOST", "0.0.0.0")
-PORT = int(os.environ.get("CLOUD_PORT", "9000"))
+PORT = int(os.environ.get("CLOUD_PORT", "19090"))
 
 # Serverlar (agentlar) shu manzilga ulanadi va fayllarni shundan tortadi.
 # Reverse-proxy ortida turganда TASHQI manzilni shu yerda bering, aks holda
@@ -63,7 +63,7 @@ ADMIN_USER_ENV = (os.environ.get("CLOUD_ADMIN_USER") or "admin").strip() or "adm
 ADMIN_PASS_ENV = os.environ.get("CLOUD_ADMIN_PASS") or ""
 
 # Ed25519 imzo kaliti yo'li. Docker'da doimiy volume'ga qo'yiladi (aks holda
-# konteyner qayta qurilganда yangi kalit yaratilib, ulanган serverlar buyruqni
+# konteyner qayta qurilganда yangi kalit yaratilib, ulangan serverlar buyruqni
 # rad etadi). Standart — dastur papkasi.
 SIGNING_KEY_PATH = (os.environ.get("CLOUD_SIGNING_KEY")
                     or os.path.join(BASE_DIR, "cloud_signing_key.pem"))

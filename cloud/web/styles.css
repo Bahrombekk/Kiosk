@@ -540,7 +540,9 @@ input[type="date"], input[type="time"] {
 .chart .d { font-size: 10px; color: var(--dim); white-space: nowrap; }
 
 /* Uzun ro'yxatlar (qurilmalar) — kartani cho'zib yubormasin */
-.scroll-y { max-height: 320px; overflow-y: auto; }
+/* Ro'yxat ekran balandligини to'ldirsin (avval 320px — pastда katta bo'shliq
+   qolardi). Endi viewport'ning katta qismini egallaydi, ichida skroll. */
+.scroll-y { max-height: calc(100vh - 300px); min-height: 220px; overflow-y: auto; }
 
 /* ---- Analitika: donut, gorizontal bar, soatlik ---- */
 .donutwrap { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
@@ -757,6 +759,66 @@ body { background:
 .upd-ico { width:46px; height:46px; border-radius:14px; flex:none;
   background: linear-gradient(135deg, #6366F1, #4F46E5); color:#fff;
   display:grid; place-items:center; box-shadow:0 8px 20px rgba(79,70,229,.40); }
+/* Yangilanish jadvalида qurilma tanlash katakchasi */
+.upd-chk { display:inline-grid; place-items:center; width:20px; height:20px;
+  border-radius:6px; border:1.6px solid var(--border-strong); cursor:pointer;
+  background:#fff; transition: background .15s, border-color .15s; vertical-align:middle; }
+.upd-chk.on { background: var(--accent); border-color: var(--accent); }
+
+/* Yangilanish sahifasi — 2 ustun (yuklash chapда, versiya jadvali o'ngда) */
+.upd-page { display:grid; gap:18px; align-items:start;
+  grid-template-columns: minmax(340px, 460px) minmax(0, 1fr); }
+@media (max-width:1000px){ .upd-page { grid-template-columns:1fr; } }
+
+/* Navbat yuqori qismi — premium stat kartalar + info */
+.q-head { display:grid; grid-template-columns: minmax(0,2fr) minmax(0,1.1fr);
+  gap:16px; align-items:stretch; margin-bottom:6px; }
+.qkpi-row { display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:12px; }
+.qkpi { background:var(--card); border:1px solid var(--border); border-radius:16px;
+  padding:14px 16px; box-shadow:var(--shadow);
+  transition: transform .16s ease, box-shadow .18s ease; }
+.qkpi:hover { transform: translateY(-2px); box-shadow: var(--shadow-lift); }
+.qkpi-top { display:flex; align-items:center; gap:7px; margin-bottom:8px; }
+.qkpi-val { font-family:Unbounded,sans-serif; font-size:24px; font-weight:600;
+  letter-spacing:-.5px; }
+.q-info { display:flex; align-items:flex-start; gap:12px; padding:16px 18px;
+  border-radius:16px; background:var(--accent-soft); }
+@media (max-width:1100px){
+  .q-head { grid-template-columns:1fr; }
+  .qkpi-row { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+
+/* Job qatori — bosilsa ichi ochiladi (har qurilma holati) */
+.job-wrap { border-bottom:1px solid var(--border); }
+.job-wrap:last-child { border-bottom:0; }
+.job-wrap .job { border-bottom:0; }
+.job-chev { flex:none; display:grid; place-items:center; width:22px; opacity:.7;
+  transition: transform .18s ease; }
+.job-wrap.open { background:#FAFBFF; }
+.job-wrap.open .job-chev { transform: rotate(90deg); color:var(--accent); }
+.job-details { padding:2px 18px 14px 70px; display:flex; flex-direction:column;
+  gap:9px; animation: jdIn .18s ease; }
+@keyframes jdIn { from{opacity:0; transform:translateY(-4px)} to{opacity:1; transform:none} }
+.jt-row { display:grid; gap:12px; align-items:center;
+  grid-template-columns: 12px minmax(110px,1.3fr) minmax(110px,2fr) minmax(150px,1.4fr); }
+.jt-dot { width:9px; height:9px; border-radius:50%; }
+.jt-dot.done{background:var(--ok)} .jt-dot.run{background:var(--accent)}
+.jt-dot.wait{background:#CBD5E1} .jt-dot.err{background:var(--err)}
+.jt-name { font-weight:700; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.jt-bar { height:7px; border-radius:999px; background:var(--bg); overflow:hidden; }
+.jt-bar > i { display:block; height:100%; border-radius:999px; transition:width .3s;
+  background:linear-gradient(90deg,#6366F1,#4F46E5); }
+.jt-bar > i.done{background:var(--ok)} .jt-bar > i.err{background:var(--err)}
+.jt-bar > i.wait{background:#CBD5E1}
+.jt-stat { font-size:12px; font-weight:700; white-space:nowrap; }
+.jt-stat .dim { font-weight:600; }
+.jt-stat.done{color:var(--ok-dark)} .jt-stat.err{color:var(--err-dark)}
+.jt-stat.run{color:var(--accent-dark)} .jt-stat.wait{color:var(--muted)}
+@media (max-width:860px){
+  .jt-row { grid-template-columns:12px 1fr; }
+  .jt-bar, .jt-stat { grid-column:2; }
+  .job-details { padding-left:22px; }
+}
 
 /* Navbat (tarqatish) — ixcham, toza qatorlar */
 .job { padding: 13px 18px; border-bottom: 1px solid var(--border); gap: 16px; }

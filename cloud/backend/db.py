@@ -1272,6 +1272,56 @@ def create_job(kind, title, server_ids, content_ids=(), opts=None):
     return jid
 
 
+def open_job_for(server_id, kind):
+    """Shu server uchun OCHIQ (tugamagan) `kind` turidagi ish bormi — job_id
+    yoki None. Sync job'ни har ulanishда qayta yaratib spam qilmaslik uchun."""
+    with _conn() as c:
+        row = c.execute(
+            "SELECT t.job_id FROM job_targets t JOIN jobs j ON j.id=t.job_id "
+            "WHERE t.server_id=? AND j.kind=? AND j.state NOT IN "
+            "('done','error','cancelled') ORDER BY t.job_id DESC LIMIT 1",
+            (server_id, kind)).fetchone()
+        return row["job_id"] if row else None
+
+
+def open_update_target(server_id):
+    """Shu server uchun OCHIQ (tugamagan) update job — (job_id, version) yoki
+    None. Qurilma ulanганда qayta yuborish / tugatish uchun."""
+    with _conn() as c:
+        row = c.execute(
+            "SELECT t.job_id, j.opts FROM job_targets t JOIN jobs j ON j.id=t.job_id "
+            "WHERE t.server_id=? AND j.kind='update' AND t.state NOT IN "
+            "('done','error','cancelled') ORDER BY t.job_id DESC LIMIT 1",
+            (server_id,)).fetchone()
+        if not row:
+            return None
+        try:
+            ver = json.loads(row["opts"] or "{}").get("version")
+        except (ValueError, TypeError):
+            ver = None
+        return (row["job_id"], ver)
+
+
+def latest_update_job():
+    """Eng oxirgi update job + har qurilma holati (panel «jarayonini ko'rish»)."""
+    with _conn() as c:
+        j = c.execute("SELECT id,title,state,opts FROM jobs WHERE kind='update' "
+                      "ORDER BY id DESC LIMIT 1").fetchone()
+        if not j:
+            return None
+        tg = c.execute(
+            "SELECT t.server_id, s.name server_name, t.state, t.pct, "
+            "t.bytes_done, t.bytes_total FROM job_targets t "
+            "LEFT JOIN servers s ON s.id=t.server_id WHERE t.job_id=?",
+            (j["id"],)).fetchall()
+        try:
+            ver = json.loads(j["opts"] or "{}").get("version")
+        except (ValueError, TypeError):
+            ver = None
+        return {"id": j["id"], "title": j["title"], "state": j["state"],
+                "version": ver, "targets": [dict(r) for r in tg]}
+
+
 def set_target(job_id, server_id, **fields):
     allowed = ("state", "pct", "bytes_done", "bytes_total", "error")
     data = {k: v for k, v in fields.items() if k in allowed}
@@ -1388,12 +1438,16 @@ def insert_stats(server_id, events):
 
 
 def insert_logs(server_id, entries):
+    # MUHIM: `ts` — BULUT qabul vaqti (db.now()), qurilmaning o'z soati EMAS.
+    # Qurilmalar soati turlicha/noto'g'ri bo'lishi mumkin (masalan 2 soat farq)
+    # — u holда loglar aralashib, tartibi buzilardi. Yagona manba = bulut soati.
+    ts = now()
     rows = []
     for e in entries[:2000]:
         if not isinstance(e, dict):
             continue
         lvl = str(e.get("level") or "INFO").upper()
-        rows.append((str(e.get("ts") or now())[:32], server_id,
+        rows.append((ts, server_id,
                      lvl if lvl in LOG_LEVELS else "INFO",
                      str(e.get("source") or "")[:32], str(e.get("msg") or "")[:1000]))
     if not rows:

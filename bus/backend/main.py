@@ -18,6 +18,7 @@ Ishga tushirish:
   python main.py
 """
 import os
+import sys
 import json
 import time
 import hashlib
@@ -40,6 +41,7 @@ import discovery
 import weather
 import cloud_client
 import web_server
+import content_crypto
 from ws import manager
 
 logging.basicConfig(
@@ -94,6 +96,17 @@ async def lifespan(app: FastAPI):
     task = asyncio.create_task(_status_loop())   # holatni davriy tarqatish
     cloud_client.start()   # markaziy bulut agenti (KIOSK_CLOUD_URL berilsa)
     _web.start()   # Nuxt veb-ilova (yo'lovchilar 80-portда ochadi) — fon oqimда
+    # Mavjud OCHIQ kontent fayllarini FONДА shifrlaymiz (bir martalik migratsiya —
+    # bulutдан yangi yuklanganlar allaqachon shifrlangan). Serve yo'li ochiq VA
+    # shifrlanganни ikkalasini qo'llaydi, shuning uchun migratsiya davomiда ham
+    # ijro to'xtamaydi. Frozen (o'rnatilган) rejimдагina — dev'да tegmaymiz.
+    if getattr(sys, "frozen", False):
+        import threading
+        threading.Thread(
+            target=content_crypto.migrate_dirs,
+            args=([config.MEDIA_DIR, config.COVERS_DIR, config.BOOKS_DIR,
+                   config.ADS_DIR],),
+            name="content-encrypt", daemon=True).start()
     yield
     _web.stop()    # veb bola jarayonini yopamiz
     if config.DISCOVERY_ENABLED:
@@ -226,7 +239,12 @@ def cover(content_id: int):
     path = _safe_join(config.COVERS_DIR, item.get("cover_path"))
     # Muqova rasmlari kamdan-kam o'zgaradi — kiosk uzoq kesh qilsin (1 kun).
     if path and os.path.isfile(path) and not path.endswith(".svg"):
-        return FileResponse(path, headers={"Cache-Control": "public, max-age=86400"})
+        hdr = {"Cache-Control": "public, max-age=86400"}
+        if content_crypto.is_encrypted(path):
+            mt = mimetypes.guess_type(path)[0] or "image/jpeg"
+            return Response(content=content_crypto.read_all(path),
+                            media_type=mt, headers=hdr)
+        return FileResponse(path, headers=hdr)
     return Response(content=_placeholder_svg(item["title"], item["type"]),
                     media_type="image/svg+xml",
                     headers={"Cache-Control": "public, max-age=86400"})
@@ -317,8 +335,13 @@ def _parse_range(range_header, file_size):
 
 
 def _range_response(path, request: Request, chunk=1024 * 1024):
-    """Faylni HTTP Range (206 Partial Content) bilan oqim qilib beradi."""
-    file_size = os.path.getsize(path)
+    """Faylni HTTP Range (206 Partial Content) bilan oqim qilib beradi.
+
+    Fayl AES-CTR bilan SHIFRLANGAN bo'lsa (content_crypto) — o'qish paytida
+    deshifrlanadi. O'lcham/seek ASL (plaintext) o'lchamга nisbatан hisoblanadi,
+    shuning uchun video seek/Range shaffof ishlaydi."""
+    enc = content_crypto.is_encrypted(path)
+    file_size = content_crypto.plaintext_size(path) if enc else os.path.getsize(path)
     media_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
     range_header = request.headers.get("range")
     etag = _file_tag(path, file_size)
@@ -346,6 +369,10 @@ def _range_response(path, request: Request, chunk=1024 * 1024):
     length = end - start + 1
 
     def body():
+        if enc:
+            # Shifrlangan — kerakli oralig'ini deshifrlab oqim qilamiz
+            yield from content_crypto.decrypt_range(path, start, length, chunk)
+            return
         with open(path, "rb") as f:
             f.seek(start)
             remaining = length
@@ -376,11 +403,12 @@ def book_text(content_id: int):
     if os.path.getsize(path) > 25 * 1024 * 1024:
         raise HTTPException(413, "Matn fayli juda katta")
     try:
-        with open(path, encoding="utf-8") as f:
-            if path.endswith(".json"):
-                return json.load(f)
-            return {"chapters": [{"title": item["title"], "text": f.read()}]}
-    except (OSError, json.JSONDecodeError) as e:
+        raw = content_crypto.read_all(path)       # shifrlangan bo'lsa deshifrlaydi
+        txt = raw.decode("utf-8", errors="replace")
+        if path.endswith(".json"):
+            return json.loads(txt)
+        return {"chapters": [{"title": item["title"], "text": txt}]}
+    except (OSError, ValueError, json.JSONDecodeError) as e:
         raise HTTPException(500, f"Matn faylini o'qib bo'lmadi: {e}")
 
 
@@ -749,8 +777,9 @@ def _admin_config_payload():
         "cloud_url": config.CLOUD_URL,
         "enroll_set": bool(config.CLOUD_ENROLL),
         "local_ips": ips,
-        # Yo'lovchilar shu manzil(lar)дан ochadi (avto-aniqlangan LAN IP)
-        "web_urls": [f"http://{ip}/" for ip in ips],
+        # Yo'lovchilar shu manzil(lar)дан ochadi (avto-aniqlangan LAN IP +
+        # veb porti; domen emas — telefonda DNS yo'q)
+        "web_urls": web_server.lan_urls(),
         "vertical": config.VERTICAL,
         "version": config.APP_VERSION,
         "cloud_configured": bool(config.CLOUD_URL),

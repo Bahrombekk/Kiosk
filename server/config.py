@@ -31,7 +31,7 @@ BRANDING_DIR = os.path.join(CONTENT_DIR, "branding")
 
 # Server manzili
 HOST = os.environ.get("KIOSK_HOST", "0.0.0.0")
-PORT = int(os.environ.get("KIOSK_PORT", "8765"))
+PORT = int(os.environ.get("KIOSK_PORT", "19080"))
 
 # --- Xavfsizlik / topish (discovery) ---
 # TLS (HTTPS/WSS): yoqilganda server self-signed sertifikat bilan ishlaydi va
@@ -41,7 +41,7 @@ USE_TLS = os.environ.get("KIOSK_TLS", "1") != "0"
 
 # Discovery: server LAN'ga imzolangan UDP "beacon" tarqatadi, kiosklar uni
 # tutib serverni avtomatik topadi (qo'lda IP yozish shart emas).
-DISCOVERY_PORT = int(os.environ.get("KIOSK_DISCOVERY_PORT", "8766"))
+DISCOVERY_PORT = int(os.environ.get("KIOSK_DISCOVERY_PORT", "19081"))
 DISCOVERY_INTERVAL_S = 3        # beacon yuborish oralig'i
 DISCOVERY_ENABLED = os.environ.get("KIOSK_DISCOVERY", "1") != "0"
 
