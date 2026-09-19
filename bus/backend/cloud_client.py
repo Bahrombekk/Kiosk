@@ -1064,8 +1064,15 @@ class CloudClient:
         sha = part["sha256"]
         os.makedirs(dest_dir, exist_ok=True)
         final = os.path.join(dest_dir, self._safe_name(sha, part.get("name")))
-        if os.path.isfile(final) and self._sha_of(final) == sha:
-            return os.path.basename(final)          # allaqachon bor
+        if os.path.isfile(final):
+            if self._sha_of(final) == sha:
+                return os.path.basename(final)      # allaqachon bor
+            # Fayl bor, lekin sha boshqa — faststart uchun qayta o'ralgan
+            # bo'lishi mumkin (pastga qarang). Yonidagi belgi faylida ASL sha
+            # saqlanadi; mos kelsa qaytadan yuklamaymiz. Busiz har manifestda
+            # fayl qayta tortilib, qayta o'raladi — cheksiz tsikl bo'lardi.
+            if self._fs_marker_ok(final, sha):
+                return os.path.basename(final)
         tmp = final + ".part"
         url = part["url"]
         if url.startswith("/"):
@@ -1103,7 +1110,49 @@ class CloudClient:
             os.remove(tmp)
             raise ValueError(f"sha256 mos kelmadi ({got[:12]} != {sha[:12]})")
         os.replace(tmp, final)
+        self._make_faststart(final, sha)
         return os.path.basename(final)
+
+    # --- faststart -------------------------------------------------------
+    # Nega kerak: MP4 da `moov` atomi fayl OXIRIDA bo'lsa, brauzer videoni
+    # boshlash uchun deyarli butun faylni yuklab olishi kerak. Telefonда bu
+    # "video ochilmayapti" bo'lib ko'rinadi (500 MB lik kino amalda ochilmaydi).
+    # Poyezdda bu desktop admin yuklash oynasida hal qilinardi; avtobus esa
+    # kontentni FAQAT bulutdan oladi, ya'ni o'sha bosqich umuman yo'q edi.
+
+    @staticmethod
+    def _fs_marker(path):
+        return path + ".fs"
+
+    @classmethod
+    def _fs_marker_ok(cls, path, sha):
+        """Fayl shu ASL sha'dan qayta o'ralganmi (ya'ni qaytadan yuklash
+        shart emasmi)."""
+        try:
+            with open(cls._fs_marker(path), "r", encoding="ascii") as f:
+                return f.read().strip() == sha
+        except OSError:
+            return False
+
+    @classmethod
+    def _make_faststart(cls, path, sha):
+        """Video bo'lsa `moov`ni oldinga o'tkazadi. Fayl o'zgargani uchun uning
+        sha'si ham o'zgaradi — shuning uchun yoniga ASL sha yozib qo'yamiz,
+        aks holda keyingi manifestda qayta yuklanib ketardi.
+
+        Best-effort: ffmpeg yo'q bo'lsa yoki o'ralmasa jim o'tadi."""
+        if os.path.splitext(path)[1].lower() not in media_tools.VIDEO_EXTS:
+            return
+        try:
+            if media_tools.is_faststart(path):
+                return
+            if media_tools.ensure_faststart(path):
+                with open(cls._fs_marker(path), "w", encoding="ascii") as f:
+                    f.write(sha)
+                log.info("Bulut: video faststart qilindi — %s",
+                         os.path.basename(path))
+        except Exception:                                # noqa: BLE001
+            log.exception("faststart bajarilmadi: %s", os.path.basename(path))
 
     @staticmethod
     def _sha_of(path):
