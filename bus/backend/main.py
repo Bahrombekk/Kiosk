@@ -844,7 +844,15 @@ if IMPORT_ENABLED:
                           final: str = Query("")):
         """Faylni kontent papkasiga yozadi (xom tana, oqim bilan).
 
-        `mode=write`  — faylni noldan yozadi (kichik fayllar uchun).
+        `mode=write`  — faylni noldan yozadi VA darhol yakunlaydi (bitta
+                        so'rovga sig'adigan kichik fayllar uchun).
+        `mode=start`  — faylni noldan yozadi, lekin YAKUNLAMAYDI. Ko'p bo'lakli
+                        yuklashning birinchi bo'lagi shu bilan yuboriladi.
+                        Avval bu holat yo'q edi: birinchi bo'lak `write` bilan
+                        kelib, `.part` darhol yakuniy nomga o'tib ketardi va
+                        keyingi bo'laklar bo'sh joyga tushardi — natijada
+                        serverda faqat OXIRGI bo'lak qolgan 7 ta buzuq fayl
+                        paydo bo'ldi.
         `mode=append` — mavjud `.part` ga qo'shib yozadi. Katta fayl bo'laklarga
                         bo'lib yuboriladi: teskari proksilarda tana hajmi
                         cheklangan bo'ladi (bizda 413 chiqdi) va bitta
@@ -880,8 +888,8 @@ if IMPORT_ENABLED:
             raise
 
         size = os.path.getsize(tmp)
-        if mode == "append" and not final:
-            # Oraliq bo'lak — hozircha `.part` bo'lib turadi.
+        if mode in ("start", "append") and not final:
+            # Oraliq bo'lak — hozircha `.part` bo'lib turadi, yakunlanmaydi.
             return {"ok": True, "name": safe, "written": written, "size": size}
 
         # Yakunlash: sha tekshiruvi (berilgan bo'lsa), keyin nomini o'zgartirish
