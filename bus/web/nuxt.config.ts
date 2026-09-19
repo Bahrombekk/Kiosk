@@ -20,6 +20,10 @@ export default defineNuxtConfig({
   runtimeConfig: {
     kioskServer: "https://127.0.0.1:8765",
     kioskApiKey: "",
+    // VAQTINCHALIK: kontent importi uchun token (NUXT_KIOSK_IMPORT_TOKEN).
+    // Bo'sh bo'lsa `/api/import/...` marshruti 404 qaytaradi — ya'ni
+    // standart holda o'chiq. Import tugagach o'zgaruvchini olib tashlang.
+    kioskImportToken: "",
   },
 
   components: [

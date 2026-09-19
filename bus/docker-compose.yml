@@ -24,6 +24,9 @@ services:
       # Web -> backend (ichki tarmoq). Kalit .env'даги bilan BIR XIL bo'lsin.
       NUXT_KIOSK_SERVER: http://backend:8000
       NUXT_KIOSK_API_KEY: ${KIOSK_API_KEY}
+      # VAQTINCHALIK: kontent importi tokeni. .env da berilmasa bo'sh qoladi
+      # va `/api/import/...` marshruti 404 qaytaradi (o'chiq holat).
+      NUXT_KIOSK_IMPORT_TOKEN: ${KIOSK_IMPORT_TOKEN:-}
     ports:
       - "80:3000"              # yo'lovchilar: http://<avtobus-qurilma-IP>/
 

@@ -27,9 +27,10 @@ import mimetypes
 import secrets
 from email.utils import formatdate
 from datetime import datetime
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, closing
 
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import (FastAPI, HTTPException, Query, Request, WebSocket,
+                     WebSocketDisconnect)
 from fastapi.responses import Response, StreamingResponse, FileResponse, JSONResponse
 
 import config
@@ -805,6 +806,124 @@ async def admin_config_set(request: Request):
             changed.append("name")
     log.info("Ichki admin: sozlama o'zgardi (%s)", ", ".join(changed) or "-")
     return {"ok": True, "changed": changed, **_admin_config_payload()}
+
+
+# ============ VAQTINCHALIK: kontentni tashqaridan import qilish ============
+# Nega kerak bo'ldi: avtobus qurilmasi kontentni FAQAT bulutdan oladi (o'zi
+# chiquvchi WS ochadi). Bu ataylab shunday — tashqaridan hech kim qurilmaga
+# kontent tiqa olmaydi. Ammo ommaviy serverga birinchi marta ma'lumot
+# solishning boshqa yo'li yo'q edi (bulut tailnet ichida va unga yetib
+# bo'lmaydi), shuning uchun vaqtinchalik import yo'li qo'shildi.
+#
+# XAVFSIZLIK: standart holda BUTUNLAY O'CHIQ. Faqat `KIOSK_IMPORT=1` muhit
+# o'zgaruvchisi berilgandagina ro'yxatdan o'tadi. Ustiga umumiy `x-api-key`
+# middleware'i ham qo'llanadi. Import tugagach o'zgaruvchini olib tashlang.
+IMPORT_ENABLED = os.environ.get("KIOSK_IMPORT") == "1"
+
+_IMPORT_DIRS = {
+    "media": config.MEDIA_DIR,
+    "covers": config.COVERS_DIR,
+    "books": config.BOOKS_DIR,
+    "ads": config.ADS_DIR,
+    "branding": config.BRANDING_DIR,
+}
+
+
+def _import_guard():
+    if not IMPORT_ENABLED:
+        raise HTTPException(404, "import o'chiq")
+
+
+if IMPORT_ENABLED:
+    log.warning("VAQTINCHALIK import yo'li YOQILGAN (KIOSK_IMPORT=1) — "
+                "ishlatib bo'lgach o'chiring")
+
+    @app.put("/api/import/blob")
+    async def import_blob(request: Request, kind: str = Query(""),
+                          name: str = Query("")):
+        """Bitta faylni kontent papkasiga yozadi (xom tana, oqim bilan).
+
+        Multipart ishlatilmaydi — katta kino uchun oqim arzonroq va xotirada
+        bufer bo'lmaydi (yuklashning o'zi `storage.save_upload` bilan bir xil
+        mantiq, faqat bu yerda manzil kontent papkasi)."""
+        _import_guard()
+        dest_dir = _IMPORT_DIRS.get(kind)
+        if not dest_dir:
+            raise HTTPException(400, f"noma'lum kind: {kind}")
+        safe = os.path.basename(str(name or "").strip())
+        if not safe or safe.startswith("."):
+            raise HTTPException(400, "nom noto'g'ri")
+        os.makedirs(dest_dir, exist_ok=True)
+        final = os.path.join(dest_dir, safe)
+        tmp = final + ".part"
+        h = hashlib.sha256()
+        total = 0
+        try:
+            with open(tmp, "wb") as f:
+                async for chunk in request.stream():
+                    if not chunk:
+                        continue
+                    total += len(chunk)
+                    h.update(chunk)
+                    f.write(chunk)
+            os.replace(tmp, final)
+        except Exception:                                    # noqa: BLE001
+            if os.path.exists(tmp):
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
+            raise
+        return {"ok": True, "name": safe, "size": total, "sha256": h.hexdigest()}
+
+    @app.post("/api/import/catalog")
+    async def import_catalog(payload: dict):
+        """Katalogni to'ldiradi: kontent yozuvlari, bekatlar, sozlamalar.
+
+        Fayllar avval `/api/import/blob` bilan yuklangan bo'lishi kerak —
+        bu yerda faqat bazaga yoziladi."""
+        _import_guard()
+        out = {"content": 0, "stops": 0, "settings": 0}
+
+        stops = payload.get("stops")
+        if isinstance(stops, list):
+            with closing(db.connect()) as conn:
+                conn.execute("DELETE FROM route_stops")
+                for s in stops:
+                    conn.execute(
+                        "INSERT INTO route_stops (name, arrival_time,"
+                        " departure_time, latitude, longitude, distance_km,"
+                        " sort_order, direction) VALUES (?,?,?,?,?,?,?,?)",
+                        (s.get("name"), s.get("arrival_time"),
+                         s.get("departure_time"), s.get("latitude"),
+                         s.get("longitude"), s.get("distance_km"),
+                         s.get("sort_order", 0), s.get("direction", 0)))
+                conn.commit()
+            out["stops"] = len(stops)
+
+        items = payload.get("content")
+        if isinstance(items, list):
+            cols = ("type", "title", "author", "genre", "description",
+                    "duration", "pages", "cover_path", "file_path",
+                    "text_path", "category_tab", "lang", "cache_enabled",
+                    "is_recommended", "visible")
+            with closing(db.connect()) as conn:
+                for it in items:
+                    vals = [it.get(c) for c in cols]
+                    conn.execute(
+                        f"INSERT INTO content ({','.join(cols)}) "
+                        f"VALUES ({','.join('?' * len(cols))})", vals)
+                conn.commit()
+            out["content"] = len(items)
+
+        sets = payload.get("settings")
+        if isinstance(sets, dict):
+            for k, v in sets.items():
+                db.set_setting(k, str(v))
+            out["settings"] = len(sets)
+
+        log.warning("VAQTINCHALIK import: %s", out)
+        return {"ok": True, **out}
 
 
 @app.websocket("/ws")
