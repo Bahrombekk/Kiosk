@@ -937,6 +937,15 @@ if IMPORT_ENABLED:
 
         items = payload.get("content")
         if isinstance(items, list):
+            # `reset` — avval bor kontentni tozalaydi. Busiz har import YANGI
+            # qatorlar qo'shardi: ikki marta yuborilganda katalogda 11 o'rniga
+            # 17 ta yozuv paydo bo'ldi (fayllar bir xil, yozuvlar takror).
+            if payload.get("reset"):
+                with closing(db.connect()) as conn:
+                    n = conn.execute("SELECT COUNT(*) FROM content").fetchone()[0]
+                    conn.execute("DELETE FROM content")
+                    conn.commit()
+                out["deleted"] = n
             cols = ("type", "title", "author", "genre", "description",
                     "duration", "pages", "cover_path", "file_path",
                     "text_path", "category_tab", "lang", "cache_enabled",
