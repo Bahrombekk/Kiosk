@@ -840,12 +840,19 @@ if IMPORT_ENABLED:
 
     @app.put("/api/import/blob")
     async def import_blob(request: Request, kind: str = Query(""),
-                          name: str = Query("")):
-        """Bitta faylni kontent papkasiga yozadi (xom tana, oqim bilan).
+                          name: str = Query(""), mode: str = Query("write"),
+                          final: str = Query("")):
+        """Faylni kontent papkasiga yozadi (xom tana, oqim bilan).
 
-        Multipart ishlatilmaydi — katta kino uchun oqim arzonroq va xotirada
-        bufer bo'lmaydi (yuklashning o'zi `storage.save_upload` bilan bir xil
-        mantiq, faqat bu yerda manzil kontent papkasi)."""
+        `mode=write`  — faylni noldan yozadi (kichik fayllar uchun).
+        `mode=append` — mavjud `.part` ga qo'shib yozadi. Katta fayl bo'laklarga
+                        bo'lib yuboriladi: teskari proksilarda tana hajmi
+                        cheklangan bo'ladi (bizda 413 chiqdi) va bitta
+                        so'rovda gigabayt o'tmaydi.
+        `final=<sha256>` — oxirgi bo'lakda beriladi: `.part` yakuniy nomga
+                        o'tkaziladi va sha256 SOLISHTIRILADI. Mos kelmasa fayl
+                        o'chiriladi va 400 qaytadi — yarim/buzuq fayl qolmaydi.
+        """
         _import_guard()
         dest_dir = _IMPORT_DIRS.get(kind)
         if not dest_dir:
@@ -854,27 +861,46 @@ if IMPORT_ENABLED:
         if not safe or safe.startswith("."):
             raise HTTPException(400, "nom noto'g'ri")
         os.makedirs(dest_dir, exist_ok=True)
-        final = os.path.join(dest_dir, safe)
-        tmp = final + ".part"
-        h = hashlib.sha256()
-        total = 0
+        dest = os.path.join(dest_dir, safe)
+        tmp = dest + ".part"
+
+        written = 0
         try:
-            with open(tmp, "wb") as f:
+            with open(tmp, "ab" if mode == "append" else "wb") as f:
                 async for chunk in request.stream():
-                    if not chunk:
-                        continue
-                    total += len(chunk)
-                    h.update(chunk)
-                    f.write(chunk)
-            os.replace(tmp, final)
+                    if chunk:
+                        written += len(chunk)
+                        f.write(chunk)
         except Exception:                                    # noqa: BLE001
-            if os.path.exists(tmp):
+            if mode != "append" and os.path.exists(tmp):
                 try:
                     os.remove(tmp)
                 except OSError:
                     pass
             raise
-        return {"ok": True, "name": safe, "size": total, "sha256": h.hexdigest()}
+
+        size = os.path.getsize(tmp)
+        if mode == "append" and not final:
+            # Oraliq bo'lak — hozircha `.part` bo'lib turadi.
+            return {"ok": True, "name": safe, "written": written, "size": size}
+
+        # Yakunlash: sha tekshiruvi (berilgan bo'lsa), keyin nomini o'zgartirish
+        got = None
+        if final:
+            h = hashlib.sha256()
+            with open(tmp, "rb") as f:
+                while True:
+                    b = f.read(1024 * 1024)
+                    if not b:
+                        break
+                    h.update(b)
+            got = h.hexdigest()
+            if got != final:
+                os.remove(tmp)
+                raise HTTPException(
+                    400, f"sha256 mos kelmadi ({got[:12]} != {final[:12]})")
+        os.replace(tmp, dest)
+        return {"ok": True, "name": safe, "size": size, "sha256": got}
 
     @app.post("/api/import/catalog")
     async def import_catalog(payload: dict):
