@@ -99,3 +99,40 @@ def ensure_faststart(path: str) -> bool:
             except OSError:
                 pass
         return False
+
+
+def _ffprobe_path() -> str | None:
+    """ffprobe yo'li (ffmpeg bilan birga keladi)."""
+    if getattr(sys, "frozen", False):
+        p = os.path.join(os.path.dirname(sys.executable), "ffprobe.exe")
+        if os.path.isfile(p):
+            return p
+    return shutil.which("ffprobe")
+
+
+def probe_duration(path: str) -> int | None:
+    """Media faylning davomiyligi — SONIYADA (butun son), aniqlanmasa None.
+
+    Nega kerak: bulut panelida davomiylik QO'LDA kiritiladigan maydon va odatda
+    bo'sh qoladi. U holda kioskda kartochkada "0s 0d" ko'rinardi. Fayl
+    qurilmada, ffmpeg ham shu yerda — o'zimiz o'lchaganimiz ishonchliroq va
+    operatordan hech narsa talab qilmaydi.
+
+    Best-effort: ffprobe topilmasa yoki fayl o'qilmasa None qaytaradi va
+    chaqiruvchi eski xatti-harakatda qoladi (majburiy emas).
+    """
+    ffprobe = _ffprobe_path()
+    if not ffprobe or not os.path.isfile(path):
+        return None
+    try:
+        r = subprocess.run(
+            [ffprobe, "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", path],
+            capture_output=True, text=True, timeout=60,
+        )
+        if r.returncode != 0:
+            return None
+        val = float((r.stdout or "").strip())
+        return int(round(val)) if val > 0 else None
+    except Exception:                                # noqa: BLE001 — best-effort
+        return None

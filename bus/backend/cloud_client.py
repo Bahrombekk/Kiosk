@@ -41,6 +41,7 @@ import urllib.request
 import config
 import db
 import licensing
+import media_tools
 import ws as wsmod
 
 log = logging.getLogger("kiosk.cloud")
@@ -1150,6 +1151,17 @@ class CloudClient:
             elif not p:
                 row[path_col] = None
                 row[sha_col] = None
+
+        # Davomiylik bulutda QO'LDA kiritiladi va odatda bo'sh qoladi — u holda
+        # kioskda kartochkada "0s 0d" ko'rinadi. Fayl shu yerda, ffmpeg ham
+        # shu yerda: o'zimiz o'lchaymiz (soniyada). Faqat bulut bermagan
+        # holatda — operator aniq qiymat kiritgan bo'lsa unga tegmaymiz.
+        if not row.get("duration") and row.get("file_path") \
+                and row["type"] in ("movie", "music"):
+            probed = media_tools.probe_duration(
+                os.path.join(config.MEDIA_DIR, row["file_path"]))
+            if probed:
+                row["duration"] = probed
         return row
 
 

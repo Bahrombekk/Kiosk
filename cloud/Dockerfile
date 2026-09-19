@@ -6,6 +6,13 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# ffprobe — yuklangan media davomiyligini o'lchash uchun (storage.probe_duration).
+# `ffmpeg` paketi ffprobe'ni ham olib keladi. Panelda «Davomiylik» maydoni bo'sh
+# qoldirilsa qiymat shu bilan aniqlanadi va manifest orqali hamma qurilmaga
+# ketadi — operator har bir kino uchun qo'lda yozib o'tirmaydi.
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
 # Avval faqat requirements — Docker qatlam keshi (kod o'zgarsa qayta o'rnatmaydi)
 COPY backend/requirements.txt .
 RUN pip install -r requirements.txt

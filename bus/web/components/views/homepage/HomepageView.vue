@@ -7,7 +7,7 @@
       class="grid items-stretch gap-[18px]"
       style="grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr))"
     >
-      <HomeHero :route="route" :status="status" />
+      <HomeHero />
       <div class="flex flex-col gap-[14px]">
         <HomepageStats />
         <FetchErrorState v-if="booksError && moviesError" @retry="retryAll" />
@@ -28,7 +28,7 @@
 </template>
 
 <script setup lang="ts">
-import type { Book, TrainRoute, TrainStatus, Video } from "~/types/app";
+import type { Book, Video } from "~/types/app";
 
 const { filterByLang } = useContentLang();
 
@@ -43,13 +43,6 @@ const {
   refresh: refreshBooks,
 } = await useFetch<Book[]>("/api/books");
 
-// Hero uchun marshrut + status (joriy bekat, tezlik). Xatosi hero'ni buzmaydi.
-const { data: route } = await useFetch<TrainRoute>("/api/route", {
-  default: () => null,
-});
-const { data: status } = await useFetch<TrainStatus>("/api/status", {
-  default: () => null,
-});
 
 function retryAll() {
   refreshMovies();

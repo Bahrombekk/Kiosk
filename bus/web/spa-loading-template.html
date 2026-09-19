@@ -1,45 +1,231 @@
-<div class="splash-container">
-  <img src="/avtobus-logo.svg" alt="AVTOBUS.UZ" style="width:min(60vw,320px);height:auto" />
+<div class="splash" role="status" aria-live="polite" aria-label="Yuklanmoqda">
+  <!-- Milliy xonatlas chizig'i (layouts/default.vue bilan bir xil) -->
+  <div class="splash-atlas splash-atlas--top"></div>
+
+  <!-- Chet girih medalyonlari — faqat keng ekranda, default.vue dagidek -->
+  <img src="/naqsh.svg" class="splash-naqsh splash-naqsh--left" alt="" aria-hidden="true" />
+  <img src="/naqsh.svg" class="splash-naqsh splash-naqsh--right" alt="" aria-hidden="true" />
+
+  <div class="splash-core">
+    <div class="splash-mark">
+      <div class="splash-word">AVTOBUS<span>.UZ</span></div>
+      <div class="splash-rule"><i></i></div>
+      <div class="splash-tag">YO&rsquo;LDA HAMROHINGIZ</div>
+    </div>
+    <div class="splash-bar"><span></span></div>
+  </div>
+
+  <div class="splash-atlas splash-atlas--bottom"></div>
 </div>
 
 <style>
+  /* Bu shablon ilova CSS'idan OLDIN chiziladi — index.scss o'zgaruvchilari
+     (var(--...)) va @font-face'lari bu yerda MAVJUD EMAS. Shuning uchun
+     ranglar qo'lda yozilgan (qiymatlar index.scss bilan bir xil) va splash
+     ishlatadigan ikki shrift shu yerda e'lon qilinadi. font-display:swap —
+     matn darhol ko'rinadi, shrift kelgach almashadi (bloklamaydi). Ilova
+     baribir shu shriftlarni yuklaydi, ya'ni bu oldindan yuklash. */
+  @font-face {
+    font-family: 'Unbounded';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url(/fonts/unbounded-700.ttf) format('truetype');
+  }
+  @font-face {
+    font-family: 'Manrope';
+    font-style: normal;
+    font-weight: 800;
+    font-display: swap;
+    src: url(/fonts/manrope-800.ttf) format('truetype');
+  }
+
   body {
     margin: 0;
   }
-  .splash-container {
+
+  .splash {
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    background: url("/splash_screen_background.png");
-    background-repeat: no-repeat;
-    background-size: cover;
-    height: 100vh;
+    inset: 0;
+    z-index: 9999;
     display: flex;
     flex-direction: column;
-    justify-content: center;
     align-items: center;
-    background-color: var(--tertiary-bg);
-    color: #ffffff;
-    font-family: sans-serif;
-    z-index: 9999;
+    justify-content: space-between;
+    overflow: hidden;
+    background-color: #f6f1e7; /* --page-bg */
+    /* --pattern-page bilan bir xil (394 KB PNG o'rniga — tez chiziladi) */
+    background-image:
+      repeating-linear-gradient(45deg, rgba(20, 69, 167, 0.025) 0 2px, transparent 2px 26px),
+      repeating-linear-gradient(-45deg, rgba(201, 154, 60, 0.035) 0 2px, transparent 2px 26px);
   }
-  .dark .splash-container {
+
+  /* --- Xonatlas chiziqlari (10px, index.scss bilan bir xil) --- */
+  .splash-atlas {
+    width: 100%;
+    height: 10px;
+    flex: none;
+  }
+  .splash-atlas--top {
+    background: repeating-linear-gradient(90deg,
+      #1445a7 0 36px, #f6f1e7 36px 40px, #14939b 40px 66px, #f6f1e7 66px 70px,
+      #c99a3c 70px 94px, #f6f1e7 94px 98px, #1445a7 98px 118px, #f6f1e7 118px 122px);
+  }
+  .splash-atlas--bottom {
+    background: repeating-linear-gradient(90deg,
+      #c99a3c 0 36px, #f6f1e7 36px 40px, #14939b 40px 66px, #f6f1e7 66px 70px,
+      #1445a7 70px 94px, #f6f1e7 94px 98px, #c99a3c 98px 118px, #f6f1e7 118px 122px);
+  }
+
+  /* --- Chet medalyonlari (keng ekran bo'shlig'ini to'ldiradi) --- */
+  .splash-naqsh {
     position: fixed;
-    top: 0;
+    top: 50%;
+    height: min(780px, 88vh);
+    pointer-events: none;
+    z-index: 0;
+    display: none;
+  }
+  .splash-naqsh--left {
     left: 0;
-    width: 100vw;
-    background: url("/splash_screen_background_dark.png");
-    background-repeat: no-repeat;
-    background-size: cover;
-    height: 100vh;
+    transform: translateY(-50%);
+    opacity: 0.75;
+  }
+  .splash-naqsh--right {
+    right: 0;
+    transform: translateY(-50%) scaleX(-1);
+    opacity: 0.22;
+    filter: sepia(0.6) saturate(0.5);
+  }
+  @media (min-width: 56.25rem) {
+    .splash-naqsh { display: block; }
+  }
+
+  /* --- Markaz --- */
+  .splash-core {
+    position: relative;
+    z-index: 1;
+    flex: 1;
     display: flex;
     flex-direction: column;
-    justify-content: center;
     align-items: center;
-    background-color: var(--tertiary-bg);
-    color: #ffffff;
-    font-family: sans-serif;
-    z-index: 9999;
+    justify-content: center;
+    gap: clamp(28px, 5vh, 48px);
+    padding: 24px;
+    animation: splashIn 0.5s ease-out both;
+  }
+
+  /* Yozuv bloki + ortidagi yumshoq oltin nur */
+  .splash-mark {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(14px, 2.2vh, 22px);
+  }
+  .splash-mark::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 148%;
+    padding-bottom: 148%;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: radial-gradient(circle,
+      rgba(201, 154, 60, 0.15) 0%,
+      rgba(201, 154, 60, 0.055) 42%,
+      rgba(201, 154, 60, 0) 68%);
+    pointer-events: none;
+  }
+
+  .splash-word {
+    position: relative;
+    font-family: 'Unbounded', 'Manrope', system-ui, sans-serif;
+    font-weight: 700;
+    font-size: clamp(34px, 7.2vw, 66px);
+    line-height: 1;
+    letter-spacing: -0.01em;
+    color: #16265e; /* --brand-navy-1 */
+    white-space: nowrap;
+  }
+  .splash-word span {
+    color: #c99a3c; /* --accent-gold */
+  }
+
+  /* Oltin ajratgich + o'rtada girih rombi */
+  .splash-rule {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    width: min(340px, 74vw);
+  }
+  .splash-rule::before,
+  .splash-rule::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(201, 154, 60, 0) 0%, rgba(201, 154, 60, 0.55) 100%);
+  }
+  .splash-rule::after {
+    background: linear-gradient(90deg, rgba(201, 154, 60, 0.55) 0%, rgba(201, 154, 60, 0) 100%);
+  }
+  .splash-rule i {
+    flex: none;
+    width: 7px;
+    height: 7px;
+    transform: rotate(45deg);
+    background: #c99a3c;
+  }
+
+  .splash-tag {
+    position: relative;
+    font-family: 'Manrope', system-ui, sans-serif;
+    font-weight: 800;
+    font-size: clamp(10px, 1.5vw, 13px);
+    letter-spacing: 0.42em;
+    text-indent: 0.42em; /* letter-spacing markazni surib yubormasin */
+    color: #8a7f68; /* --text-secondary */
+  }
+
+  /* Noaniq (indeterminate) yuklanish chizig'i — "qotib qolgan" ko'rinmasin */
+  .splash-bar {
+    position: relative;
+    width: min(240px, 52vw);
+    height: 3px;
+    border-radius: 999px;
+    background: rgba(201, 154, 60, 0.18);
+    overflow: hidden;
+  }
+  .splash-bar > span {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 42%;
+    border-radius: 999px;
+    background: linear-gradient(90deg,
+      rgba(201, 154, 60, 0) 0%, #c99a3c 35%, #e8c87a 50%, #c99a3c 65%, rgba(201, 154, 60, 0) 100%);
+    animation: splashSlide 1.3s ease-in-out infinite;
+  }
+
+  @keyframes splashIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes splashSlide {
+    0%   { transform: translateX(-105%); }
+    100% { transform: translateX(245%); }
+  }
+
+  /* Harakatni kamaytirish so'ralgan bo'lsa — statik, lekin ko'rinadigan holat */
+  @media (prefers-reduced-motion: reduce) {
+    .splash-core { animation: none; }
+    .splash-bar > span {
+      animation: none;
+      width: 100%;
+      background: linear-gradient(90deg, #c99a3c, #e8c87a, #c99a3c);
+      opacity: 0.5;
+    }
   }
 </style>

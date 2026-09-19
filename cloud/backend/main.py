@@ -996,6 +996,16 @@ def content_create(payload: dict, _=A):
     if not data.get("media_sha") and not data.get("text_sha"):
         raise HTTPException(400, "media yoki matn fayli kerak")
 
+    # Davomiylik berilmagan bo'lsa — fayldan O'ZIMIZ o'lchaymiz (ffprobe).
+    # Panelda bu qo'lda kiritiladigan maydon va amalda deyarli doim bo'sh
+    # qoladi; natijada qurilmada kartochkada "0s 0d" ko'rinardi. Bir marta
+    # shu yerda o'lchasak, qiymat manifest bilan hamma qurilmaga ketadi.
+    if not data.get("duration") and data.get("media_sha") \
+            and ctype in ("movie", "cartoon", "music", "audiobook"):
+        probed = storage.probe_duration(data["media_sha"])
+        if probed:
+            data["duration"] = probed
+
     cid = db.add_content(data)
     db.add_event(f"Kutubxonaga qo'shildi: {title}", "info")
     return {"id": cid}
@@ -1712,5 +1722,12 @@ if __name__ == "__main__":
     for _ip in _lan_ips():
         print(f"  |  LAN (IP):     {_scheme}://{_ip}:{config.PORT}   <-- boshqa qurilmalar shu manzildan kiradi")
     print("  +" + "-" * 52 + "\n", flush=True)
+    # Standart "warning" — kundalik ishda so'rov loglari shovqin qiladi.
+    # Diagnostika uchun CLOUD_LOG_LEVEL=info bersangiz, har bir HTTP so'rov
+    # (masalan yuklash PUT'i) logda ko'rinadi — muammo brauzerdami yoki
+    # serverdami, shundan bilinadi.
+    _lvl = (os.environ.get("CLOUD_LOG_LEVEL") or "warning").strip().lower()
+    if _lvl not in ("critical", "error", "warning", "info", "debug", "trace"):
+        _lvl = "warning"
     uvicorn.run("main:app", host=config.HOST, port=config.PORT,
-                log_level="warning", **kw)
+                log_level=_lvl, **kw)

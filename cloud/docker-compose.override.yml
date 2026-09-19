@@ -1,0 +1,21 @@
+# Tailscale-only rejim: Caddy ISHLATILMAYDI (uni ishga tushirmaymiz), bulut
+# 9000-portni to'g'ridan-to'g'ri beradi.
+#
+# Ishga tushirish:   docker compose up -d --build cloud
+#   (ataylab faqat `cloud` — `caddy` ko'tarilmaydi, domen/sertifikat kerak emas)
+#
+# Port FAQAT ikki manzilga bog'langan: localhost va shu mashinaning Tailscale
+# IP'si. Ya'ni panel lokal tarmoqqa (Wi-Fi/Ethernet) OCHILMAYDI — faqat
+# tailnet'ingizdagi qurilmalar ko'radi.
+services:
+  cloud:
+    environment:
+      # MUHIM: konteyner UTC'da ishlasa, `datetime('now','localtime')` bilan
+      # yozilgan last_seen brauzerda (UTC+5) 5 soat eski ko'rinadi va qurilma
+      # doim "Offlayn" deb belgilanadi. Zonani qurilmalar bilan tenglashtiramiz.
+      TZ: Asia/Tashkent
+      # Diagnostika: har bir HTTP so0rov logda ko0rinsin (odatda warning)
+      CLOUD_LOG_LEVEL: info
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "100.114.162.27:9000:9000"

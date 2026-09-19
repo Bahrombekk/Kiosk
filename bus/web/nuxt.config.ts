@@ -30,6 +30,15 @@ export default defineNuxtConfig({
   ],
   ssr: false,
   spaLoadingTemplate: "./spa-loading-template.html",
+
+  nitro: {
+    // JS/CSS build vaqtida .gz va .br bo'lib oldindan siqiladi va Nitro shuni
+    // beradi. Bu SPA'da eng katta yuk: ~604 KB JS+CSS siqilmasdan ketardi,
+    // gzip bilan ~150 KB ga tushadi. Avtobusda yo'lovchi telefoni zaif Wi-Fi
+    // signalida bo'ladi — birinchi ochilish shuncha barobar tezlashadi.
+    // Ishlash vaqtida CPU sarflanmaydi: fayllar build paytida siqilgan.
+    compressPublicAssets: { gzip: true, brotli: true },
+  },
   css: [
     "~/assets/css/main.css",
     "~/assets/index.scss",

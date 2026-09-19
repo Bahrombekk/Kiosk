@@ -3131,6 +3131,20 @@ document.addEventListener("click", async (e) => {
     if (inp) {
       inp.accept = (S.pickKind === "cover" || S.pickKind === "hero") ? "image/*"
         : S.pickKind === "text" ? ".json,.txt,.epub" : "";
+      // Fayl tanlash oynasi ochiq turganda avtomatik yangilanish DOM ni QAYTA
+      // QURMASIN. render() `app.innerHTML` ni almashtiradi — shunda mana shu
+      // <input> DOM'dan uziladi va foydalanuvchi rasm tanlaganda `change`
+      // hodisasi uzilgan elementda yuz berib, `document`gacha yetib bormaydi.
+      // Natijada yuklash JIMGINA bajarilmaydi (hero banneri shu sababdan
+      // ishlamasdi: u yagona modaldan tashqaridagi tanlagich, modallarda esa
+      // taymer `S.modal` tufayli allaqachon to'xtaydi).
+      S.picking = true;
+      window.addEventListener("focus", () => {
+        // Oyna yopildi (tanlandi yoki bekor qilindi). `change` fokusdan keyin
+        // keladi, shuning uchun biroz kutamiz; yuklash ketayotgan bo'lsa
+        // bayroqni pickFiles() o'zi tushiradi.
+        setTimeout(() => { if (!S.uploading) S.picking = false; }, 2000);
+      }, { once: true });
       inp.click();
     }
     return;
@@ -3495,6 +3509,11 @@ const EXT_KIND = (name) => {
 };
 
 async function pickFiles(files) {
+  // Yuklash tugagunча avtomatik yangilanish to'xtab tursin — aks holda
+  // render() progress ko'rsatkichini o'chirib yuboradi (XHR o'zi uzilmaydi,
+  // lekin foydalanuvchi jarayonni ko'rmay qoladi).
+  S.uploading = true;
+  try {
   for (const f of files) {
     // Slot: tugma orqali majburiy berilgan bo'lsa shu, aks holda kengaytmadan
     const slot = S.pickKind || EXT_KIND(f.name);
@@ -3543,7 +3562,11 @@ async function pickFiles(files) {
     }
     render();
   }
-  S.pickKind = "";
+  } finally {
+    S.uploading = false;
+    S.picking = false;
+    S.pickKind = "";
+  }
 }
 
 function partOf(slot) {
@@ -3694,6 +3717,9 @@ async function deployGo() {
   // ham to'xtatamiz — qayta chizish ish ustida xalaqit bermasin.
   setInterval(() => {
     if (!S.auth || S.modal) return;
+    // Fayl tanlash oynasi ochiq yoki yuklash ketyapti — DOM ga tegmaymiz
+    // (qarang: `pick-*` ishlovchisidagi izoh).
+    if (S.picking || S.uploading) return;
     if (!["dash", "servers", "queue", "server", "stats"].includes(S.page)) return;
     if (Object.keys(S.srvForm).length) return;        // yuborilmagan sozlama bor
     const ae = document.activeElement;

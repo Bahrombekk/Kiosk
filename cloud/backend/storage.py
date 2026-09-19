@@ -16,6 +16,7 @@ import logging
 import mimetypes
 import os
 import shutil
+import subprocess
 from email.utils import formatdate
 
 from fastapi import Request
@@ -231,3 +232,37 @@ def range_response(path, request: Request, filename=None, chunk=CHUNK):
 def _ascii(name):
     """Content-Disposition sarlavhasi uchun xavfsiz nom (kirill/bo'shliq)."""
     return "".join(ch if 32 < ord(ch) < 127 and ch != '"' else "_" for ch in name)
+
+
+# ---------------------------------------------------------------- davomiylik
+def probe_duration(sha):
+    """Blobning davomiyligi — SONIYADA (butun son), aniqlanmasa None.
+
+    Nega bu yerda: panelda «Davomiylik» qo'lda kiritiladigan maydon va operator
+    uni deyarli har doim bo'sh qoldiradi. U holda qurilmada kartochkada
+    "0s 0d" ko'rinardi. Fayl shu yerda, ffprobe ham image ichida — o'lchashni
+    bulut bir marta bajaradi va qiymat manifest bilan hamma qurilmaga ketadi
+    (qurilmada qayta o'lchash shart bo'lmaydi).
+
+    Best-effort: ffprobe topilmasa yoki fayl media bo'lmasa None qaytaradi —
+    chaqiruvchi eski xatti-harakatda qoladi.
+    """
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        log.warning("ffprobe topilmadi — davomiylik aniqlanmaydi")
+        return None
+    path = blob_path(sha)
+    if not os.path.isfile(path):
+        return None
+    try:
+        r = subprocess.run(
+            [ffprobe, "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", path],
+            capture_output=True, text=True, timeout=120,
+        )
+        if r.returncode != 0:
+            return None
+        val = float((r.stdout or "").strip())
+        return int(round(val)) if val > 0 else None
+    except Exception:                                # noqa: BLE001 — best-effort
+        return None
